@@ -241,7 +241,7 @@ wheels = [
 
 [[package]]
 name = "mthds"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "." }
 dependencies = [
     { name = "backports-strenum", marker = "python_full_version < '3.11'" },
