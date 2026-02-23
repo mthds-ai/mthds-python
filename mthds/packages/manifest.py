@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -135,8 +136,49 @@ class DomainExports(BaseModel):
         return pipes
 
 
+def _walk_exports_table(table: dict[str, Any], prefix: str = "") -> list[dict[str, Any]]:
+    """Recursively walk nested exports sub-tables to reconstruct dotted domain paths.
+
+    Given a TOML structure like:
+        [exports.legal.contracts]
+        pipes = ["extract_clause"]
+
+    This produces {"domain_path": "legal.contracts", "pipes": ["extract_clause"]}.
+    """
+    result: list[dict[str, Any]] = []
+
+    for key, value in table.items():
+        current_path = f"{prefix}.{key}" if prefix else str(key)
+
+        if isinstance(value, dict):
+            value_dict: dict[str, Any] = dict(value)
+            if "pipes" in value_dict:
+                pipes_value = value_dict["pipes"]
+                if not isinstance(pipes_value, list):
+                    msg = f"'pipes' in domain '{current_path}' must be a list, got {type(pipes_value).__name__}"
+                    raise ValueError(msg)
+                result.append({"domain_path": current_path, "pipes": list(pipes_value)})
+
+                # Also recurse into remaining sub-tables (a domain can have both pipes and sub-domains)
+                for sub_key, sub_value in value_dict.items():
+                    if sub_key != "pipes" and isinstance(sub_value, dict):
+                        result.extend(_walk_exports_table({sub_key: sub_value}, prefix=current_path))
+            else:
+                result.extend(_walk_exports_table(value_dict, prefix=current_path))
+
+    return result
+
+
+_KNOWN_TOP_LEVEL_KEYS = frozenset({"package", "dependencies", "exports"})
+
+
 class MthdsPackageManifest(BaseModel):
-    """The METHODS.toml package manifest model."""
+    """The METHODS.toml package manifest model.
+
+    Can be constructed in two ways:
+    - From raw TOML dict: ``MthdsPackageManifest.model_validate(raw_toml_dict)``
+    - Directly: ``MthdsPackageManifest(address=..., version=..., ...)``
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -150,6 +192,50 @@ class MthdsPackageManifest(BaseModel):
 
     dependencies: list[PackageDependency] = Field(default_factory=empty_list_factory_of(PackageDependency))
     exports: list[DomainExports] = Field(default_factory=empty_list_factory_of(DomainExports))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_raw_toml(cls, data: Any) -> Any:
+        """Accept raw TOML dict shape and reshape it for field validation.
+
+        Detects raw TOML format (has a ``package`` dict key) vs. direct
+        construction (has ``address`` key directly) and handles both.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # If "package" is a dict, we're dealing with raw TOML input
+        if "package" not in data or not isinstance(data.get("package"), dict):
+            return data
+
+        # Reject unknown top-level sections
+        unknown = set(data.keys()) - _KNOWN_TOP_LEVEL_KEYS
+        if unknown:
+            msg = f"Unknown sections in METHODS.toml: {', '.join(sorted(unknown))}"
+            raise ValueError(msg)
+
+        # Flatten [package] section to top-level fields
+        result: dict[str, Any] = dict(data["package"])
+
+        # Transform [dependencies] from {alias: {address, version, ...}} to list
+        deps_section = data.get("dependencies", {})
+        if isinstance(deps_section, dict):
+            deps_list: list[dict[str, Any]] = []
+            for alias, dep_data in deps_section.items():
+                if not isinstance(dep_data, dict):
+                    msg = f"Invalid dependency '{alias}': expected a table with 'address' and 'version' keys, got {type(dep_data).__name__}"
+                    raise ValueError(msg)
+                dep_dict = dict(dep_data)
+                dep_dict["alias"] = str(alias)
+                deps_list.append(dep_dict)
+            result["dependencies"] = deps_list
+
+        # Walk nested [exports] tables into flat list
+        exports_section = data.get("exports", {})
+        if isinstance(exports_section, dict):
+            result["exports"] = _walk_exports_table(dict(exports_section))
+
+        return result
 
     @field_validator("address")
     @classmethod

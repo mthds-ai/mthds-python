@@ -89,7 +89,7 @@ def _validate_with_pipelex(
 
     if shutil.which("pipelex") is None:
         console.print("[red]'pipelex' not found on PATH.[/red]")
-        console.print("[dim]Install pipelex to use runner-based validation.[/dim]")
+        console.print("[dim]Install pipelex: curl -sSL https://pipelex.com/install.sh | sh[/dim]")
         raise typer.Exit(code=1)
 
     cmd: list[str] = ["pipelex", "validate"]
@@ -110,7 +110,8 @@ def _validate_with_pipelex(
         if result.returncode != 0:
             raise typer.Exit(code=result.returncode)
     except FileNotFoundError as exc:
-        console.print("[red]'pipelex' not found on PATH. Install pipelex for runner-based validation.[/red]")
+        console.print("[red]'pipelex' not found on PATH.[/red]")
+        console.print("[dim]Install pipelex: curl -sSL https://pipelex.com/install.sh | sh[/dim]")
         raise typer.Exit(code=1) from exc
     except subprocess.TimeoutExpired as exc:
         console.print("[red]Runner validation timed out (10 min limit).[/red]")

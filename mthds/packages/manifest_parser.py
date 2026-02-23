@@ -1,55 +1,11 @@
-from typing import Any, cast
+from typing import Any
 
 import tomlkit
 from pydantic import ValidationError
 
 from mthds._utils.toml_utils import TomlError, load_toml_from_content
 from mthds.packages.exceptions import ManifestParseError, ManifestValidationError
-from mthds.packages.manifest import DomainExports, MthdsPackageManifest, PackageDependency
-
-
-def _walk_exports_table(table: dict[str, Any], prefix: str = "") -> list[DomainExports]:
-    """Recursively walk nested exports sub-tables to reconstruct dotted domain paths.
-
-    Given a TOML structure like:
-        [exports.legal.contracts]
-        pipes = ["extract_clause"]
-
-    This produces DomainExports(domain_path="legal.contracts", pipes=["extract_clause"]).
-
-    Args:
-        table: The current dict-level of the exports table
-        prefix: The dotted path prefix accumulated so far
-
-    Returns:
-        List of DomainExports built from nested sub-tables
-    """
-    result: list[DomainExports] = []
-
-    for key, value in table.items():
-        current_path = f"{prefix}.{key}" if prefix else str(key)
-
-        if isinstance(value, dict):
-            value_dict = cast("dict[str, Any]", value)
-            # Check if this level has a "pipes" key (leaf domain)
-            if "pipes" in value_dict:
-                pipes_value = value_dict["pipes"]
-                if not isinstance(pipes_value, list):
-                    msg = f"'pipes' in domain '{current_path}' must be a list, got {type(pipes_value).__name__}"
-                    raise ManifestValidationError(msg)
-                pipes_list = cast("list[str]", pipes_value)
-                result.append(DomainExports(domain_path=current_path, pipes=pipes_list))
-
-                # Also recurse into remaining sub-tables (a domain can have both pipes and sub-domains)
-                for sub_key, sub_value in value_dict.items():
-                    if sub_key != "pipes" and isinstance(sub_value, dict):
-                        sub_dict = cast("dict[str, Any]", {sub_key: sub_value})
-                        result.extend(_walk_exports_table(sub_dict, prefix=current_path))
-            else:
-                # No pipes at this level, just recurse deeper
-                result.extend(_walk_exports_table(value_dict, prefix=current_path))
-
-    return result
+from mthds.packages.manifest import MthdsPackageManifest
 
 
 def parse_methods_toml(content: str) -> MthdsPackageManifest:
@@ -71,81 +27,11 @@ def parse_methods_toml(content: str) -> MthdsPackageManifest:
         msg = f"Invalid TOML syntax in METHODS.toml: {exc}"
         raise ManifestParseError(msg) from exc
 
-    # Extract [package] section
-    package_section = raw.get("package")
-    if not isinstance(package_section, dict):
-        msg = "METHODS.toml must contain a [package] section"
-        raise ManifestValidationError(msg)
-    pkg = cast("dict[str, Any]", package_section)
-
-    # Extract [dependencies] section
-    deps_section = raw.get("dependencies", {})
-    dependencies: list[PackageDependency] = []
-    if isinstance(deps_section, dict):
-        deps_dict = cast("dict[str, Any]", deps_section)
-        for alias, dep_data in deps_dict.items():
-            if isinstance(dep_data, dict):
-                dep_data_dict = cast("dict[str, Any]", dep_data)
-                dep_data_dict["alias"] = str(alias)
-                try:
-                    dependencies.append(PackageDependency(**dep_data_dict))
-                except ValidationError as exc:
-                    msg = f"Invalid dependency '{alias}' in METHODS.toml: {exc}"
-                    raise ManifestValidationError(msg) from exc
-            else:
-                msg = (
-                    f"Invalid dependency '{alias}' in METHODS.toml: expected a table with 'address' and 'version' keys, got {type(dep_data).__name__}"
-                )
-                raise ManifestValidationError(msg)
-
-    # Extract [exports] section with recursive walk
-    exports_section = raw.get("exports", {})
-    exports: list[DomainExports] = []
-    if isinstance(exports_section, dict):
-        exports_dict = cast("dict[str, Any]", exports_section)
-        try:
-            exports = _walk_exports_table(exports_dict)
-        except ValidationError as exc:
-            msg = f"Invalid exports in METHODS.toml: {exc}"
-            raise ManifestValidationError(msg) from exc
-
-    # Reject unknown keys in [package] section
-    known_package_keys = {"address", "display_name", "version", "description", "authors", "license", "mthds_version"}
-    unknown_keys = set(pkg.keys()) - known_package_keys
-    if unknown_keys:
-        msg = f"Unknown keys in [package] section: {', '.join(sorted(unknown_keys))}"
-        raise ManifestValidationError(msg)
-
-    # Build the manifest
-    address: str = str(pkg.get("address", ""))
-    version: str = str(pkg.get("version", ""))
-    description: str = str(pkg.get("description", ""))
-    authors_val = pkg.get("authors", [])
-    authors: list[str] = cast("list[str]", authors_val) if isinstance(authors_val, list) else []
-    license_val = pkg.get("license")
-    license_str: str | None = str(license_val) if license_val is not None else None
-    mthds_version_val = pkg.get("mthds_version")
-    mthds_version: str | None = str(mthds_version_val) if mthds_version_val is not None else None
-    display_name_val = pkg.get("display_name")
-    display_name: str | None = str(display_name_val) if display_name_val is not None else None
-
     try:
-        manifest = MthdsPackageManifest(
-            address=address,
-            display_name=display_name,
-            version=version,
-            description=description,
-            authors=authors,
-            license=license_str,
-            mthds_version=mthds_version,
-            dependencies=dependencies,
-            exports=exports,
-        )
+        return MthdsPackageManifest.model_validate(raw)
     except ValidationError as exc:
         msg = f"METHODS.toml validation failed: {exc}"
         raise ManifestValidationError(msg) from exc
-
-    return manifest
 
 
 def serialize_manifest_to_toml(manifest: MthdsPackageManifest) -> str:

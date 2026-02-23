@@ -93,7 +93,9 @@ def _run_with_pipelex(
         if result.returncode != 0:
             raise typer.Exit(code=result.returncode)
     except FileNotFoundError as exc:
-        console.print("[red]'pipelex' not found on PATH. Install pipelex or use --runner api.[/red]")
+        console.print("[red]'pipelex' not found on PATH.[/red]")
+        console.print("[dim]Install pipelex: curl -sSL https://pipelex.com/install.sh | sh[/dim]")
+        console.print("[dim]Or use --runner api to run via the MTHDS API instead.[/dim]")
         raise typer.Exit(code=1) from exc
     except subprocess.TimeoutExpired as exc:
         console.print("[red]Execution timed out (10 min limit).[/red]")
