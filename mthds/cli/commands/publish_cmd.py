@@ -11,4 +11,4 @@ def do_publish(tag: bool = False) -> None:  # noqa: ARG001
     """
     console = get_console()
     console.print("[yellow]Publish is not yet implemented.[/yellow]")
-    raise typer.Exit(code=0)
+    raise typer.Exit(code=1)
