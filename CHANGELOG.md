@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.0.3] - 2026-02-23
 
 ### Changed
 - Move all METHODS.toml validation logic into the `MthdsPackageManifest` Pydantic model via a `model_validator(mode="before")`, so the model can be constructed directly from a raw TOML dict (`MthdsPackageManifest.model_validate(raw)`). Simplify `manifest_parser.py` from ~155 lines of manual validation to a thin TOML-parse + `model_validate` wrapper.
