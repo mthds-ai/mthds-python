@@ -53,6 +53,7 @@ make test                     - Run unit tests
 make test-with-prints         - Run unit tests with prints
 make t                        - Shorthand -> test
 make tp                       - Shorthand -> test-with-prints
+make gha-tests                - Run tests for GitHub Actions (exit on first failure, quiet)
 
 make format                   - format with ruff format
 make lint                     - lint with ruff check
@@ -82,7 +83,7 @@ make li                       - Shorthand -> lock install
 endef
 export HELP
 
-.PHONY: all help env env-verbose check-uv check-uv-verbose lock install update build test test-with-prints t tp agent-test format lint pyright mypy pylint merge-check-ruff-format merge-check-ruff-lint merge-check-pyright merge-check-mypy merge-check-pylint check-unused-imports fix-unused-imports check-TODOs check-uv cleanderived cleanenv cleanall c cc li
+.PHONY: all help env env-verbose check-uv check-uv-verbose lock install update build test test-with-prints t tp gha-tests agent-test format lint pyright mypy pylint merge-check-ruff-format merge-check-ruff-lint merge-check-pyright merge-check-mypy merge-check-pylint check-unused-imports fix-unused-imports check-TODOs check-uv cleanderived cleanenv cleanall c cc li
 
 all help:
 	@echo "$$HELP"
@@ -205,6 +206,10 @@ t: test
 
 tp: test-with-prints
 	@echo "> done: tp = test-with-prints"
+
+gha-tests: env
+	$(call PRINT_TITLE,"Unit testing for GitHub Actions")
+	$(VENV_PYTEST) --exitfirst --quiet
 
 agent-test: env
 	@echo "• Running unit tests..."
