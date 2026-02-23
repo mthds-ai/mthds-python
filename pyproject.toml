@@ -36,6 +36,7 @@ dev = [
     "pyright==1.1.408",
     "pylint==4.0.4",
     "ruff==0.14.13",
+    "pytest>=8.0.0,<9.0.0",
 ]
 
 [project.scripts]
@@ -51,6 +52,10 @@ Homepage = "https://mthds.ai"
 Repository = "https://github.com/mthds-ai/mthds"
 Documentation = "https://docs.mthds.ai/"
 Changelog = "https://github.com/mthds-ai/mthds/releases"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.mypy]
 check_untyped_defs = true
