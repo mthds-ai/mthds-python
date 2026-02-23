@@ -278,10 +278,11 @@ class MthdsPackageManifest(BaseModel):
     @field_validator("description")
     @classmethod
     def validate_description(cls, description: str) -> str:
-        if not description.strip():
+        stripped = description.strip()
+        if not stripped:
             msg = "Package description must not be empty."
             raise ValueError(msg)
-        return description
+        return stripped
 
     @field_validator("authors")
     @classmethod

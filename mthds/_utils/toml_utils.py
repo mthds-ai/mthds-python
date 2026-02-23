@@ -5,6 +5,7 @@ import sys
 from typing import Any
 
 import tomlkit
+from tomlkit.exceptions import ParseError as TomlkitParseError  # type: ignore[import-untyped]
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -81,9 +82,22 @@ def load_toml_with_tomlkit(path: str) -> tomlkit.TOMLDocument:
 
     Returns:
         TOMLDocument that preserves formatting and comments
+
+    Raises:
+        TomlError: If TOML parsing fails.
     """
-    with open(path, encoding="utf-8") as file:
-        return tomlkit.load(file)
+    try:
+        with open(path, encoding="utf-8") as file:
+            return tomlkit.load(file)
+    except TomlkitParseError as exc:
+        msg = f"TOML parsing error in file '{path}': {exc}"
+        raise TomlError(
+            message=msg,
+            doc="",
+            pos=0,
+            lineno=getattr(exc, "line", 0),
+            colno=getattr(exc, "col", 0),
+        ) from exc
 
 
 def save_toml_to_path(data: dict[str, Any] | tomlkit.TOMLDocument, path: str) -> None:

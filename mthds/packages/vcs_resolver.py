@@ -11,7 +11,7 @@ from pathlib import Path
 from semantic_version import Version  # type: ignore[import-untyped]
 
 from mthds.packages.exceptions import VCSFetchError, VersionResolutionError
-from mthds.packages.semver import parse_constraint, parse_version_tag, select_minimum_version
+from mthds.packages.semver import SemVerError, parse_constraint, parse_version_tag, select_minimum_version
 
 
 def address_to_clone_url(address: str) -> str:
@@ -110,7 +110,11 @@ def resolve_version_from_tags(
         msg = f"No version tags available to satisfy constraint '{version_constraint}'"
         raise VersionResolutionError(msg)
 
-    constraint = parse_constraint(version_constraint)
+    try:
+        constraint = parse_constraint(version_constraint)
+    except SemVerError as exc:
+        msg = f"Invalid version constraint '{version_constraint}': {exc}"
+        raise VersionResolutionError(msg) from exc
     versions = [entry[0] for entry in version_tags]
     selected = select_minimum_version(versions, constraint)
 

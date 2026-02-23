@@ -38,17 +38,17 @@ def do_list() -> None:
     pkg_table = Table(title="Package", box=box.ROUNDED, show_header=True)
     pkg_table.add_column("Field", style="cyan")
     pkg_table.add_column("Value")
-    pkg_table.add_row("Address", manifest.address)
+    pkg_table.add_row("Address", escape(manifest.address))
     if manifest.display_name:
-        pkg_table.add_row("Display Name", manifest.display_name)
-    pkg_table.add_row("Version", manifest.version)
-    pkg_table.add_row("Description", manifest.description)
+        pkg_table.add_row("Display Name", escape(manifest.display_name))
+    pkg_table.add_row("Version", escape(manifest.version))
+    pkg_table.add_row("Description", escape(manifest.description))
     if manifest.authors:
-        pkg_table.add_row("Authors", ", ".join(manifest.authors))
+        pkg_table.add_row("Authors", escape(", ".join(manifest.authors)))
     if manifest.license:
-        pkg_table.add_row("License", manifest.license)
+        pkg_table.add_row("License", escape(manifest.license))
     if manifest.mthds_version:
-        pkg_table.add_row("MTHDS Version", manifest.mthds_version)
+        pkg_table.add_row("MTHDS Version", escape(manifest.mthds_version))
     console.print(pkg_table)
 
     # Dependencies table
@@ -59,7 +59,7 @@ def do_list() -> None:
         deps_table.add_column("Address")
         deps_table.add_column("Version")
         for dep in manifest.dependencies:
-            deps_table.add_row(dep.alias, dep.address, dep.version)
+            deps_table.add_row(escape(dep.alias), escape(dep.address), escape(dep.version))
         console.print(deps_table)
 
     # Exports table
@@ -70,8 +70,8 @@ def do_list() -> None:
         exports_table.add_column("Pipes")
         for domain_export in manifest.exports:
             exports_table.add_row(
-                domain_export.domain_path,
-                ", ".join(domain_export.pipes),
+                escape(domain_export.domain_path),
+                escape(", ".join(domain_export.pipes)),
             )
         console.print(exports_table)
 

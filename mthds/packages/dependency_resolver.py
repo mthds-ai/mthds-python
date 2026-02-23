@@ -78,71 +78,6 @@ def determine_exported_pipes(manifest: MthdsPackageManifest | None) -> set[str] 
     return exported
 
 
-def resolve_local_dependencies(
-    manifest: MthdsPackageManifest,
-    package_root: Path,
-) -> list[ResolvedDependency]:
-    """Resolve dependencies that have a local `path` field.
-
-    For each dependency with a `path`, resolves the directory, finds the manifest
-    and .mthds files, and determines exported pipes.
-
-    Args:
-        manifest: The consuming package's manifest
-        package_root: The root directory of the consuming package
-
-    Returns:
-        List of resolved dependencies (only those with a `path` field)
-
-    Raises:
-        DependencyResolveError: If a path does not exist or is not a directory
-    """
-    resolved: list[ResolvedDependency] = []
-
-    for dep in manifest.dependencies:
-        if dep.path is None:
-            logger.debug("Dependency '%s' has no local path, skipping local resolution", dep.alias)
-            continue
-
-        dep_dir = (package_root / dep.path).resolve()
-        if not dep_dir.exists():
-            msg = f"Dependency '{dep.alias}' local path '{dep.path}' resolves to '{dep_dir}' which does not exist"
-            raise DependencyResolveError(msg)
-        if not dep_dir.is_dir():
-            msg = f"Dependency '{dep.alias}' local path '{dep.path}' resolves to '{dep_dir}' which is not a directory"
-            raise DependencyResolveError(msg)
-
-        # Find the dependency's manifest
-        dep_manifest: MthdsPackageManifest | None = None
-        dep_manifest_path = dep_dir / MANIFEST_FILENAME
-        if dep_manifest_path.is_file():
-            try:
-                dep_manifest = find_package_manifest(dep_manifest_path)
-            except ManifestError as exc:
-                logger.warning("Could not parse METHODS.toml for dependency '%s': %s", dep.alias, exc)
-
-        # Collect .mthds files
-        mthds_files = collect_mthds_files(dep_dir)
-
-        # Determine exported pipes
-        exported_pipe_codes = determine_exported_pipes(dep_manifest)
-
-        resolved.append(
-            ResolvedDependency(
-                alias=dep.alias,
-                address=dep.address,
-                manifest=dep_manifest,
-                package_root=dep_dir,
-                mthds_files=mthds_files,
-                exported_pipe_codes=exported_pipe_codes,
-            )
-        )
-        export_count = len(exported_pipe_codes) if exported_pipe_codes is not None else "all"
-        logger.debug("Resolved dependency '%s': %d .mthds files, %s exported pipes", dep.alias, len(mthds_files), export_count)
-
-    return resolved
-
-
 def _find_manifest_in_dir(directory: Path) -> MthdsPackageManifest | None:
     """Read and parse a METHODS.toml from a directory root.
 
@@ -178,7 +113,8 @@ def _resolve_local_dependency(
     Raises:
         DependencyResolveError: If the path does not exist or is not a directory.
     """
-    local_path: str = dep.path  # type: ignore[assignment]
+    assert dep.path is not None  # guaranteed by caller
+    local_path: str = dep.path
     dep_dir = (package_root / local_path).resolve()
     if not dep_dir.exists():
         msg = f"Dependency '{dep.alias}' local path '{local_path}' resolves to '{dep_dir}' which does not exist"
