@@ -12,6 +12,7 @@ PROJECT_NAME := $(shell grep '^name = ' pyproject.toml | sed -E 's/name = "(.*)"
 PYTHON_VERSION ?= 3.13
 
 VENV_PYTHON := "$(VIRTUAL_ENV)/bin/python"
+VENV_PYTEST := "$(VIRTUAL_ENV)/bin/pytest"
 VENV_RUFF := "$(VIRTUAL_ENV)/bin/ruff"
 VENV_PYRIGHT := "$(VIRTUAL_ENV)/bin/pyright"
 VENV_MYPY := "$(VIRTUAL_ENV)/bin/mypy"
@@ -48,6 +49,12 @@ make update                   - Upgrade dependencies via uv
 make validate                 - Run the setup sequence to validate the config and libraries
 make build                    - Build the wheels
 
+make test                     - Run unit tests
+make test-with-prints         - Run unit tests with prints
+make t                        - Shorthand -> test
+make tp                       - Shorthand -> test-with-prints
+make gha-tests                - Run tests for GitHub Actions (exit on first failure, quiet)
+
 make format                   - format with ruff format
 make lint                     - lint with ruff check
 make pyright                  - Check types with pyright
@@ -76,7 +83,7 @@ make li                       - Shorthand -> lock install
 endef
 export HELP
 
-.PHONY: all help env env-verbose check-uv check-uv-verbose lock install update build format lint pyright mypy pylint merge-check-ruff-format merge-check-ruff-lint merge-check-pyright merge-check-mypy merge-check-pylint check-unused-imports fix-unused-imports check-TODOs check-uv cleanderived cleanenv cleanall c cc li
+.PHONY: all help env env-verbose check-uv check-uv-verbose lock install update build test test-with-prints t tp gha-tests agent-test format lint pyright mypy pylint merge-check-ruff-format merge-check-ruff-lint merge-check-pyright merge-check-mypy merge-check-pylint check-unused-imports fix-unused-imports check-TODOs check-uv cleanderived cleanenv cleanall c cc li
 
 all help:
 	@echo "$$HELP"
@@ -160,6 +167,7 @@ cleanderived:
 	find . -type d -wholename './.cache' -exec rm -rf {} + && \
 	find . -type d -wholename './.mypy_cache' -exec rm -rf {} + && \
 	find . -type d -wholename './.ruff_cache' -exec rm -rf {} + && \
+	find . -type d -name '.pytest_cache' -exec rm -rf {} + && \
 	find . -type d -wholename './logs/*.log' -exec rm -rf {} + && \
 	find . -type d -wholename './.reports/*' -exec rm -rf {} + && \
 	echo "Cleaned up derived files and directories";
@@ -172,6 +180,46 @@ cleanenv:
 
 cleanall: cleanderived cleanenv
 	@echo "Cleaned up all derived files and directories";
+
+##########################################################################################
+### TESTING
+##########################################################################################
+
+test: env
+	$(call PRINT_TITLE,"Unit testing")
+	@if [ -n "$(TEST)" ]; then \
+		$(VENV_PYTEST) -o log_cli=true -o log_level=WARNING -k "$(TEST)" $(if $(filter 1,$(VERBOSE)),-v,$(if $(filter 2,$(VERBOSE)),-vv,$(if $(filter 3,$(VERBOSE)),-vvv,))); \
+	else \
+		$(VENV_PYTEST) -o log_cli=true -o log_level=WARNING $(if $(filter 1,$(VERBOSE)),-v,$(if $(filter 2,$(VERBOSE)),-vv,$(if $(filter 3,$(VERBOSE)),-vvv,))); \
+	fi
+
+test-with-prints: env
+	$(call PRINT_TITLE,"Unit testing with prints")
+	@if [ -n "$(TEST)" ]; then \
+		$(VENV_PYTEST) -s -k "$(TEST)" $(if $(filter 1,$(VERBOSE)),-v,$(if $(filter 2,$(VERBOSE)),-vv,$(if $(filter 3,$(VERBOSE)),-vvv,))); \
+	else \
+		$(VENV_PYTEST) -s $(if $(filter 1,$(VERBOSE)),-v,$(if $(filter 2,$(VERBOSE)),-vv,$(if $(filter 3,$(VERBOSE)),-vvv,))); \
+	fi
+
+t: test
+	@echo "> done: t = test"
+
+tp: test-with-prints
+	@echo "> done: tp = test-with-prints"
+
+gha-tests: env
+	$(call PRINT_TITLE,"Unit testing for GitHub Actions")
+	$(VENV_PYTEST) --exitfirst --quiet
+
+agent-test: env
+	@echo "• Running unit tests..."
+	@tmpfile=$$(mktemp); \
+	$(VENV_PYTEST) -o log_level=WARNING --tb=short -q > "$$tmpfile" 2>&1; \
+	exit_code=$$?; \
+	if [ $$exit_code -ne 0 ]; then cat "$$tmpfile"; fi; \
+	rm -f "$$tmpfile"; \
+	if [ $$exit_code -eq 0 ]; then echo "• All tests passed."; fi; \
+	exit $$exit_code
 
 ##########################################################################################
 ### LINTING
