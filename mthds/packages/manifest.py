@@ -1,6 +1,6 @@
 import re
 import unicodedata
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -151,18 +151,20 @@ def _walk_exports_table(table: dict[str, Any], prefix: str = "") -> list[dict[st
         current_path = f"{prefix}.{key}" if prefix else str(key)
 
         if isinstance(value, dict):
-            value_dict: dict[str, Any] = dict(value)
+            value_dict = cast("dict[str, Any]", value)
             if "pipes" in value_dict:
-                pipes_value = value_dict["pipes"]
+                pipes_value: Any = value_dict["pipes"]
                 if not isinstance(pipes_value, list):
                     msg = f"'pipes' in domain '{current_path}' must be a list, got {type(pipes_value).__name__}"
                     raise ValueError(msg)
-                result.append({"domain_path": current_path, "pipes": list(pipes_value)})
+                pipes_list = cast("list[str]", pipes_value)
+                result.append({"domain_path": current_path, "pipes": pipes_list})
 
                 # Also recurse into remaining sub-tables (a domain can have both pipes and sub-domains)
                 for sub_key, sub_value in value_dict.items():
                     if sub_key != "pipes" and isinstance(sub_value, dict):
-                        result.extend(_walk_exports_table({sub_key: sub_value}, prefix=current_path))
+                        sub_dict = cast("dict[str, Any]", {sub_key: sub_value})
+                        result.extend(_walk_exports_table(sub_dict, prefix=current_path))
             else:
                 result.extend(_walk_exports_table(value_dict, prefix=current_path))
 
@@ -203,37 +205,40 @@ class MthdsPackageManifest(BaseModel):
         """
         if not isinstance(data, dict):
             return data
+        raw = cast("dict[str, Any]", data)
 
         # If "package" is a dict, we're dealing with raw TOML input
-        if "package" not in data or not isinstance(data.get("package"), dict):
-            return data
+        pkg_section: Any = raw.get("package")
+        if not isinstance(pkg_section, dict):
+            return raw
 
         # Reject unknown top-level sections
-        unknown = set(data.keys()) - _KNOWN_TOP_LEVEL_KEYS
+        unknown = set(raw.keys()) - _KNOWN_TOP_LEVEL_KEYS
         if unknown:
             msg = f"Unknown sections in METHODS.toml: {', '.join(sorted(unknown))}"
             raise ValueError(msg)
 
         # Flatten [package] section to top-level fields
-        result: dict[str, Any] = dict(data["package"])
+        result: dict[str, Any] = dict(cast("dict[str, Any]", pkg_section))
 
         # Transform [dependencies] from {alias: {address, version, ...}} to list
-        deps_section = data.get("dependencies", {})
+        deps_section: Any = raw.get("dependencies", {})
         if isinstance(deps_section, dict):
+            deps_dict = cast("dict[str, Any]", deps_section)
             deps_list: list[dict[str, Any]] = []
-            for alias, dep_data in deps_section.items():
+            for alias, dep_data in deps_dict.items():
                 if not isinstance(dep_data, dict):
                     msg = f"Invalid dependency '{alias}': expected a table with 'address' and 'version' keys, got {type(dep_data).__name__}"
-                    raise ValueError(msg)
-                dep_dict = dict(dep_data)
-                dep_dict["alias"] = str(alias)
-                deps_list.append(dep_dict)
+                    raise ValueError(msg)  # noqa: TRY004 — must be ValueError for Pydantic to wrap it
+                dep_entry: dict[str, Any] = dict(cast("dict[str, Any]", dep_data))
+                dep_entry["alias"] = str(alias)
+                deps_list.append(dep_entry)
             result["dependencies"] = deps_list
 
         # Walk nested [exports] tables into flat list
-        exports_section = data.get("exports", {})
+        exports_section: Any = raw.get("exports", {})
         if isinstance(exports_section, dict):
-            result["exports"] = _walk_exports_table(dict(exports_section))
+            result["exports"] = _walk_exports_table(cast("dict[str, Any]", exports_section))
 
         return result
 

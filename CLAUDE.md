@@ -187,3 +187,11 @@ class TestFooBar:
 4. **Validate Tests**
 
 The key to TDD is writing the test first and letting it drive your implementation. Always run the full test suite and quality checks before considering a feature complete.
+
+## Post-Coding Checklist
+
+After finishing any code change, always run:
+```bash
+make fui && make cc
+```
+This fixes unused imports, cleans caches, formats, lints, and type-checks. Do not consider a task done until this passes.

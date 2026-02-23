@@ -1,6 +1,10 @@
 """Package visibility checking for cross-domain pipe references.
 
-Clean version that works with BundleMetadata — no pipelex-specific types.
+Enforces the MTHDS visibility rules:
+- Pipes default to private.
+- Only pipes in [exports] or declared as main_pipe are public.
+- Same-domain references are always allowed.
+- Cross-domain references must target exported or main_pipe pipes.
 """
 
 import logging

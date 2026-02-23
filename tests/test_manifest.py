@@ -4,9 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from mthds.packages.exceptions import ManifestParseError, ManifestValidationError
-from mthds.packages.manifest import MthdsPackageManifest
+from mthds.packages.manifest import MthdsPackageManifest, PackageDependency
 from mthds.packages.manifest_parser import parse_methods_toml, serialize_manifest_to_toml
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -308,7 +307,7 @@ class TestPackageFieldValidation:
             version = "1.0.0"
             description = "test"
         """)
-        with pytest.raises(ManifestValidationError, match="[Dd]isplay name"):
+        with pytest.raises(ManifestValidationError, match=r"[Dd]isplay name"):
             parse_methods_toml(toml)
 
     def test_empty_author(self):
@@ -319,7 +318,7 @@ class TestPackageFieldValidation:
             description = "test"
             authors = ["Alice", "  "]
         """)
-        with pytest.raises(ManifestValidationError, match="[Aa]uthor"):
+        with pytest.raises(ManifestValidationError, match=r"[Aa]uthor"):
             parse_methods_toml(toml)
 
     def test_empty_license(self):
@@ -330,7 +329,7 @@ class TestPackageFieldValidation:
             description = "test"
             license = "  "
         """)
-        with pytest.raises(ManifestValidationError, match="[Ll]icense"):
+        with pytest.raises(ManifestValidationError, match=r"[Ll]icense"):
             parse_methods_toml(toml)
 
     def test_invalid_mthds_version(self):
@@ -440,13 +439,11 @@ class TestDependencyValidation:
         TOML itself merges duplicate keys, so we test via model_validate
         to ensure the after-validator catches duplicates.
         """
-        from mthds.packages.manifest import PackageDependency
-
         deps = [
             PackageDependency(address="github.com/a/b", version="1.0.0", alias="dupe"),
             PackageDependency(address="github.com/c/d", version="2.0.0", alias="dupe"),
         ]
-        with pytest.raises(ValidationError, match="[Dd]uplicate dependency alias"):
+        with pytest.raises(ValidationError, match=r"[Dd]uplicate dependency alias"):
             MthdsPackageManifest(
                 address="github.com/acme/widgets",
                 version="1.0.0",
