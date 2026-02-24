@@ -28,7 +28,7 @@ def resolve_directory(directory: Path | None) -> Path:
         typer.Exit: If the path does not exist or is not a directory.
     """
     if directory is None:
-        return Path.cwd()
+        return Path.cwd().resolve()
 
     resolved = Path(directory).resolve()
     if not resolved.exists():
