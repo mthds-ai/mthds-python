@@ -1,7 +1,6 @@
 import textwrap
 
 import pytest
-from pydantic import ValidationError
 
 from mthds.package.exceptions import ManifestParseError, ManifestValidationError
 from mthds.package.manifest.parser import parse_methods_toml, serialize_manifest_to_toml
@@ -58,8 +57,8 @@ class TestParseMethodsToml:
         assert manifest.authors == []
         assert manifest.license is None
         assert manifest.mthds_version is None
-        assert manifest.dependencies == []
-        assert manifest.exports == []
+        assert manifest.dependencies == {}
+        assert manifest.exports == {}
 
     def test_full(self):
         manifest = parse_methods_toml(FULL_TOML)
@@ -72,19 +71,15 @@ class TestParseMethodsToml:
 
         # Dependencies
         assert len(manifest.dependencies) == 2
-        aliases = {dep.alias for dep in manifest.dependencies}
-        assert aliases == {"foo_pkg", "bar_pkg"}
-        foo = next(dep for dep in manifest.dependencies if dep.alias == "foo_pkg")
-        assert foo.address == "github.com/acme/foo"
-        assert foo.version == "^1.0.0"
-        assert foo.path is None
+        assert set(manifest.dependencies.keys()) == {"foo_pkg", "bar_pkg"}
+        assert manifest.dependencies["foo_pkg"].address == "github.com/acme/foo"
+        assert manifest.dependencies["foo_pkg"].version == "^1.0.0"
+        assert manifest.dependencies["foo_pkg"].path is None
 
         # Exports
         assert len(manifest.exports) == 3
-        domains = {exp.domain_path for exp in manifest.exports}
-        assert domains == {"legal.contracts", "legal.compliance", "finance"}
-        contracts = next(exp for exp in manifest.exports if exp.domain_path == "legal.contracts")
-        assert contracts.pipes == ["extract_clause", "summarize"]
+        assert set(manifest.exports.keys()) == {"legal.contracts", "legal.compliance", "finance"}
+        assert manifest.exports["legal.contracts"].pipes == ["extract_clause", "summarize"]
 
     def test_dependency_with_path(self):
         toml = textwrap.dedent("""\
@@ -97,7 +92,7 @@ class TestParseMethodsToml:
             local_dep = {address = "github.com/acme/local", version = "0.1.0", path = "../local"}
         """)
         manifest = parse_methods_toml(toml)
-        assert manifest.dependencies[0].path == "../local"
+        assert manifest.dependencies["local_dep"].path == "../local"
 
     def test_nested_exports_deep(self):
         toml = textwrap.dedent("""\
@@ -111,7 +106,7 @@ class TestParseMethodsToml:
         """)
         manifest = parse_methods_toml(toml)
         assert len(manifest.exports) == 1
-        assert manifest.exports[0].domain_path == "legal.contracts.shareholder"
+        assert "legal.contracts.shareholder" in manifest.exports
 
     def test_domain_with_pipes_and_subdomains(self):
         toml = textwrap.dedent("""\
@@ -128,13 +123,12 @@ class TestParseMethodsToml:
         """)
         manifest = parse_methods_toml(toml)
         assert len(manifest.exports) == 2
-        domains = {exp.domain_path for exp in manifest.exports}
-        assert domains == {"legal", "legal.contracts"}
+        assert set(manifest.exports.keys()) == {"legal", "legal.contracts"}
 
     def test_no_dependencies_no_exports(self):
         manifest = parse_methods_toml(MINIMAL_TOML)
-        assert manifest.dependencies == []
-        assert manifest.exports == []
+        assert manifest.dependencies == {}
+        assert manifest.exports == {}
 
 
 # ===========================================================================
@@ -151,7 +145,19 @@ class TestDirectConstruction:
         )
         assert manifest.address == "example.com/org/repo"
         assert manifest.version == "0.1.0"
-        assert manifest.dependencies == []
+        assert manifest.dependencies == {}
+
+    def test_with_dependencies(self):
+        manifest = MethodsManifest(
+            address="example.com/org/repo",
+            version="0.1.0",
+            description="A test package",
+            dependencies={
+                "foo_pkg": PackageDependency(address="github.com/acme/foo", version="^1.0.0"),
+            },
+        )
+        assert "foo_pkg" in manifest.dependencies
+        assert manifest.dependencies["foo_pkg"].address == "github.com/acme/foo"
 
     def test_model_validate_raw_dict(self):
         raw = {
@@ -192,17 +198,15 @@ class TestRoundTrip:
         assert restored.mthds_version == original.mthds_version
 
         assert len(restored.dependencies) == len(original.dependencies)
-        for orig_dep, rest_dep in zip(original.dependencies, restored.dependencies, strict=True):
-            assert rest_dep.alias == orig_dep.alias
-            assert rest_dep.address == orig_dep.address
-            assert rest_dep.version == orig_dep.version
+        for alias in original.dependencies:
+            assert alias in restored.dependencies
+            assert restored.dependencies[alias].address == original.dependencies[alias].address
+            assert restored.dependencies[alias].version == original.dependencies[alias].version
 
         assert len(restored.exports) == len(original.exports)
-        orig_exports = sorted(original.exports, key=lambda e: e.domain_path)
-        rest_exports = sorted(restored.exports, key=lambda e: e.domain_path)
-        for orig_exp, rest_exp in zip(orig_exports, rest_exports, strict=True):
-            assert rest_exp.domain_path == orig_exp.domain_path
-            assert rest_exp.pipes == orig_exp.pipes
+        for domain_path in original.exports:
+            assert domain_path in restored.exports
+            assert restored.exports[domain_path].pipes == original.exports[domain_path].pipes
 
 
 # ===========================================================================
@@ -433,23 +437,17 @@ class TestDependencyValidation:
         with pytest.raises(ManifestValidationError, match="alias"):
             parse_methods_toml(toml)
 
-    def test_duplicate_dependency_aliases(self):
-        """Two [dependencies] entries cannot share the same alias.
-
-        TOML itself merges duplicate keys, so we test via model_validate
-        to ensure the after-validator catches duplicates.
-        """
-        deps = [
-            PackageDependency(address="github.com/a/b", version="1.0.0", alias="dupe"),
-            PackageDependency(address="github.com/c/d", version="2.0.0", alias="dupe"),
-        ]
-        with pytest.raises(ValidationError, match=r"[Dd]uplicate dependency alias"):
-            MethodsManifest(
-                address="github.com/acme/widgets",
-                version="1.0.0",
-                description="test",
-                dependencies=deps,
-            )
+    def test_dependency_dict_keys_inherently_unique(self):
+        """Dict keys are inherently unique — no duplicate alias validator needed."""
+        manifest = MethodsManifest(
+            address="github.com/acme/widgets",
+            version="1.0.0",
+            description="test",
+            dependencies={
+                "foo": PackageDependency(address="github.com/a/b", version="1.0.0"),
+            },
+        )
+        assert len(manifest.dependencies) == 1
 
     def test_dependency_unknown_key(self):
         toml = textwrap.dedent("""\
@@ -636,7 +634,7 @@ class TestEdgeCases:
             dep = {{address = "github.com/acme/dep", version = "{constraint}"}}
         """)
         manifest = parse_methods_toml(toml)
-        assert manifest.dependencies[0].version == constraint
+        assert manifest.dependencies["dep"].version == constraint
 
     def test_empty_exports_section(self):
         toml = textwrap.dedent("""\
@@ -648,7 +646,7 @@ class TestEdgeCases:
             [exports]
         """)
         manifest = parse_methods_toml(toml)
-        assert manifest.exports == []
+        assert manifest.exports == {}
 
     def test_empty_dependencies_section(self):
         toml = textwrap.dedent("""\
@@ -660,4 +658,4 @@ class TestEdgeCases:
             [dependencies]
         """)
         manifest = parse_methods_toml(toml)
-        assert manifest.dependencies == []
+        assert manifest.dependencies == {}

@@ -47,8 +47,8 @@ class PackageVisibilityChecker:
         # Build lookup: exported_pipes[domain_path] = set of pipe codes
         self._exported_pipes: dict[str, set[str]] = {}
         if manifest:
-            for domain_export in manifest.exports:
-                self._exported_pipes[domain_export.domain_path] = set(domain_export.pipes)
+            for domain_path, domain_export in manifest.exports.items():
+                self._exported_pipes[domain_path] = set(domain_export.pipes)
 
         # Build lookup: main_pipes[domain_path] = main_pipe code (auto-exported)
         self._main_pipes: dict[str, str] = {}
@@ -153,7 +153,7 @@ class PackageVisibilityChecker:
             return []
 
         # Build alias lookup from manifest dependencies
-        known_aliases: set[str] = {dep.alias for dep in self._manifest.dependencies}
+        known_aliases: set[str] = set(self._manifest.dependencies.keys())
 
         errors: list[VisibilityError] = []
 

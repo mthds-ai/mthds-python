@@ -5,7 +5,6 @@ from typing import Any, cast
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from mthds._compat import Self
-from mthds._utils.pydantic_utils import empty_list_factory_of
 from mthds._utils.string_utils import is_snake_case
 from mthds.package.manifest.validation import is_domain_code_valid, is_pipe_code_valid
 
@@ -75,7 +74,6 @@ class PackageDependency(BaseModel):
 
     address: str
     version: str
-    alias: str
     path: str | None = None
 
     @field_validator("address")
@@ -94,37 +92,13 @@ class PackageDependency(BaseModel):
             raise ValueError(msg)
         return version
 
-    @field_validator("alias")
-    @classmethod
-    def validate_alias(cls, alias: str) -> str:
-        if not is_snake_case(alias):
-            msg = f"Invalid dependency alias '{alias}'. Must be snake_case."
-            raise ValueError(msg)
-        return alias
-
 
 class DomainExports(BaseModel):
     """Exports for a single domain within a package."""
 
     model_config = ConfigDict(extra="forbid")
 
-    domain_path: str
     pipes: list[str] = Field(default_factory=list)
-
-    @field_validator("domain_path")
-    @classmethod
-    def validate_domain_path(cls, domain_path: str) -> str:
-        if not is_domain_code_valid(domain_path):
-            msg = f"Invalid domain path '{domain_path}' in [exports]. Domain paths must be dot-separated snake_case segments."
-            raise ValueError(msg)
-        if is_reserved_domain_path(domain_path):
-            first_segment = domain_path.split(".", maxsplit=1)[0]
-            msg = (
-                f"Domain path '{domain_path}' uses reserved domain '{first_segment}'. "
-                f"Reserved domains ({', '.join(sorted(RESERVED_DOMAINS))}) cannot be used in package exports."
-            )
-            raise ValueError(msg)
-        return domain_path
 
     @field_validator("pipes")
     @classmethod
@@ -136,16 +110,16 @@ class DomainExports(BaseModel):
         return pipes
 
 
-def _walk_exports_table(table: dict[str, Any], prefix: str = "") -> list[dict[str, Any]]:
+def _walk_exports_table(table: dict[str, Any], prefix: str = "") -> dict[str, dict[str, Any]]:
     """Recursively walk nested exports sub-tables to reconstruct dotted domain paths.
 
     Given a TOML structure like:
         [exports.legal.contracts]
         pipes = ["extract_clause"]
 
-    This produces {"domain_path": "legal.contracts", "pipes": ["extract_clause"]}.
+    This produces {"legal.contracts": {"pipes": ["extract_clause"]}}.
     """
-    result: list[dict[str, Any]] = []
+    result: dict[str, dict[str, Any]] = {}
 
     for key, value in table.items():
         current_path = f"{prefix}.{key}" if prefix else str(key)
@@ -158,15 +132,15 @@ def _walk_exports_table(table: dict[str, Any], prefix: str = "") -> list[dict[st
                     msg = f"'pipes' in domain '{current_path}' must be a list, got {type(pipes_value).__name__}"
                     raise ValueError(msg)
                 pipes_list = cast("list[str]", pipes_value)
-                result.append({"domain_path": current_path, "pipes": pipes_list})
+                result[current_path] = {"pipes": pipes_list}
 
                 # Also recurse into remaining sub-tables (a domain can have both pipes and sub-domains)
                 for sub_key, sub_value in value_dict.items():
                     if sub_key != "pipes" and isinstance(sub_value, dict):
                         sub_dict = cast("dict[str, Any]", {sub_key: sub_value})
-                        result.extend(_walk_exports_table(sub_dict, prefix=current_path))
+                        result.update(_walk_exports_table(sub_dict, prefix=current_path))
             else:
-                result.extend(_walk_exports_table(value_dict, prefix=current_path))
+                result.update(_walk_exports_table(value_dict, prefix=current_path))
 
     return result
 
@@ -192,8 +166,8 @@ class MethodsManifest(BaseModel):
     license: str | None = None
     mthds_version: str | None = None
 
-    dependencies: list[PackageDependency] = Field(default_factory=empty_list_factory_of(PackageDependency))
-    exports: list[DomainExports] = Field(default_factory=empty_list_factory_of(DomainExports))
+    dependencies: dict[str, PackageDependency] = Field(default_factory=dict)
+    exports: dict[str, DomainExports] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -221,19 +195,15 @@ class MethodsManifest(BaseModel):
         # Flatten [package] section to top-level fields
         result: dict[str, Any] = dict(cast("dict[str, Any]", pkg_section))
 
-        # Transform [dependencies] from {alias: {address, version, ...}} to list
+        # Pass [dependencies] dict through directly (keys are aliases)
         deps_section: Any = raw.get("dependencies", {})
         if isinstance(deps_section, dict):
             deps_dict = cast("dict[str, Any]", deps_section)
-            deps_list: list[dict[str, Any]] = []
             for alias, dep_data in deps_dict.items():
                 if not isinstance(dep_data, dict):
                     msg = f"Invalid dependency '{alias}': expected a table with 'address' and 'version' keys, got {type(dep_data).__name__}"
                     raise ValueError(msg)  # noqa: TRY004 — must be ValueError for Pydantic to wrap it
-                dep_entry: dict[str, Any] = dict(cast("dict[str, Any]", dep_data))
-                dep_entry["alias"] = str(alias)
-                deps_list.append(dep_entry)
-            result["dependencies"] = deps_list
+            result["dependencies"] = deps_dict
 
         # Walk nested [exports] tables into flat list
         exports_section: Any = raw.get("exports", {})
@@ -310,12 +280,26 @@ class MethodsManifest(BaseModel):
         return mthds_version
 
     @model_validator(mode="after")
-    def validate_unique_dependency_aliases(self) -> Self:
-        """Ensure all dependency aliases are unique."""
-        seen_aliases: set[str] = set()
-        for dep in self.dependencies:
-            if dep.alias in seen_aliases:
-                msg = f"Duplicate dependency alias '{dep.alias}'. Each dependency must have a unique alias."
+    def validate_dependency_aliases(self) -> Self:
+        """Ensure all dependency alias keys are snake_case."""
+        for alias in self.dependencies:
+            if not is_snake_case(alias):
+                msg = f"Invalid dependency alias '{alias}'. Must be snake_case."
                 raise ValueError(msg)
-            seen_aliases.add(dep.alias)
+        return self
+
+    @model_validator(mode="after")
+    def validate_export_domains(self) -> Self:
+        """Ensure all export domain path keys are valid and not reserved."""
+        for domain_path in self.exports:
+            if not is_domain_code_valid(domain_path):
+                msg = f"Invalid domain path '{domain_path}' in [exports]. Domain paths must be dot-separated snake_case segments."
+                raise ValueError(msg)
+            if is_reserved_domain_path(domain_path):
+                first_segment = domain_path.split(".", maxsplit=1)[0]
+                msg = (
+                    f"Domain path '{domain_path}' uses reserved domain '{first_segment}'. "
+                    f"Reserved domains ({', '.join(sorted(RESERVED_DOMAINS))}) cannot be used in package exports."
+                )
+                raise ValueError(msg)
         return self

@@ -61,8 +61,8 @@ def do_list(directory: str | None = None) -> None:
         deps_table.add_column("Alias", style="cyan")
         deps_table.add_column("Address")
         deps_table.add_column("Version")
-        for dep in manifest.dependencies:
-            deps_table.add_row(escape(dep.alias), escape(dep.address), escape(dep.version))
+        for alias, dep in manifest.dependencies.items():
+            deps_table.add_row(escape(alias), escape(dep.address), escape(dep.version))
         console.print(deps_table)
 
     # Exports table
@@ -71,9 +71,9 @@ def do_list(directory: str | None = None) -> None:
         exports_table = Table(title="Exports", box=box.ROUNDED, show_header=True)
         exports_table.add_column("Domain", style="cyan")
         exports_table.add_column("Pipes")
-        for domain_export in manifest.exports:
+        for domain_path, domain_export in manifest.exports.items():
             exports_table.add_row(
-                escape(domain_export.domain_path),
+                escape(domain_path),
                 escape(", ".join(domain_export.pipes)),
             )
         console.print(exports_table)

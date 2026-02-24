@@ -46,13 +46,13 @@ def do_install(directory: str | None = None) -> None:
             continue
 
         # Fetch missing package by resolving with exact version constraint
+        derived_alias = address.rsplit("/", maxsplit=1)[-1].replace("-", "_").replace(".", "_").lower()
         dep = PackageDependency(
             address=address,
             version=locked.version,
-            alias=address.rsplit("/", maxsplit=1)[-1].replace("-", "_").replace(".", "_").lower(),
         )
         try:
-            resolve_remote_dependency(dep)
+            resolve_remote_dependency(derived_alias, dep)
         except DependencyResolveError as exc:
             console.print(f"[red]Failed to fetch '{escape(address)}@{escape(locked.version)}': {escape(exc.message)}[/red]")
             raise typer.Exit(code=1) from exc

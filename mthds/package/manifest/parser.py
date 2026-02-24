@@ -64,13 +64,13 @@ def serialize_manifest_to_toml(manifest: MethodsManifest) -> str:
     if manifest.dependencies:
         doc.add(tomlkit.nl())
         deps_table = tomlkit.table()
-        for dep in manifest.dependencies:
+        for alias, dep in manifest.dependencies.items():
             dep_table = tomlkit.inline_table()
             dep_table.append("address", dep.address)
             dep_table.append("version", dep.version)
             if dep.path is not None:
                 dep_table.append("path", dep.path)
-            deps_table.add(dep.alias, dep_table)
+            deps_table.add(alias, dep_table)
         doc.add("dependencies", deps_table)
 
     # [exports] section — build nested tables from dotted domain paths
@@ -78,8 +78,8 @@ def serialize_manifest_to_toml(manifest: MethodsManifest) -> str:
         doc.add(tomlkit.nl())
         exports_table = tomlkit.table(is_super_table=True)
 
-        for domain_export in manifest.exports:
-            segments = domain_export.domain_path.split(".")
+        for domain_path, domain_export in manifest.exports.items():
+            segments = domain_path.split(".")
             # Navigate/create nested tables
             current: Any = exports_table
             for segment in segments:

@@ -82,8 +82,8 @@ def scan_bundles_for_domain_info(
 def build_domain_exports_from_scan(
     domain_pipes: dict[str, set[str]],
     domain_main_pipes: dict[str, str],
-) -> list[DomainExports]:
-    """Build DomainExports list from scan results.
+) -> dict[str, DomainExports]:
+    """Build DomainExports dict from scan results.
 
     Each domain gets an export entry with all its pipe codes.
     The main_pipe is included in the pipe list if not already present.
@@ -93,9 +93,9 @@ def build_domain_exports_from_scan(
         domain_main_pipes: mapping domain -> main_pipe code
 
     Returns:
-        List of DomainExports, one per domain, sorted by domain path.
+        Dict of domain_path -> DomainExports, sorted by domain path.
     """
-    exports: list[DomainExports] = []
+    exports: dict[str, DomainExports] = {}
 
     for domain in sorted(domain_pipes.keys()):
         pipes = set(domain_pipes[domain])
@@ -105,11 +105,8 @@ def build_domain_exports_from_scan(
         if main_pipe:
             pipes.add(main_pipe)
 
-        exports.append(
-            DomainExports.model_construct(
-                domain_path=domain,
-                pipes=sorted(pipes),
-            )
+        exports[domain] = DomainExports.model_construct(
+            pipes=sorted(pipes),
         )
 
     return exports

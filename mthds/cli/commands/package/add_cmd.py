@@ -73,8 +73,7 @@ def do_add(
         console.print(f"[dim]Auto-derived alias: {escape(alias)}[/dim]")
 
     # Check alias uniqueness
-    existing_aliases = {dep.alias for dep in manifest.dependencies}
-    if alias in existing_aliases:
+    if alias in manifest.dependencies:
         console.print(f"[red]Dependency alias '{escape(alias)}' already exists in {MANIFEST_FILENAME}.[/red]")
         raise typer.Exit(code=1)
 
@@ -83,7 +82,6 @@ def do_add(
         dep = PackageDependency(
             address=address,
             version=version,
-            alias=alias,
             path=path,
         )
     except ValidationError as exc:
@@ -91,7 +89,7 @@ def do_add(
         raise typer.Exit(code=1) from exc
 
     # Add to manifest and write back
-    manifest.dependencies.append(dep)
+    manifest.dependencies[alias] = dep
     toml_content = serialize_manifest_to_toml(manifest)
     manifest_path.write_text(toml_content, encoding="utf-8")
 

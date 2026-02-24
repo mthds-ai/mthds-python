@@ -210,7 +210,7 @@ def generate_lock_file(
     packages: dict[str, LockedPackage] = {}
 
     # Build set of local-override addresses from root manifest
-    local_addresses = {dep.address for dep in manifest.dependencies if dep.path is not None}
+    local_addresses = {dep.address for dep in manifest.dependencies.values() if dep.path is not None}
 
     for resolved in resolved_deps:
         # Skip local path overrides

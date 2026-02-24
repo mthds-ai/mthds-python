@@ -70,7 +70,7 @@ def determine_exported_pipes(manifest: MethodsManifest | None) -> set[str] | Non
         return None
 
     exported: set[str] = set()
-    for domain_export in manifest.exports:
+    for domain_export in manifest.exports.values():
         exported.update(domain_export.pipes)
 
     # Auto-export main_pipe from bundles (scan for main_pipe in bundle headers)
@@ -98,12 +98,14 @@ def _find_manifest_in_dir(directory: Path) -> MethodsManifest | None:
 
 
 def _resolve_local_dependency(
+    alias: str,
     dep: PackageDependency,
     package_root: Path,
 ) -> ResolvedDependency:
     """Resolve a single dependency that has a local path.
 
     Args:
+        alias: The dependency alias.
         dep: The dependency with a non-None ``path`` field.
         package_root: The consuming package root.
 
@@ -117,10 +119,10 @@ def _resolve_local_dependency(
     local_path: str = dep.path
     dep_dir = (package_root / local_path).resolve()
     if not dep_dir.exists():
-        msg = f"Dependency '{dep.alias}' local path '{local_path}' resolves to '{dep_dir}' which does not exist"
+        msg = f"Dependency '{alias}' local path '{local_path}' resolves to '{dep_dir}' which does not exist"
         raise DependencyResolveError(msg)
     if not dep_dir.is_dir():
-        msg = f"Dependency '{dep.alias}' local path '{local_path}' resolves to '{dep_dir}' which is not a directory"
+        msg = f"Dependency '{alias}' local path '{local_path}' resolves to '{dep_dir}' which is not a directory"
         raise DependencyResolveError(msg)
 
     dep_manifest = _find_manifest_in_dir(dep_dir)
@@ -128,7 +130,7 @@ def _resolve_local_dependency(
     exported_pipe_codes = determine_exported_pipes(dep_manifest)
 
     return ResolvedDependency(
-        alias=dep.alias,
+        alias=alias,
         address=dep.address,
         manifest=dep_manifest,
         package_root=dep_dir,
@@ -138,6 +140,7 @@ def _resolve_local_dependency(
 
 
 def resolve_remote_dependency(
+    alias: str,
     dep: PackageDependency,
     cache_root: Path | None = None,
     fetch_url_override: str | None = None,
@@ -148,6 +151,7 @@ def resolve_remote_dependency(
     check cache -> clone if miss -> build ResolvedDependency.
 
     Args:
+        alias: The dependency alias.
         dep: The dependency to resolve (no ``path`` field).
         cache_root: Override for the package cache root directory.
         fetch_url_override: Override clone URL (e.g. ``file://`` for tests).
@@ -165,7 +169,7 @@ def resolve_remote_dependency(
         version_tags = list_remote_version_tags(clone_url)
         selected_version, selected_tag = resolve_version_from_tags(version_tags, dep.version)
     except (VCSFetchError, VersionResolutionError) as exc:
-        msg = f"Failed to resolve remote dependency '{dep.alias}' ({dep.address}): {exc}"
+        msg = f"Failed to resolve remote dependency '{alias}' ({dep.address}): {exc}"
         raise DependencyResolveError(msg) from exc
 
     version_str = str(selected_version)
@@ -173,8 +177,8 @@ def resolve_remote_dependency(
     # Check cache
     if is_cached(dep.address, version_str, cache_root):
         cached_path = get_cached_package_path(dep.address, version_str, cache_root)
-        logger.debug("Dependency '%s' (%s@%s) found in cache", dep.alias, dep.address, version_str)
-        return _build_resolved_from_dir(dep.alias, dep.address, cached_path)
+        logger.debug("Dependency '%s' (%s@%s) found in cache", alias, dep.address, version_str)
+        return _build_resolved_from_dir(alias, dep.address, cached_path)
 
     # Clone and cache
     try:
@@ -183,11 +187,11 @@ def resolve_remote_dependency(
             clone_at_version(clone_url, selected_tag, clone_dest)
             cached_path = store_in_cache(clone_dest, dep.address, version_str, cache_root)
     except (VCSFetchError, PackageCacheError) as exc:
-        msg = f"Failed to fetch/cache dependency '{dep.alias}' ({dep.address}@{version_str}): {exc}"
+        msg = f"Failed to fetch/cache dependency '{alias}' ({dep.address}@{version_str}): {exc}"
         raise DependencyResolveError(msg) from exc
 
-    logger.debug("Dependency '%s' (%s@%s) fetched and cached", dep.alias, dep.address, version_str)
-    return _build_resolved_from_dir(dep.alias, dep.address, cached_path)
+    logger.debug("Dependency '%s' (%s@%s) fetched and cached", alias, dep.address, version_str)
+    return _build_resolved_from_dir(alias, dep.address, cached_path)
 
 
 def _build_resolved_from_dir(alias: str, address: str, directory: Path) -> ResolvedDependency:
@@ -317,7 +321,7 @@ def _remove_stale_subdep_constraints(
     if old_manifest is None or not old_manifest.dependencies:
         return
 
-    for old_sub in old_manifest.dependencies:
+    for old_sub in old_manifest.dependencies.values():
         if old_sub.path is not None:
             continue
         constraints_list = constraints_by_address.get(old_sub.address)
@@ -338,7 +342,7 @@ def _remove_stale_subdep_constraints(
 
 
 def _resolve_transitive_tree(
-    deps: list[PackageDependency],
+    deps: dict[str, PackageDependency],
     resolution_stack: set[str],
     resolved_map: dict[str, ResolvedDependency],
     constraints_by_address: dict[str, list[str]],
@@ -352,7 +356,7 @@ def _resolve_transitive_tree(
     reached via multiple paths) are resolved by finding a version satisfying all constraints.
 
     Args:
-        deps: Dependencies to resolve at this level.
+        deps: Dependencies to resolve at this level (alias -> PackageDependency).
         resolution_stack: Addresses currently on the DFS path (cycle detection).
         resolved_map: Address -> resolved dependency (deduplication).
         constraints_by_address: Address -> list of version constraints seen.
@@ -364,7 +368,7 @@ def _resolve_transitive_tree(
         TransitiveDependencyError: If a cycle is detected or diamond constraints are unsatisfiable.
         DependencyResolveError: If resolution fails.
     """
-    for dep in deps:
+    for alias, dep in deps.items():
         # Skip local path deps in transitive resolution
         if dep.path is not None:
             continue
@@ -402,7 +406,7 @@ def _resolve_transitive_tree(
             override_url = (fetch_url_overrides or {}).get(dep.address)
             re_resolved = _resolve_with_multiple_constraints(
                 address=dep.address,
-                alias=dep.alias,
+                alias=alias,
                 constraints=constraints_by_address[dep.address],
                 tags_cache=tags_cache,
                 cache_root=cache_root,
@@ -413,7 +417,7 @@ def _resolve_transitive_tree(
             # Recurse into sub-dependencies of the re-resolved version,
             # which may differ from the previously resolved version
             if re_resolved.manifest is not None and re_resolved.manifest.dependencies:
-                remote_sub_deps = [sub for sub in re_resolved.manifest.dependencies if sub.path is None]
+                remote_sub_deps = {sub_alias: sub for sub_alias, sub in re_resolved.manifest.dependencies.items() if sub.path is None}
                 if remote_sub_deps:
                     resolution_stack.add(dep.address)
                     try:
@@ -439,20 +443,20 @@ def _resolve_transitive_tree(
             if len(constraints_by_address[dep.address]) > 1:
                 resolved_dep = _resolve_with_multiple_constraints(
                     address=dep.address,
-                    alias=dep.alias,
+                    alias=alias,
                     constraints=constraints_by_address[dep.address],
                     tags_cache=tags_cache,
                     cache_root=cache_root,
                     fetch_url_override=override_url,
                 )
             else:
-                resolved_dep = resolve_remote_dependency(dep, cache_root=cache_root, fetch_url_override=override_url)
+                resolved_dep = resolve_remote_dependency(alias, dep, cache_root=cache_root, fetch_url_override=override_url)
 
             resolved_map[dep.address] = resolved_dep
 
             # Recurse into sub-dependencies (remote only)
             if resolved_dep.manifest is not None and resolved_dep.manifest.dependencies:
-                remote_sub_deps = [sub for sub in resolved_dep.manifest.dependencies if sub.path is None]
+                remote_sub_deps = {sub_alias: sub for sub_alias, sub in resolved_dep.manifest.dependencies.items() if sub.path is None}
                 if remote_sub_deps:
                     _resolve_transitive_tree(
                         deps=remote_sub_deps,
@@ -494,11 +498,11 @@ def resolve_all_dependencies(
     """
     # 1. Resolve local path deps (direct only, no recursion)
     local_resolved: list[ResolvedDependency] = []
-    remote_deps: list[PackageDependency] = []
+    remote_deps: dict[str, PackageDependency] = {}
 
-    for dep in manifest.dependencies:
+    for alias, dep in manifest.dependencies.items():
         if dep.path is not None:
-            resolved_dep = _resolve_local_dependency(dep, package_root)
+            resolved_dep = _resolve_local_dependency(alias, dep, package_root)
             local_resolved.append(resolved_dep)
             local_export_count = len(resolved_dep.exported_pipe_codes) if resolved_dep.exported_pipe_codes is not None else "all"
             logger.debug(
@@ -508,7 +512,7 @@ def resolve_all_dependencies(
                 local_export_count,
             )
         else:
-            remote_deps.append(dep)
+            remote_deps[alias] = dep
 
     # 2. Resolve remote deps transitively
     resolved_map: dict[str, ResolvedDependency] = {}
