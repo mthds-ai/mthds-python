@@ -12,7 +12,7 @@ import logging
 from pydantic import BaseModel, ConfigDict
 
 from mthds.package.bundle_metadata import BundleMetadata
-from mthds.package.manifest.schema import RESERVED_DOMAINS, MthdsPackageManifest, is_reserved_domain_path
+from mthds.package.manifest.schema import RESERVED_DOMAINS, MethodsManifest, is_reserved_domain_path
 from mthds.package.qualified_ref import QualifiedRef, QualifiedRefError
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class PackageVisibilityChecker:
 
     def __init__(
         self,
-        manifest: MthdsPackageManifest | None,
+        manifest: MethodsManifest | None,
         bundle_metadatas: list[BundleMetadata],
     ):
         self._manifest = manifest
@@ -221,7 +221,7 @@ class PackageVisibilityChecker:
 
 
 def check_visibility(
-    manifest: MthdsPackageManifest | None,
+    manifest: MethodsManifest | None,
     bundle_metadatas: list[BundleMetadata],
 ) -> list[VisibilityError]:
     """Convenience function: check visibility for a set of bundle metadatas.

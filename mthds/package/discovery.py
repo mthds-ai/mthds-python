@@ -1,12 +1,12 @@
 from pathlib import Path
 
 from mthds.package.manifest.parser import parse_methods_toml
-from mthds.package.manifest.schema import MthdsPackageManifest
+from mthds.package.manifest.schema import MethodsManifest
 
 MANIFEST_FILENAME = "METHODS.toml"
 
 
-def find_package_manifest(bundle_path: Path) -> MthdsPackageManifest | None:
+def find_package_manifest(bundle_path: Path) -> MethodsManifest | None:
     """Walk up from a bundle file's directory to find the nearest METHODS.toml.
 
     Stops at the first METHODS.toml found, or when a .git/ directory is
@@ -16,7 +16,7 @@ def find_package_manifest(bundle_path: Path) -> MthdsPackageManifest | None:
         bundle_path: Path to a .mthds bundle file
 
     Returns:
-        The parsed MthdsPackageManifest, or None if no manifest is found
+        The parsed MethodsManifest, or None if no manifest is found
 
     Raises:
         ManifestParseError: If a METHODS.toml is found but has invalid TOML syntax

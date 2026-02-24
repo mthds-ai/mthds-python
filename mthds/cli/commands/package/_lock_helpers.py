@@ -11,10 +11,10 @@ from mthds.package.discovery import MANIFEST_FILENAME
 from mthds.package.exceptions import DependencyResolveError, ManifestError, TransitiveDependencyError
 from mthds.package.lock_file import LOCK_FILENAME, LockFile, LockFileError, generate_lock_file, serialize_lock_file
 from mthds.package.manifest.parser import parse_methods_toml
-from mthds.package.manifest.schema import MthdsPackageManifest
+from mthds.package.manifest.schema import MethodsManifest
 
 
-def parse_manifest_or_exit(console: Console, cwd: Path) -> MthdsPackageManifest:
+def parse_manifest_or_exit(console: Console, cwd: Path) -> MethodsManifest:
     """Parse the METHODS.toml in cwd, or exit with an error message.
 
     Args:
@@ -39,7 +39,7 @@ def parse_manifest_or_exit(console: Console, cwd: Path) -> MthdsPackageManifest:
         raise typer.Exit(code=1) from exc
 
 
-def resolve_and_generate_lock(console: Console, cwd: Path, manifest: MthdsPackageManifest) -> tuple[LockFile, str]:
+def resolve_and_generate_lock(console: Console, cwd: Path, manifest: MethodsManifest) -> tuple[LockFile, str]:
     """Resolve dependencies and generate a lock file.
 
     Args:

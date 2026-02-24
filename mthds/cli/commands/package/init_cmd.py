@@ -5,7 +5,7 @@ import typer
 from mthds.cli._console import get_console
 from mthds.package.discovery import MANIFEST_FILENAME
 from mthds.package.manifest.parser import serialize_manifest_to_toml
-from mthds.package.manifest.schema import MthdsPackageManifest
+from mthds.package.manifest.schema import MethodsManifest
 
 
 def do_init(force: bool = False, directory: str | None = None) -> None:
@@ -27,7 +27,7 @@ def do_init(force: bool = False, directory: str | None = None) -> None:
 
     # Generate manifest with placeholder values
     dir_name = cwd.name.replace("-", "_").replace(" ", "_").lower()
-    manifest = MthdsPackageManifest(
+    manifest = MethodsManifest(
         address=f"example.com/yourorg/{dir_name}",
         version="0.1.0",
         description=f"MTHDS package for {dir_name}",

@@ -174,12 +174,12 @@ def _walk_exports_table(table: dict[str, Any], prefix: str = "") -> list[dict[st
 _KNOWN_TOP_LEVEL_KEYS = frozenset({"package", "dependencies", "exports"})
 
 
-class MthdsPackageManifest(BaseModel):
+class MethodsManifest(BaseModel):
     """The METHODS.toml package manifest model.
 
     Can be constructed in two ways:
-    - From raw TOML dict: ``MthdsPackageManifest.model_validate(raw_toml_dict)``
-    - Directly: ``MthdsPackageManifest(address=..., version=..., ...)``
+    - From raw TOML dict: ``MethodsManifest.model_validate(raw_toml_dict)``
+    - Directly: ``MethodsManifest(address=..., version=..., ...)``
     """
 
     model_config = ConfigDict(extra="forbid")

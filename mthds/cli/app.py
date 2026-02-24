@@ -8,6 +8,7 @@ from typing import Annotated
 
 import typer
 
+from mthds.cli._console import get_version, print_logo
 from mthds.cli.commands.build_cmd import do_build_inputs, do_build_output, do_build_pipe, do_build_runner
 from mthds.cli.commands.config_cmd import do_config_get, do_config_list, do_config_set
 from mthds.cli.commands.package.app import package_app
@@ -15,11 +16,30 @@ from mthds.cli.commands.run_cmd import do_run
 from mthds.cli.commands.setup_cmd import do_setup_runner
 from mthds.cli.commands.validate_cmd import do_validate
 
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"mthds v{get_version()}")
+        raise typer.Exit
+
+
 app = typer.Typer(
     name="mthds",
     no_args_is_help=True,
     help="MTHDS CLI — manage packages, configure credentials, and run pipelines.",
 )
+
+
+@app.callback(invoke_without_command=True)
+def main(
+    _version: Annotated[
+        bool | None,
+        typer.Option("--version", "-V", help="Show version and exit", callback=_version_callback, is_eager=True),
+    ] = None,
+) -> None:
+    """MTHDS CLI — manage packages, configure credentials, and run pipelines."""
+    print_logo()
+
 
 # ── Package subcommand group ─────────────────────────────────────────
 app.add_typer(package_app, name="package")

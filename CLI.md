@@ -35,7 +35,12 @@ mthds run my_pipe_code
 
 ## Global Options
 
-The `mthds` CLI does not have global flags. Runner selection is available per-command via `--runner`.
+| Option | Description |
+|---|---|
+| `-V, --version` | Print the CLI version and exit |
+| `--help` | Show help for any command |
+
+Runner selection (`--runner`) and directory targeting (`--directory`) are available per-command.
 
 ---
 
@@ -55,6 +60,7 @@ mthds run <target> [OPTIONS] [EXTRA_ARGS...]
 | `--inputs`, `-i` | string | no | `None` | Path to a JSON file containing inputs |
 | `--inputs-json` | string | no | `None` | Inline JSON string with inputs |
 | `--runner`, `-r` | string | no | auto-detect | Runner to use: `pipelex` or `api` |
+| `--directory`, `-d` | string | no | `.` | Target package directory (defaults to current directory) |
 | `EXTRA_ARGS` | string[] | no | -- | Additional arguments passed through to the runner |
 
 When `--runner` is omitted, the CLI uses the runner configured via `mthds config set runner <name>` (default: `api`).
@@ -95,6 +101,7 @@ mthds validate [TARGET] [OPTIONS] [EXTRA_ARGS...]
 | `target` | string | no | `None` | Pipe code or `.mthds` file path (for runner validation) |
 | `--all`, `-a` | bool | no | `False` | Validate all pipes via the runner |
 | `--runner`, `-r` | string | no | `None` | Runner for deeper validation (e.g. `pipelex`) |
+| `--directory`, `-d` | string | no | `.` | Target package directory (defaults to current directory) |
 | `EXTRA_ARGS` | string[] | no | -- | Additional arguments passed through to the runner |
 
 Without `--runner`, only the `METHODS.toml` manifest structure is validated. With `--runner pipelex`, validation is delegated to the pipelex CLI subprocess for deeper checks.
@@ -129,6 +136,7 @@ mthds build pipe <brief>
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `brief` | string | yes | Brief description of the pipe to build |
+| `--directory`, `-d` | string | no | Target package directory (defaults to current directory) |
 
 **Example:**
 
@@ -147,6 +155,7 @@ mthds build runner <target>
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `target` | string | yes | Target runner to build for |
+| `--directory`, `-d` | string | no | Target package directory (defaults to current directory) |
 
 **Example:**
 
@@ -166,6 +175,7 @@ mthds build inputs <target> <pipe_code>
 |---|---|---|---|
 | `target` | string | yes | Target runner |
 | `pipe_code` | string | yes | Pipe code to build inputs for |
+| `--directory`, `-d` | string | no | Target package directory (defaults to current directory) |
 
 **Example:**
 
@@ -186,6 +196,7 @@ mthds build output <target> <pipe_code> [OPTIONS]
 | `target` | string | yes | -- | Target runner |
 | `pipe_code` | string | yes | -- | Pipe code to build output for |
 | `--format`, `-f` | string | no | `json` | Output format |
+| `--directory`, `-d` | string | no | `.` | Target package directory (defaults to current directory) |
 
 **Example:**
 
@@ -206,8 +217,8 @@ Configuration values are resolved in this order: **environment variables > crede
 | Key | Environment Variable | Default | Description |
 |---|---|---|---|
 | `runner` | `MTHDS_RUNNER` | `api` | Default runner (`api` or `pipelex`) |
-| `api-url` | `MTHDS_API_URL` | `https://api.pipelex.com` | MTHDS API base URL |
-| `api-key` | `MTHDS_API_KEY` | (empty) | API authentication key |
+| `api-url` | `PIPELEX_API_URL` | `https://api.pipelex.com` | MTHDS API base URL |
+| `api-key` | `PIPELEX_API_KEY` | (empty) | API authentication key |
 | `telemetry` | `DISABLE_TELEMETRY` | `0` | Set to `1` to disable telemetry |
 
 ### `mthds config set`
@@ -305,6 +316,7 @@ mthds package init [OPTIONS]
 | Option | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `--force`, `-f` | bool | no | `False` | Overwrite existing `METHODS.toml` |
+| `--directory`, `-d` | string | no | `.` | Target package directory (defaults to current directory) |
 
 **Examples:**
 
@@ -321,8 +333,12 @@ mthds package init --force
 Display the package manifest (`METHODS.toml`) for the current directory.
 
 ```bash
-mthds package list
+mthds package list [OPTIONS]
 ```
+
+| Option | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `--directory`, `-d` | string | no | `.` | Target package directory (defaults to current directory) |
 
 Shows package metadata, dependencies, and exports in formatted tables.
 
@@ -340,6 +356,7 @@ mthds package add <address> [OPTIONS]
 | `--alias`, `-a` | string | no | auto-derived | Dependency alias (derived from address if omitted) |
 | `--version`, `-v` | string | no | `0.1.0` | Version constraint |
 | `--path`, `-p` | string | no | `None` | Local filesystem path to the dependency |
+| `--directory`, `-d` | string | no | `.` | Target package directory (defaults to current directory) |
 
 **Examples:**
 
@@ -359,16 +376,24 @@ mthds package add github.com/org/repo --path ../local-repo
 Resolve dependencies and generate `methods.lock`.
 
 ```bash
-mthds package lock
+mthds package lock [OPTIONS]
 ```
+
+| Option | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `--directory`, `-d` | string | no | `.` | Target package directory (defaults to current directory) |
 
 ### `mthds package install`
 
 Install dependencies from `methods.lock`.
 
 ```bash
-mthds package install
+mthds package install [OPTIONS]
 ```
+
+| Option | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `--directory`, `-d` | string | no | `.` | Target package directory (defaults to current directory) |
 
 Requires a `methods.lock` file. Run `mthds package lock` first if one does not exist.
 
@@ -377,21 +402,11 @@ Requires a `methods.lock` file. Run `mthds package lock` first if one does not e
 Re-resolve dependencies and update `methods.lock`.
 
 ```bash
-mthds package update
-```
-
-Performs a fresh resolve of all dependencies, rewrites the lock file, and displays a diff of changes.
-
-### `mthds package publish`
-
-Publish package for distribution (not yet implemented).
-
-```bash
-mthds package publish [OPTIONS]
+mthds package update [OPTIONS]
 ```
 
 | Option | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `--tag` | bool | no | `False` | Create git tag `v{version}` locally on success |
+| `--directory`, `-d` | string | no | `.` | Target package directory (defaults to current directory) |
 
-This command is not yet implemented and will exit with an error.
+Performs a fresh resolve of all dependencies, rewrites the lock file, and displays a diff of changes.

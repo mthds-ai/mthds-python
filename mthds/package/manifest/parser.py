@@ -5,17 +5,17 @@ from pydantic import ValidationError
 
 from mthds._utils.toml_utils import TomlError, load_toml_from_content
 from mthds.package.exceptions import ManifestParseError, ManifestValidationError
-from mthds.package.manifest.schema import MthdsPackageManifest
+from mthds.package.manifest.schema import MethodsManifest
 
 
-def parse_methods_toml(content: str) -> MthdsPackageManifest:
-    """Parse METHODS.toml content into an MthdsPackageManifest model.
+def parse_methods_toml(content: str) -> MethodsManifest:
+    """Parse METHODS.toml content into an MethodsManifest model.
 
     Args:
         content: The raw TOML string
 
     Returns:
-        A validated MthdsPackageManifest
+        A validated MethodsManifest
 
     Raises:
         ManifestParseError: If the TOML syntax is invalid
@@ -28,14 +28,14 @@ def parse_methods_toml(content: str) -> MthdsPackageManifest:
         raise ManifestParseError(msg) from exc
 
     try:
-        return MthdsPackageManifest.model_validate(raw)
+        return MethodsManifest.model_validate(raw)
     except ValidationError as exc:
         msg = f"METHODS.toml validation failed: {exc}"
         raise ManifestValidationError(msg) from exc
 
 
-def serialize_manifest_to_toml(manifest: MthdsPackageManifest) -> str:
-    """Serialize an MthdsPackageManifest to a human-readable TOML string.
+def serialize_manifest_to_toml(manifest: MethodsManifest) -> str:
+    """Serialize an MethodsManifest to a human-readable TOML string.
 
     Args:
         manifest: The manifest model to serialize

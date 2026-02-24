@@ -15,7 +15,7 @@ from mthds.package.exceptions import (
     VCSFetchError,
     VersionResolutionError,
 )
-from mthds.package.manifest.schema import MthdsPackageManifest, PackageDependency
+from mthds.package.manifest.schema import MethodsManifest, PackageDependency
 from mthds.package.package_cache import get_cached_package_path, is_cached, store_in_cache
 from mthds.package.semver import parse_constraint, parse_version, select_minimum_version_for_multiple_constraints, version_satisfies
 from mthds.package.vcs_resolver import address_to_clone_url, clone_at_version, list_remote_version_tags, resolve_version_from_tags
@@ -30,7 +30,7 @@ class ResolvedDependency(BaseModel):
 
     alias: str
     address: str
-    manifest: MthdsPackageManifest | None
+    manifest: MethodsManifest | None
     package_root: Path
     mthds_files: list[Path]
     exported_pipe_codes: set[str] | None
@@ -48,7 +48,7 @@ def collect_mthds_files(directory: Path) -> list[Path]:
     return sorted(directory.rglob("*.mthds"))
 
 
-def determine_exported_pipes(manifest: MthdsPackageManifest | None) -> set[str] | None:
+def determine_exported_pipes(manifest: MethodsManifest | None) -> set[str] | None:
     """Determine which pipes are exported by a dependency.
 
     Returns None when all pipes should be public (no manifest, or manifest
@@ -78,7 +78,7 @@ def determine_exported_pipes(manifest: MthdsPackageManifest | None) -> set[str] 
     return exported
 
 
-def _find_manifest_in_dir(directory: Path) -> MthdsPackageManifest | None:
+def _find_manifest_in_dir(directory: Path) -> MethodsManifest | None:
     """Read and parse a METHODS.toml from a directory root.
 
     Args:
@@ -299,7 +299,7 @@ def _resolve_with_multiple_constraints(
 
 
 def _remove_stale_subdep_constraints(
-    old_manifest: MthdsPackageManifest | None,
+    old_manifest: MethodsManifest | None,
     resolved_map: dict[str, ResolvedDependency],
     constraints_by_address: dict[str, list[str]],
 ) -> None:
@@ -468,7 +468,7 @@ def _resolve_transitive_tree(
 
 
 def resolve_all_dependencies(
-    manifest: MthdsPackageManifest,
+    manifest: MethodsManifest,
     package_root: Path,
     cache_root: Path | None = None,
     fetch_url_overrides: dict[str, str] | None = None,

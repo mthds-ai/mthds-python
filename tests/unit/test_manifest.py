@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from mthds.package.exceptions import ManifestParseError, ManifestValidationError
 from mthds.package.manifest.parser import parse_methods_toml, serialize_manifest_to_toml
-from mthds.package.manifest.schema import MthdsPackageManifest, PackageDependency
+from mthds.package.manifest.schema import MethodsManifest, PackageDependency
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -144,7 +144,7 @@ class TestParseMethodsToml:
 
 class TestDirectConstruction:
     def test_minimal_direct(self):
-        manifest = MthdsPackageManifest(
+        manifest = MethodsManifest(
             address="example.com/org/repo",
             version="0.1.0",
             description="A test package",
@@ -161,7 +161,7 @@ class TestDirectConstruction:
                 "description": "test",
             },
         }
-        manifest = MthdsPackageManifest.model_validate(raw)
+        manifest = MethodsManifest.model_validate(raw)
         assert manifest.address == "github.com/org/repo"
 
 
@@ -444,7 +444,7 @@ class TestDependencyValidation:
             PackageDependency(address="github.com/c/d", version="2.0.0", alias="dupe"),
         ]
         with pytest.raises(ValidationError, match=r"[Dd]uplicate dependency alias"):
-            MthdsPackageManifest(
+            MethodsManifest(
                 address="github.com/acme/widgets",
                 version="1.0.0",
                 description="test",

@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from mthds._utils.toml_utils import TomlError, load_toml_from_content
 from mthds.package.exceptions import IntegrityError, LockFileError
-from mthds.package.manifest.schema import MthdsPackageManifest, is_valid_semver
+from mthds.package.manifest.schema import MethodsManifest, is_valid_semver
 from mthds.package.package_cache import get_cached_package_path
 
 LOCK_FILENAME = "methods.lock"
@@ -188,7 +188,7 @@ def serialize_lock_file(lock_file: LockFile) -> str:
 
 
 def generate_lock_file(
-    manifest: MthdsPackageManifest,
+    manifest: MethodsManifest,
     resolved_deps: list[Any],
 ) -> LockFile:
     """Generate a lock file from resolved dependencies.

@@ -1,7 +1,7 @@
 """Package management subcommand group.
 
 Registers all package management commands: init, list, add, lock, install,
-update, and publish.
+and update.
 """
 
 from typing import Annotated
@@ -13,13 +13,12 @@ from mthds.cli.commands.package.init_cmd import do_init
 from mthds.cli.commands.package.install_cmd import do_install
 from mthds.cli.commands.package.list_cmd import do_list
 from mthds.cli.commands.package.lock_cmd import do_lock
-from mthds.cli.commands.package.publish_cmd import do_publish
 from mthds.cli.commands.package.update_cmd import do_update
 
 package_app = typer.Typer(
     name="package",
     no_args_is_help=True,
-    help="Manage MTHDS packages: init, list, add, lock, install, update, publish.",
+    help="Manage MTHDS packages: init, list, add, lock, install, update.",
 )
 
 
@@ -107,14 +106,3 @@ def update_cmd(
 ) -> None:
     """Fresh resolve of all dependencies and rewrite the lock file."""
     do_update(directory=directory)
-
-
-@package_app.command("publish", help="Publish package for distribution (not yet implemented)")
-def publish_cmd(
-    tag: Annotated[
-        bool,
-        typer.Option("--tag", help="Create git tag v{version} locally on success"),
-    ] = False,
-) -> None:
-    """Validate that the package is ready for distribution."""
-    do_publish(tag=tag)
