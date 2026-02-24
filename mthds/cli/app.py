@@ -1,7 +1,7 @@
 """MTHDS package manager CLI.
 
 Provides commands for managing MTHDS packages: init, list, add, lock, install,
-update, publish, validate, and run.
+update, validate, and run.
 """
 
 from typing import Annotated
@@ -13,7 +13,6 @@ from mthds.cli.commands.init_cmd import do_init
 from mthds.cli.commands.install_cmd import do_install
 from mthds.cli.commands.list_cmd import do_list
 from mthds.cli.commands.lock_cmd import do_lock
-from mthds.cli.commands.publish_cmd import do_publish
 from mthds.cli.commands.run_cmd import do_run
 from mthds.cli.commands.update_cmd import do_update
 from mthds.cli.commands.validate_cmd import do_validate
@@ -81,17 +80,6 @@ def install_cmd() -> None:
 def update_cmd() -> None:
     """Fresh resolve of all dependencies and rewrite the lock file."""
     do_update()
-
-
-@app.command("publish", help="Publish package for distribution (not yet implemented)")
-def publish_cmd(
-    tag: Annotated[
-        bool,
-        typer.Option("--tag", help="Create git tag v{version} locally on success"),
-    ] = False,
-) -> None:
-    """Validate that the package is ready for distribution."""
-    do_publish(tag=tag)
 
 
 @app.command("validate", help="Validate METHODS.toml and optionally run deeper validation via a runner")
