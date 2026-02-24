@@ -26,7 +26,7 @@ class QualifiedRef(BaseModel):
 
     @property
     def full_ref(self) -> str:
-        if self.domain_path:
+        if self.domain_path is not None:
             return f"{self.domain_path}.{self.local_code}"
         return self.local_code
 
@@ -60,6 +60,22 @@ class QualifiedRef(BaseModel):
         domain_path, local_code = raw.rsplit(".", maxsplit=1)
         return cls(domain_path=domain_path, local_code=local_code)
 
+    @staticmethod
+    def _validate_domain_path(domain_path: str, raw: str) -> None:
+        """Validate that all segments of a domain path are snake_case.
+
+        Args:
+            domain_path: The domain path to validate.
+            raw: The original raw reference string (for error messages).
+
+        Raises:
+            QualifiedRefError: If any segment is not snake_case.
+        """
+        for segment in domain_path.split("."):
+            if not is_snake_case(segment):
+                msg = f"Domain segment '{segment}' in reference '{raw}' must be snake_case"
+                raise QualifiedRefError(msg)
+
     @classmethod
     def parse_concept_ref(cls, raw: str) -> "QualifiedRef":
         """Parse a concept ref. Validates domain_path segments are snake_case, local_code is PascalCase.
@@ -80,10 +96,7 @@ class QualifiedRef(BaseModel):
             raise QualifiedRefError(msg)
 
         if ref.domain_path is not None:
-            for segment in ref.domain_path.split("."):
-                if not is_snake_case(segment):
-                    msg = f"Domain segment '{segment}' in reference '{raw}' must be snake_case"
-                    raise QualifiedRefError(msg)
+            cls._validate_domain_path(ref.domain_path, raw)
 
         return ref
 
@@ -107,10 +120,7 @@ class QualifiedRef(BaseModel):
             raise QualifiedRefError(msg)
 
         if ref.domain_path is not None:
-            for segment in ref.domain_path.split("."):
-                if not is_snake_case(segment):
-                    msg = f"Domain segment '{segment}' in reference '{raw}' must be snake_case"
-                    raise QualifiedRefError(msg)
+            cls._validate_domain_path(ref.domain_path, raw)
 
         return ref
 

@@ -49,7 +49,7 @@ def do_install(directory: Path | None = None) -> None:
         dep = PackageDependency(
             address=address,
             version=locked.version,
-            alias=address.rsplit("/", maxsplit=1)[-1].replace("-", "_").replace(".", "_"),
+            alias=address.rsplit("/", maxsplit=1)[-1].replace("-", "_").replace(".", "_").lower(),
         )
         try:
             resolve_remote_dependency(dep)

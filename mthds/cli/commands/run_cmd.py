@@ -9,7 +9,6 @@ import asyncio
 import json
 import shutil
 import subprocess  # noqa: S404
-import sys
 from pathlib import Path
 from typing import cast
 
@@ -138,7 +137,7 @@ def _run_with_api(
         inputs_dict = _parse_inputs_json(inputs_json)
 
     pipeline_inputs: PipelineInputs | None = None
-    if inputs_dict:
+    if inputs_dict is not None:
         pipeline_inputs = PipelineInputs(inputs=inputs_dict)
 
     async def _execute() -> None:
@@ -184,4 +183,4 @@ def do_run(
             _run_with_api(target, inputs_file, inputs_json)
         case _:
             console.print(f"[red]Unknown runner: '{escape(resolved_runner)}'. Use 'pipelex' or 'api'.[/red]")
-            sys.exit(1)
+            raise typer.Exit(code=1)

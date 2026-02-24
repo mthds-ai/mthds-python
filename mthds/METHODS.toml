@@ -1,7 +1,0 @@
-[package]
-address = "example.com/yourorg/mthds"
-version = "0.1.0"
-description = "Package generated from 1 .mthds file(s)"
-
-[exports.synthetic_data_generation]
-pipes = ["generate_synthetic_data_samples", "create_profile_for_case", "identify_sample_cases"]

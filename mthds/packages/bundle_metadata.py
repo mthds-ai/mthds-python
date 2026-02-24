@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from mthds._utils.pydantic_utils import empty_list_factory_of
 
 
 class BundleMetadata(BaseModel):
@@ -15,4 +17,4 @@ class BundleMetadata(BaseModel):
 
     domain: str
     main_pipe: str | None = None
-    pipe_references: list[tuple[str, str]] = []
+    pipe_references: list[tuple[str, str]] = Field(default_factory=empty_list_factory_of(tuple[str, str]))

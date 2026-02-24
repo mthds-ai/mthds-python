@@ -29,7 +29,7 @@ def parse_version(version_str: str) -> Version:
     Raises:
         SemVerError: If the version string is not valid semver.
     """
-    cleaned = version_str.lstrip("v") if version_str.startswith("v") else version_str
+    cleaned = version_str.removeprefix("v")
     try:
         return Version(cleaned)
     except ValueError as exc:

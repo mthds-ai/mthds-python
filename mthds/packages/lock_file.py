@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import tomlkit
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from mthds._utils.toml_utils import TomlError, load_toml_from_content
 from mthds.packages.exceptions import IntegrityError, LockFileError
@@ -151,7 +151,7 @@ def parse_lock_file(content: str) -> LockFile:
         entry_dict = cast("dict[str, Any]", entry)
         try:
             packages[str(address)] = LockedPackage(**entry_dict)
-        except Exception as exc:
+        except ValidationError as exc:
             msg = f"Invalid lock file entry for '{address}': {exc}"
             raise LockFileError(msg) from exc
 

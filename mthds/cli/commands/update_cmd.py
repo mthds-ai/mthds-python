@@ -1,22 +1,11 @@
 from pathlib import Path
 
-import typer
 from rich.console import Console
 from rich.markup import escape
 
 from mthds.cli._console import get_console
-from mthds.packages.dependency_resolver import resolve_all_dependencies
-from mthds.packages.discovery import MANIFEST_FILENAME
-from mthds.packages.exceptions import DependencyResolveError, ManifestError, TransitiveDependencyError
-from mthds.packages.lock_file import (
-    LOCK_FILENAME,
-    LockFile,
-    LockFileError,
-    generate_lock_file,
-    parse_lock_file,
-    serialize_lock_file,
-)
-from mthds.packages.manifest_parser import parse_methods_toml
+from mthds.cli.commands._lock_helpers import parse_manifest_or_exit, resolve_and_generate_lock, write_lock_file
+from mthds.packages.lock_file import LOCK_FILENAME, LockFile, LockFileError, parse_lock_file
 
 
 def _display_lock_diff(console: Console, old_lock: LockFile, new_lock: LockFile) -> None:
@@ -57,27 +46,12 @@ def _display_lock_diff(console: Console, old_lock: LockFile, new_lock: LockFile)
         console.print(f"  [yellow]{escape(line)}[/yellow]")
 
 
-def do_update(directory: Path | None = None) -> None:
-    """Re-resolve dependencies and update methods.lock.
-
-    Args:
-        directory: Package directory (defaults to current directory)
-    """
+def do_update() -> None:
+    """Re-resolve dependencies and update methods.lock."""
     console = get_console()
-    cwd = Path(directory).resolve() if directory else Path.cwd()
-    manifest_path = cwd / MANIFEST_FILENAME
+    cwd = Path.cwd()
 
-    if not manifest_path.exists():
-        console.print(f"[red]{MANIFEST_FILENAME} not found in current directory.[/red]")
-        console.print("Run [bold]mthds init[/bold] first to create a manifest.")
-        raise typer.Exit(code=1)
-
-    content = manifest_path.read_text(encoding="utf-8")
-    try:
-        manifest = parse_methods_toml(content)
-    except ManifestError as exc:
-        console.print(f"[red]Could not parse {MANIFEST_FILENAME}: {escape(exc.message)}[/red]")
-        raise typer.Exit(code=1) from exc
+    manifest = parse_manifest_or_exit(console, cwd)
 
     # Read existing lock for diff comparison
     lock_path = cwd / LOCK_FILENAME
@@ -89,24 +63,8 @@ def do_update(directory: Path | None = None) -> None:
             pass  # Ignore unparseable old lock
 
     # Fresh resolve (ignoring existing lock)
-    try:
-        resolved = resolve_all_dependencies(manifest, cwd)
-    except (DependencyResolveError, TransitiveDependencyError) as exc:
-        console.print(f"[red]Dependency resolution failed: {escape(exc.message)}[/red]")
-        raise typer.Exit(code=1) from exc
-
-    try:
-        new_lock = generate_lock_file(manifest, resolved)
-    except LockFileError as exc:
-        console.print(f"[red]Lock file generation failed: {escape(exc.message)}[/red]")
-        raise typer.Exit(code=1) from exc
-
-    # Write lock file
-    lock_content = serialize_lock_file(new_lock)
-    lock_path.write_text(lock_content, encoding="utf-8")
-
-    pkg_count = len(new_lock.packages)
-    console.print(f"[green]Wrote {LOCK_FILENAME} with {pkg_count} package(s).[/green]")
+    new_lock, lock_content = resolve_and_generate_lock(console, cwd, manifest)
+    write_lock_file(console, cwd, new_lock, lock_content)
 
     # Display diff
     if old_lock is not None:
