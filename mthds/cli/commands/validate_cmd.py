@@ -146,7 +146,7 @@ def do_validate(
     # correct file.
     if target is not None and directory is not None:
         target_as_path = Path(target)
-        if not target_as_path.is_absolute() and target_as_path.suffix:
+        if not target_as_path.is_absolute() and target_as_path.suffix == ".mthds":
             target = str(target_as_path.resolve())
 
     manifest_ok = _validate_manifest(package_root)
