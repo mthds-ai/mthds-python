@@ -11,10 +11,14 @@ from mthds.packages.lock_file import LOCK_FILENAME, LockFileError, generate_lock
 from mthds.packages.manifest_parser import parse_methods_toml
 
 
-def do_lock() -> None:
-    """Resolve dependencies and generate methods.lock."""
+def do_lock(directory: Path | None = None) -> None:
+    """Resolve dependencies and generate methods.lock.
+
+    Args:
+        directory: Package directory (defaults to current directory)
+    """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = Path(directory).resolve() if directory else Path.cwd()
     manifest_path = cwd / MANIFEST_FILENAME
 
     if not manifest_path.exists():

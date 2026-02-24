@@ -4,6 +4,7 @@ Provides commands for managing MTHDS packages: init, list, add, lock, install,
 update, validate, and run.
 """
 
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -30,15 +31,24 @@ def init_cmd(
         bool,
         typer.Option("--force", "-f", help="Overwrite existing METHODS.toml"),
     ] = False,
+    directory: Annotated[
+        Path | None,
+        typer.Option("--directory", "-d", help="Package directory (defaults to current directory)"),
+    ] = None,
 ) -> None:
     """Create a bare METHODS.toml skeleton."""
-    do_init(force=force)
+    do_init(force=force, directory=directory)
 
 
 @app.command("list", help="Display the package manifest (METHODS.toml) for the current directory")
-def list_cmd() -> None:
+def list_cmd(
+    directory: Annotated[
+        Path | None,
+        typer.Option("--directory", "-d", help="Package directory (defaults to current directory)"),
+    ] = None,
+) -> None:
     """Show the package manifest if one exists."""
-    do_list()
+    do_list(directory=directory)
 
 
 @app.command("add", help="Add a dependency to METHODS.toml")
@@ -59,27 +69,46 @@ def add_cmd(
         str | None,
         typer.Option("--path", "-p", help="Local filesystem path to the dependency"),
     ] = None,
+    directory: Annotated[
+        Path | None,
+        typer.Option("--directory", "-d", help="Package directory (defaults to current directory)"),
+    ] = None,
 ) -> None:
     """Add a dependency to the package manifest."""
-    do_add(address=address, alias=alias, version=version, path=path)
+    do_add(address=address, alias=alias, version=version, path=path, directory=directory)
 
 
 @app.command("lock", help="Resolve dependencies and generate methods.lock")
-def lock_cmd() -> None:
+def lock_cmd(
+    directory: Annotated[
+        Path | None,
+        typer.Option("--directory", "-d", help="Package directory (defaults to current directory)"),
+    ] = None,
+) -> None:
     """Resolve all dependencies and write a lock file."""
-    do_lock()
+    do_lock(directory=directory)
 
 
 @app.command("install", help="Install dependencies from methods.lock")
-def install_cmd() -> None:
+def install_cmd(
+    directory: Annotated[
+        Path | None,
+        typer.Option("--directory", "-d", help="Package directory (defaults to current directory)"),
+    ] = None,
+) -> None:
     """Fetch packages recorded in the lock file."""
-    do_install()
+    do_install(directory=directory)
 
 
 @app.command("update", help="Re-resolve dependencies and update methods.lock")
-def update_cmd() -> None:
+def update_cmd(
+    directory: Annotated[
+        Path | None,
+        typer.Option("--directory", "-d", help="Package directory (defaults to current directory)"),
+    ] = None,
+) -> None:
     """Fresh resolve of all dependencies and rewrite the lock file."""
-    do_update()
+    do_update(directory=directory)
 
 
 @app.command("validate", help="Validate METHODS.toml and optionally run deeper validation via a runner")
@@ -100,9 +129,13 @@ def validate_cmd(
         list[str] | None,
         typer.Argument(help="Additional arguments passed through to the runner"),
     ] = None,
+    directory: Annotated[
+        Path | None,
+        typer.Option("--directory", "-d", help="Package directory (defaults to current directory)"),
+    ] = None,
 ) -> None:
     """Validate the package manifest and optionally delegate to a runner."""
-    do_validate(target=target, validate_all=validate_all, runner=runner, extra_args=extra_args)
+    do_validate(target=target, validate_all=validate_all, runner=runner, extra_args=extra_args, directory=directory)
 
 
 @app.command("run", help="Execute a pipe via a runner (pipelex subprocess or MTHDS API)")

@@ -37,6 +37,7 @@ def do_add(
     alias: str | None = None,
     version: str = "0.1.0",
     path: str | None = None,
+    directory: Path | None = None,
 ) -> None:
     """Add a dependency to METHODS.toml.
 
@@ -45,9 +46,10 @@ def do_add(
         alias: The dependency alias (auto-derived from address if not provided)
         version: The version constraint
         path: Optional local filesystem path
+        directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = Path(directory).resolve() if directory else Path.cwd()
     manifest_path = cwd / MANIFEST_FILENAME
 
     # Check that METHODS.toml exists

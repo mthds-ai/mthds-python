@@ -11,10 +11,14 @@ from mthds.packages.manifest import PackageDependency
 from mthds.packages.package_cache import is_cached
 
 
-def do_install() -> None:
-    """Install dependencies from methods.lock."""
+def do_install(directory: Path | None = None) -> None:
+    """Install dependencies from methods.lock.
+
+    Args:
+        directory: Package directory (defaults to current directory)
+    """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = Path(directory).resolve() if directory else Path.cwd()
     lock_path = cwd / LOCK_FILENAME
 
     if not lock_path.exists():

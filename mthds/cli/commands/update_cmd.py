@@ -57,10 +57,14 @@ def _display_lock_diff(console: Console, old_lock: LockFile, new_lock: LockFile)
         console.print(f"  [yellow]{escape(line)}[/yellow]")
 
 
-def do_update() -> None:
-    """Re-resolve dependencies and update methods.lock."""
+def do_update(directory: Path | None = None) -> None:
+    """Re-resolve dependencies and update methods.lock.
+
+    Args:
+        directory: Package directory (defaults to current directory)
+    """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = Path(directory).resolve() if directory else Path.cwd()
     manifest_path = cwd / MANIFEST_FILENAME
 
     if not manifest_path.exists():
