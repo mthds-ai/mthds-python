@@ -19,3 +19,43 @@ This package provides the base structures that define methods and their structur
 ```bash
 pip install mthds
 ```
+
+## Quick Start
+
+```bash
+# Configure the API runner (default)
+mthds config set api-key YOUR_KEY
+mthds config set api-url https://your-api-instance.com
+
+# Run a pipe
+mthds run my_pipe_code
+
+# Validate the manifest
+mthds validate
+
+# Initialize a new package
+mthds package init
+```
+
+## API Configuration
+
+The default runner is `api`. To use it, configure your Pipelex API credentials:
+
+```bash
+mthds config set api-key YOUR_KEY
+mthds config set api-url https://your-api-instance.com
+```
+
+Credentials are stored in `~/.mthds/credentials` and shared between mthds-python and mthds-js.
+
+You can also use environment variables, which take precedence over the credentials file:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PIPELEX_API_KEY` | API authentication key | (empty) |
+| `PIPELEX_API_URL` | API base URL | `https://api.pipelex.com` |
+| `MTHDS_RUNNER` | Default runner (`api` or `pipelex`) | `api` |
+
+See `mthds config list` to view all current settings and their sources.
+
+For the full CLI reference, see [CLI.md](./CLI.md).

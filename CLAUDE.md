@@ -77,7 +77,7 @@
 - Always catch exceptions at the place where you can add useful context to them.
 - Use try/except blocks with specific exceptions.
 - Convert third-party exceptions to custom ones, except in pydantic validators where you can raise a `ValueError` or a `TypeError`.
-- NEVER catch the generic `Exception`, only catch specific exceptions, except at the root of CLI commands.
+- NEVER catch the generic `Exception`, only catch specific exceptions, except at top-level entry points.
 - Always add `from exc` to the exception raise statements.
 - Always write the error message as a variable before raising it, for cleaner error traces.
 
