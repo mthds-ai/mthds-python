@@ -3,7 +3,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.markup import escape
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.cli.commands._lock_helpers import parse_manifest_or_exit, resolve_and_generate_lock, write_lock_file
 from mthds.packages.lock_file import LOCK_FILENAME, LockFile, LockFileError, parse_lock_file
 
@@ -46,10 +46,14 @@ def _display_lock_diff(console: Console, old_lock: LockFile, new_lock: LockFile)
         console.print(f"  [yellow]{escape(line)}[/yellow]")
 
 
-def do_update() -> None:
-    """Re-resolve dependencies and update methods.lock."""
+def do_update(directory: Path | None = None) -> None:
+    """Re-resolve dependencies and update methods.lock.
+
+    Args:
+        directory: Package directory (defaults to current directory)
+    """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = resolve_directory(directory)
 
     manifest = parse_manifest_or_exit(console, cwd)
 

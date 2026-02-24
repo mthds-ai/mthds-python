@@ -2,20 +2,21 @@ from pathlib import Path
 
 import typer
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.packages.discovery import MANIFEST_FILENAME
 from mthds.packages.manifest import MthdsPackageManifest
 from mthds.packages.manifest_parser import serialize_manifest_to_toml
 
 
-def do_init(force: bool = False) -> None:
-    """Create a bare METHODS.toml skeleton in the current directory.
+def do_init(force: bool = False, directory: Path | None = None) -> None:
+    """Create a bare METHODS.toml skeleton in the given directory.
 
     Args:
         force: If True, overwrite an existing METHODS.toml
+        directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = resolve_directory(directory)
     manifest_path = cwd / MANIFEST_FILENAME
 
     # Check if manifest already exists

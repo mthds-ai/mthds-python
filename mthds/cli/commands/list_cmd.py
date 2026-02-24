@@ -5,18 +5,21 @@ from rich import box
 from rich.markup import escape
 from rich.table import Table
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.packages.discovery import MANIFEST_FILENAME, find_package_manifest
 from mthds.packages.exceptions import ManifestError
 
 
-def do_list() -> None:
+def do_list(directory: Path | None = None) -> None:
     """Display the package manifest information.
 
-    Walks up from the current directory to find a METHODS.toml and displays its contents.
+    Walks up from the given directory to find a METHODS.toml and displays its contents.
+
+    Args:
+        directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = resolve_directory(directory)
 
     # Create a dummy bundle path to trigger the walk-up search from cwd
     dummy_bundle_path = cwd / "dummy.mthds"
@@ -27,7 +30,7 @@ def do_list() -> None:
         raise typer.Exit(code=1) from exc
 
     if manifest is None:
-        console.print(f"[yellow]No {MANIFEST_FILENAME} found in current directory or parent directories.[/yellow]")
+        console.print(f"[yellow]No {MANIFEST_FILENAME} found in {escape(str(cwd))} or parent directories.[/yellow]")
         console.print("Run [bold]mthds init[/bold] to create one.")
         raise typer.Exit(code=1)
 

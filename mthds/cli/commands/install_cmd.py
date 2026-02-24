@@ -3,7 +3,7 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.packages.dependency_resolver import resolve_remote_dependency
 from mthds.packages.exceptions import DependencyResolveError, IntegrityError
 from mthds.packages.lock_file import LOCK_FILENAME, LockFileError, parse_lock_file, verify_lock_file
@@ -11,14 +11,18 @@ from mthds.packages.manifest import PackageDependency
 from mthds.packages.package_cache import is_cached
 
 
-def do_install() -> None:
-    """Install dependencies from methods.lock."""
+def do_install(directory: Path | None = None) -> None:
+    """Install dependencies from methods.lock.
+
+    Args:
+        directory: Package directory (defaults to current directory)
+    """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = resolve_directory(directory)
     lock_path = cwd / LOCK_FILENAME
 
     if not lock_path.exists():
-        console.print(f"[red]{LOCK_FILENAME} not found in current directory.[/red]")
+        console.print(f"[red]{LOCK_FILENAME} not found in {escape(str(cwd))}.[/red]")
         console.print("Run [bold]mthds lock[/bold] first to generate a lock file.")
         raise typer.Exit(code=1)
 

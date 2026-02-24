@@ -5,7 +5,7 @@ import typer
 from pydantic import ValidationError
 from rich.markup import escape
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.packages.discovery import MANIFEST_FILENAME
 from mthds.packages.exceptions import ManifestError
 from mthds.packages.manifest import PackageDependency
@@ -38,6 +38,7 @@ def do_add(
     alias: str | None = None,
     version: str = "0.1.0",
     path: str | None = None,
+    directory: Path | None = None,
 ) -> None:
     """Add a dependency to METHODS.toml.
 
@@ -46,14 +47,15 @@ def do_add(
         alias: The dependency alias (auto-derived from address if not provided)
         version: The version constraint
         path: Optional local filesystem path
+        directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = resolve_directory(directory)
     manifest_path = cwd / MANIFEST_FILENAME
 
     # Check that METHODS.toml exists
     if not manifest_path.exists():
-        console.print(f"[red]{MANIFEST_FILENAME} not found in current directory.[/red]")
+        console.print(f"[red]{MANIFEST_FILENAME} not found in {escape(str(cwd))}.[/red]")
         console.print("Run [bold]mthds init[/bold] first to create a manifest.")
         raise typer.Exit(code=1)
 
