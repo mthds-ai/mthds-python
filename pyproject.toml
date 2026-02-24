@@ -26,8 +26,6 @@ dependencies = [
     "tomli>=2.0.0,<3.0.0 ; python_version < '3.11'",
     "tomlkit>=0.12.0",
     "semantic-version>=2.10.0,<3.0.0",
-    "typer>=0.9.0",
-    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -39,9 +37,6 @@ dev = [
     "pytest>=8.0.0,<9.0.0",
     "pytest-mock>=3.12.0,<4.0.0",
 ]
-
-[project.scripts]
-mthds = "mthds.cli.app:app"
 
 [build-system]
 requires = ["hatchling"]

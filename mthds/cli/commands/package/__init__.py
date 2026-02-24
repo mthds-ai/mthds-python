@@ -1,1 +1,0 @@
-"""Package management subcommand group."""
