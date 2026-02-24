@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.0.4] - 2026-02-24
+
+- pytest and vscode settings
+- removed CLI
+
 ## [v0.0.3] - 2026-02-23
 
 ### Changed
