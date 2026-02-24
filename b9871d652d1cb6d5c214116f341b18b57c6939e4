@@ -1,0 +1,23 @@
+mthds/cli/commands/validate_cmd.py
+  c99740a275149b95 144-151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.4",
+  "base_commit_sha": "b9871d652d1cb6d5c214116f341b18b57c6939e4",
+  "prompts": {
+    "c99740a275149b95": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "557a593f-52be-431c-a5aa-d799a0d8806d",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Louis Choquel <lchoquel@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 8,
+      "total_deletions": 0,
+      "accepted_lines": 8,
+      "overriden_lines": 0
+    }
+  }
+}
