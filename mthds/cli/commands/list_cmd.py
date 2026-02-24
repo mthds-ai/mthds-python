@@ -30,7 +30,7 @@ def do_list(directory: Path | None = None) -> None:
         raise typer.Exit(code=1) from exc
 
     if manifest is None:
-        console.print(f"[yellow]No {MANIFEST_FILENAME} found in current directory or parent directories.[/yellow]")
+        console.print(f"[yellow]No {MANIFEST_FILENAME} found in {escape(str(cwd))} or parent directories.[/yellow]")
         console.print("Run [bold]mthds init[/bold] to create one.")
         raise typer.Exit(code=1)
 
