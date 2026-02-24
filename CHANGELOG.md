@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.0.5] - 2026-02-24
+
+- bump to redeploy
+
 ## [v0.0.4] - 2026-02-24
 
 - pytest and vscode settings
