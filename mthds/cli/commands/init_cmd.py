@@ -8,14 +8,15 @@ from mthds.packages.manifest import MthdsPackageManifest
 from mthds.packages.manifest_parser import serialize_manifest_to_toml
 
 
-def do_init(force: bool = False) -> None:
-    """Create a bare METHODS.toml skeleton in the current directory.
+def do_init(force: bool = False, directory: Path | None = None) -> None:
+    """Create a bare METHODS.toml skeleton in the given directory.
 
     Args:
         force: If True, overwrite an existing METHODS.toml
+        directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = Path(directory).resolve() if directory else Path.cwd()
     manifest_path = cwd / MANIFEST_FILENAME
 
     # Check if manifest already exists

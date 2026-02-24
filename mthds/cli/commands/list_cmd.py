@@ -10,13 +10,16 @@ from mthds.packages.discovery import MANIFEST_FILENAME, find_package_manifest
 from mthds.packages.exceptions import ManifestError
 
 
-def do_list() -> None:
+def do_list(directory: Path | None = None) -> None:
     """Display the package manifest information.
 
-    Walks up from the current directory to find a METHODS.toml and displays its contents.
+    Walks up from the given directory to find a METHODS.toml and displays its contents.
+
+    Args:
+        directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path.cwd()
+    cwd = Path(directory).resolve() if directory else Path.cwd()
 
     # Create a dummy bundle path to trigger the walk-up search from cwd
     dummy_bundle_path = cwd / "dummy.mthds"
