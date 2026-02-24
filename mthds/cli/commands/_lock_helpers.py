@@ -27,7 +27,7 @@ def parse_manifest_or_exit(console: Console, cwd: Path) -> MthdsPackageManifest:
     manifest_path = cwd / MANIFEST_FILENAME
 
     if not manifest_path.exists():
-        console.print(f"[red]{MANIFEST_FILENAME} not found in current directory.[/red]")
+        console.print(f"[red]{MANIFEST_FILENAME} not found in {escape(str(cwd))}.[/red]")
         console.print("Run [bold]mthds init[/bold] first to create a manifest.")
         raise typer.Exit(code=1)
 

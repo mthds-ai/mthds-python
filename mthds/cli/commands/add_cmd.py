@@ -55,7 +55,7 @@ def do_add(
 
     # Check that METHODS.toml exists
     if not manifest_path.exists():
-        console.print(f"[red]{MANIFEST_FILENAME} not found in current directory.[/red]")
+        console.print(f"[red]{MANIFEST_FILENAME} not found in {escape(str(cwd))}.[/red]")
         console.print("Run [bold]mthds init[/bold] first to create a manifest.")
         raise typer.Exit(code=1)
 

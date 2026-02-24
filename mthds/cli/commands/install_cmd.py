@@ -22,7 +22,7 @@ def do_install(directory: Path | None = None) -> None:
     lock_path = cwd / LOCK_FILENAME
 
     if not lock_path.exists():
-        console.print(f"[red]{LOCK_FILENAME} not found in current directory.[/red]")
+        console.print(f"[red]{LOCK_FILENAME} not found in {escape(str(cwd))}.[/red]")
         console.print("Run [bold]mthds lock[/bold] first to generate a lock file.")
         raise typer.Exit(code=1)
 
