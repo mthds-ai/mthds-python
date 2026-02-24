@@ -1,0 +1,37 @@
+mthds/cli/commands/list_cmd.py
+  e35cd70a8db38619 13,16-19,22
+mthds/cli/commands/validate_cmd.py
+  e35cd70a8db38619 57,66,72,82,90,113,131,140,142,152
+mthds/cli/commands/init_cmd.py
+  e35cd70a8db38619 11-12,16,19
+mthds/cli/commands/update_cmd.py
+  e35cd70a8db38619 60-65,67
+mthds/cli/commands/add_cmd.py
+  e35cd70a8db38619 40,49,52
+mthds/cli/commands/install_cmd.py
+  e35cd70a8db38619 14-19,21
+mthds/cli/app.py
+  e35cd70a8db38619 7,34-37,40,45-48,51,72-75,78,83-86,89,94-97,100,105-108,111,132-134,138
+mthds/cli/commands/lock_cmd.py
+  e35cd70a8db38619 14-19,21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.4",
+  "base_commit_sha": "b367c5d937eca02ea77268ee2865ee4ef01f3f3d",
+  "prompts": {
+    "e35cd70a8db38619": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7053e323-8660-4c36-b669-c57add05f7b8",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Louis Choquel <lchoquel@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 88,
+      "total_deletions": 30,
+      "accepted_lines": 80,
+      "overriden_lines": 0
+    }
+  }
+}
