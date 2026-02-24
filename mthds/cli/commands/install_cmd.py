@@ -3,7 +3,7 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.packages.dependency_resolver import resolve_remote_dependency
 from mthds.packages.exceptions import DependencyResolveError, IntegrityError
 from mthds.packages.lock_file import LOCK_FILENAME, LockFileError, parse_lock_file, verify_lock_file
@@ -18,7 +18,7 @@ def do_install(directory: Path | None = None) -> None:
         directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path(directory).resolve() if directory else Path.cwd()
+    cwd = resolve_directory(directory)
     lock_path = cwd / LOCK_FILENAME
 
     if not lock_path.exists():

@@ -5,7 +5,7 @@ from rich import box
 from rich.markup import escape
 from rich.table import Table
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.packages.discovery import MANIFEST_FILENAME, find_package_manifest
 from mthds.packages.exceptions import ManifestError
 
@@ -19,7 +19,7 @@ def do_list(directory: Path | None = None) -> None:
         directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path(directory).resolve() if directory else Path.cwd()
+    cwd = resolve_directory(directory)
 
     # Create a dummy bundle path to trigger the walk-up search from cwd
     dummy_bundle_path = cwd / "dummy.mthds"

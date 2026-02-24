@@ -5,7 +5,7 @@ import typer
 from pydantic import ValidationError
 from rich.markup import escape
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.packages.discovery import MANIFEST_FILENAME
 from mthds.packages.exceptions import ManifestError
 from mthds.packages.manifest import PackageDependency
@@ -50,7 +50,7 @@ def do_add(
         directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path(directory).resolve() if directory else Path.cwd()
+    cwd = resolve_directory(directory)
     manifest_path = cwd / MANIFEST_FILENAME
 
     # Check that METHODS.toml exists

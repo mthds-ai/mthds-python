@@ -12,7 +12,7 @@ from pathlib import Path
 import typer
 from rich.markup import escape
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.packages.discovery import MANIFEST_FILENAME
 from mthds.packages.exceptions import ManifestError
 from mthds.packages.manifest_parser import parse_methods_toml
@@ -139,7 +139,7 @@ def do_validate(
         extra_args: Additional arguments passed through to the runner.
         directory: Package directory (defaults to current directory).
     """
-    package_root = Path(directory).resolve() if directory else Path.cwd()
+    package_root = resolve_directory(directory)
 
     manifest_ok = _validate_manifest(package_root)
 

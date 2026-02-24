@@ -2,7 +2,7 @@ from pathlib import Path
 
 import typer
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.packages.discovery import MANIFEST_FILENAME
 from mthds.packages.manifest import MthdsPackageManifest
 from mthds.packages.manifest_parser import serialize_manifest_to_toml
@@ -16,7 +16,7 @@ def do_init(force: bool = False, directory: Path | None = None) -> None:
         directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path(directory).resolve() if directory else Path.cwd()
+    cwd = resolve_directory(directory)
     manifest_path = cwd / MANIFEST_FILENAME
 
     # Check if manifest already exists

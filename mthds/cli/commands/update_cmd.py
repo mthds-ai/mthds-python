@@ -3,7 +3,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.markup import escape
 
-from mthds.cli._console import get_console
+from mthds.cli._console import get_console, resolve_directory
 from mthds.cli.commands._lock_helpers import parse_manifest_or_exit, resolve_and_generate_lock, write_lock_file
 from mthds.packages.lock_file import LOCK_FILENAME, LockFile, LockFileError, parse_lock_file
 
@@ -53,7 +53,7 @@ def do_update(directory: Path | None = None) -> None:
         directory: Package directory (defaults to current directory)
     """
     console = get_console()
-    cwd = Path(directory).resolve() if directory else Path.cwd()
+    cwd = resolve_directory(directory)
 
     manifest = parse_manifest_or_exit(console, cwd)
 
