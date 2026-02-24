@@ -35,9 +35,16 @@ def get_cached_package_path(
 
     Returns:
         The directory path where this package version would be cached.
+
+    Raises:
+        PackageCacheError: If the resolved path escapes the cache root (path traversal).
     """
-    root = cache_root or get_default_cache_root()
-    return root / address / version
+    root = (cache_root or get_default_cache_root()).resolve()
+    resolved = (root / address / version).resolve()
+    if not resolved.is_relative_to(root):
+        msg = f"Path traversal detected: address '{address}' and version '{version}' resolve outside cache root"
+        raise PackageCacheError(msg)
+    return resolved
 
 
 def is_cached(
@@ -136,5 +143,9 @@ def remove_cached_package(
     pkg_path = get_cached_package_path(address, version, cache_root)
     if not pkg_path.exists():
         return False
-    shutil.rmtree(pkg_path)
+    try:
+        shutil.rmtree(pkg_path)
+    except OSError as exc:
+        msg = f"Failed to remove cached package '{address}@{version}' at '{pkg_path}': {exc}"
+        raise PackageCacheError(msg) from exc
     return True

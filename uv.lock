@@ -292,7 +292,7 @@ wheels = [
 
 [[package]]
 name = "mthds"
-version = "0.0.3"
+version = "0.0.4"
 source = { editable = "." }
 dependencies = [
     { name = "backports-strenum", marker = "python_full_version < '3.11'" },
@@ -303,7 +303,7 @@ dependencies = [
     { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "tomlkit" },
     { name = "typer" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -330,7 +330,7 @@ requires-dist = [
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.0,<3.0.0" },
     { name = "tomlkit", specifier = ">=0.12.0" },
     { name = "typer", specifier = ">=0.9.0" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.0.0" },
+    { name = "typing-extensions", specifier = ">=4.0.0" },
 ]
 provides-extras = ["dev"]
 

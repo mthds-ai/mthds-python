@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 import typer
+from pydantic import ValidationError
 from rich.markup import escape
 
 from mthds.cli._console import get_console
@@ -85,7 +86,7 @@ def do_add(
             alias=alias,
             path=path,
         )
-    except ValueError as exc:
+    except ValidationError as exc:
         console.print(f"[red]Invalid dependency: {escape(str(exc))}[/red]")
         raise typer.Exit(code=1) from exc
 
