@@ -141,6 +141,14 @@ def do_validate(
     """
     package_root = resolve_directory(directory)
 
+    # When --directory shifts the working directory, resolve any relative file
+    # path in target against the original CWD so the subprocess finds the
+    # correct file.
+    if target is not None and directory is not None:
+        target_as_path = Path(target)
+        if not target_as_path.is_absolute() and target_as_path.suffix:
+            target = str(target_as_path.resolve())
+
     manifest_ok = _validate_manifest(package_root)
 
     if runner:
