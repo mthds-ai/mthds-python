@@ -1,0 +1,23 @@
+mthds/cli/_console.py
+  c99740a275149b95 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.4",
+  "base_commit_sha": "d01c0174c3d6885cc8ac3446dd4ea18be5b567fa",
+  "prompts": {
+    "c99740a275149b95": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "557a593f-52be-431c-a5aa-d799a0d8806d",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Louis Choquel <lchoquel@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
