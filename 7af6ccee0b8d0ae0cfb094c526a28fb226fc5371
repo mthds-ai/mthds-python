@@ -1,0 +1,42 @@
+mthds/cli/commands/validate_cmd.py
+  2a6ab8d152021023 149
+tests/unit/test_run_cmd.py
+  05f456683b3e43bf 1-40,42-85
+tests/unit/test_validate_cmd.py
+  05f456683b3e43bf 1-98
+tests/unit/test_resolve_directory.py
+  05f456683b3e43bf 1-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.4",
+  "base_commit_sha": "7af6ccee0b8d0ae0cfb094c526a28fb226fc5371",
+  "prompts": {
+    "05f456683b3e43bf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00b317fe-a791-443b-93ae-c67a77c5c4a0",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Louis Choquel <lchoquel@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 287,
+      "total_deletions": 51,
+      "accepted_lines": 233,
+      "overriden_lines": 2
+    },
+    "2a6ab8d152021023": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e511a4f-21d3-40b5-b333-273a18041ed7",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Louis Choquel <lchoquel@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
