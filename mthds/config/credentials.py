@@ -44,16 +44,8 @@ _LEGACY_ENV_LOCAL_PATH = CONFIG_DIR / ".env.local"
 
 # ── Credential keys ────────────────────────────────────────────────
 
-# Map from internal key to env var name
-_ENV_NAMES: dict[str, str] = {
-    "api_url": "PIPELEX_API_URL",
-    "api_key": "PIPELEX_API_KEY",
-    "runner": "MTHDS_RUNNER",
-    "telemetry": "DISABLE_TELEMETRY",
-}
-
-# Map from internal key to file key (used in ~/.mthds/credentials)
-_FILE_KEYS: dict[str, str] = {
+# Map from internal key to credential key (env var name and file key share the same names)
+_CREDENTIAL_KEYS: dict[str, str] = {
     "api_url": "PIPELEX_API_URL",
     "api_key": "PIPELEX_API_KEY",
     "runner": "MTHDS_RUNNER",
@@ -126,9 +118,10 @@ def _read_credentials_file() -> dict[str, str]:
 
 
 def _write_credentials_file(entries: dict[str, str]) -> None:
-    """Write the credentials file."""
+    """Write the credentials file with restricted permissions (owner-only)."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     CREDENTIALS_PATH.write_text(_serialize_dotenv(entries), encoding="utf-8")
+    CREDENTIALS_PATH.chmod(0o600)
 
 
 # ── Migration ──────────────────────────────────────────────────────
@@ -205,17 +198,26 @@ def load_credentials() -> dict[str, str]:
     merged = dict(_DEFAULTS)
 
     # Apply file values
-    for internal_key, file_key in _FILE_KEYS.items():
+    for internal_key, file_key in _CREDENTIAL_KEYS.items():
         if file_key in file_entries:
             merged[internal_key] = file_entries[file_key]
 
     # Env vars take precedence
-    for internal_key, env_name in _ENV_NAMES.items():
+    for internal_key, env_name in _CREDENTIAL_KEYS.items():
         env_val = os.environ.get(env_name)
         if env_val is not None:
             merged[internal_key] = env_val
 
     return merged
+
+
+def _cli_key_for(internal_key: str) -> str:
+    """Reverse-lookup the CLI flag name for an internal key."""
+    for cli_k, int_k in _KEY_ALIASES.items():
+        if int_k == internal_key:
+            return cli_k
+    msg = f"No CLI key alias found for internal key '{internal_key}'"
+    raise KeyError(msg)
 
 
 def get_credential_value(key: str) -> CredentialEntry:
@@ -227,19 +229,18 @@ def get_credential_value(key: str) -> CredentialEntry:
     Returns:
         A CredentialEntry with the value and its source.
     """
-    env_name = _ENV_NAMES[key]
+    cli_key = _cli_key_for(key)
+
+    env_name = _CREDENTIAL_KEYS[key]
     env_val = os.environ.get(env_name)
     if env_val is not None:
-        cli_key = next(ck for ck, ik in _KEY_ALIASES.items() if ik == key)
         return CredentialEntry(key=key, cli_key=cli_key, value=env_val, source=CredentialSource.ENV)
 
     file_entries = _read_credentials_file()
-    file_key = _FILE_KEYS[key]
+    file_key = _CREDENTIAL_KEYS[key]
     if file_key in file_entries:
-        cli_key = next(ck for ck, ik in _KEY_ALIASES.items() if ik == key)
         return CredentialEntry(key=key, cli_key=cli_key, value=file_entries[file_key], source=CredentialSource.FILE)
 
-    cli_key = next(ck for ck, ik in _KEY_ALIASES.items() if ik == key)
     return CredentialEntry(key=key, cli_key=cli_key, value=_DEFAULTS[key], source=CredentialSource.DEFAULT)
 
 
@@ -251,7 +252,7 @@ def set_credential_value(key: str, value: str) -> None:
         value: The value to set.
     """
     file_entries = _read_credentials_file()
-    file_key = _FILE_KEYS[key]
+    file_key = _CREDENTIAL_KEYS[key]
     file_entries[file_key] = value
     _write_credentials_file(file_entries)
 

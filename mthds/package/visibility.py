@@ -152,9 +152,6 @@ class PackageVisibilityChecker:
         if self._manifest is None:
             return []
 
-        # Build alias lookup from manifest dependencies
-        known_aliases: set[str] = set(self._manifest.dependencies.keys())
-
         errors: list[VisibilityError] = []
 
         for metadata in self._bundle_metadatas:
@@ -164,31 +161,20 @@ class PackageVisibilityChecker:
 
                 alias, _remainder = QualifiedRef.split_cross_package_ref(pipe_ref_str)
 
-                if alias in known_aliases:
-                    # Known alias -> informational (cross-package resolution is active)
-                    logger.info(
-                        "Cross-package reference '%s' in %s (domain '%s'): alias '%s' is a known dependency.",
-                        pipe_ref_str,
-                        context,
-                        metadata.domain,
-                        alias,
+                msg = (
+                    f"Cross-package reference '{pipe_ref_str}' in {context} "
+                    f"(domain '{metadata.domain}'): dependencies are not supported "
+                    "in this version of the MTHDS standard."
+                )
+                errors.append(
+                    VisibilityError(
+                        pipe_ref=pipe_ref_str,
+                        source_domain=metadata.domain,
+                        target_domain=alias,
+                        context=context,
+                        message=msg,
                     )
-                else:
-                    # Unknown alias -> error
-                    msg = (
-                        f"Cross-package reference '{pipe_ref_str}' in {context} "
-                        f"(domain '{metadata.domain}'): alias '{alias}' is not declared "
-                        "in [dependencies] of METHODS.toml."
-                    )
-                    errors.append(
-                        VisibilityError(
-                            pipe_ref=pipe_ref_str,
-                            source_domain=metadata.domain,
-                            target_domain=alias,
-                            context=context,
-                            message=msg,
-                        )
-                    )
+                )
 
         return errors
 
