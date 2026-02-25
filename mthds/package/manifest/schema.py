@@ -36,6 +36,14 @@ RESERVED_DOMAINS: frozenset[str] = frozenset({"native", "mthds", "pipelex"})
 
 MTHDS_STANDARD_VERSION: str = "1.0.0"
 
+# Method name: lowercase alphanumeric + hyphens/underscores, 2-25 chars, must start with a letter
+METHOD_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{1,24}$")
+
+
+def is_valid_method_name(name: str) -> bool:
+    """Check if a method name is valid (2-25 lowercase chars, starts with letter, allows digits/hyphens/underscores)."""
+    return METHOD_NAME_PATTERN.match(name) is not None
+
 
 def is_reserved_domain_path(domain_path: str) -> bool:
     """Check if a domain path starts with a reserved domain segment."""
@@ -158,6 +166,7 @@ class MethodsManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    name: str | None = None
     address: str
     display_name: str | None = None
     version: str
@@ -165,6 +174,7 @@ class MethodsManifest(BaseModel):
     authors: list[str] = Field(default_factory=list)
     license: str | None = None
     mthds_version: str | None = None
+    main_pipe: str | None = None
 
     dependencies: dict[str, PackageDependency] = Field(default_factory=dict)
     exports: dict[str, DomainExports] = Field(default_factory=dict)
@@ -211,6 +221,22 @@ class MethodsManifest(BaseModel):
             result["exports"] = _walk_exports_table(cast("dict[str, Any]", exports_section))
 
         return result
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, name: str | None) -> str | None:
+        if name is not None and not is_valid_method_name(name):
+            msg = f"Invalid method name '{name}'. Must be 2-25 lowercase chars (letters, digits, hyphens, underscores), starting with a letter."
+            raise ValueError(msg)
+        return name
+
+    @field_validator("main_pipe")
+    @classmethod
+    def validate_main_pipe(cls, main_pipe: str | None) -> str | None:
+        if main_pipe is not None and not is_pipe_code_valid(main_pipe):
+            msg = f"Invalid main_pipe '{main_pipe}'. Must be a valid snake_case pipe code."
+            raise ValueError(msg)
+        return main_pipe
 
     @field_validator("address")
     @classmethod

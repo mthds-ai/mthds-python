@@ -47,6 +47,8 @@ def serialize_manifest_to_toml(manifest: MethodsManifest) -> str:
 
     # [package] section
     package_table = tomlkit.table()
+    if manifest.name is not None:
+        package_table.add("name", manifest.name)
     package_table.add("address", manifest.address)
     if manifest.display_name is not None:
         package_table.add("display_name", manifest.display_name)
@@ -58,6 +60,8 @@ def serialize_manifest_to_toml(manifest: MethodsManifest) -> str:
         package_table.add("license", manifest.license)
     if manifest.mthds_version is not None:
         package_table.add("mthds_version", manifest.mthds_version)
+    if manifest.main_pipe is not None:
+        package_table.add("main_pipe", manifest.main_pipe)
     doc.add("package", package_table)
 
     # [dependencies] section

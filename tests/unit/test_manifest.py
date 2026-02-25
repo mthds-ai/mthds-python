@@ -4,7 +4,7 @@ import pytest
 
 from mthds.package.exceptions import ManifestParseError, ManifestValidationError
 from mthds.package.manifest.parser import parse_methods_toml, serialize_manifest_to_toml
-from mthds.package.manifest.schema import MethodsManifest, PackageDependency
+from mthds.package.manifest.schema import MethodsManifest, PackageDependency, is_valid_method_name
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -12,6 +12,7 @@ from mthds.package.manifest.schema import MethodsManifest, PackageDependency
 
 MINIMAL_TOML = textwrap.dedent("""\
     [package]
+    name = "acme-widgets"
     address = "github.com/acme/widgets"
     version = "1.0.0"
     description = "A minimal package"
@@ -19,6 +20,7 @@ MINIMAL_TOML = textwrap.dedent("""\
 
 FULL_TOML = textwrap.dedent("""\
     [package]
+    name = "acme-widgets"
     address = "github.com/acme/widgets"
     display_name = "Acme Widgets"
     version = "2.1.0-beta.1"
@@ -26,6 +28,7 @@ FULL_TOML = textwrap.dedent("""\
     authors = ["Alice <alice@acme.com>", "Bob <bob@acme.com>"]
     license = "MIT"
     mthds_version = "^1.0.0"
+    main_pipe = "extract_clause"
 
     [dependencies]
     foo_pkg = {address = "github.com/acme/foo", version = "^1.0.0"}
@@ -50,6 +53,7 @@ FULL_TOML = textwrap.dedent("""\
 class TestParseMethodsToml:
     def test_minimal(self):
         manifest = parse_methods_toml(MINIMAL_TOML)
+        assert manifest.name == "acme-widgets"
         assert manifest.address == "github.com/acme/widgets"
         assert manifest.version == "1.0.0"
         assert manifest.description == "A minimal package"
@@ -57,17 +61,20 @@ class TestParseMethodsToml:
         assert manifest.authors == []
         assert manifest.license is None
         assert manifest.mthds_version is None
+        assert manifest.main_pipe is None
         assert manifest.dependencies == {}
         assert manifest.exports == {}
 
     def test_full(self):
         manifest = parse_methods_toml(FULL_TOML)
+        assert manifest.name == "acme-widgets"
         assert manifest.address == "github.com/acme/widgets"
         assert manifest.display_name == "Acme Widgets"
         assert manifest.version == "2.1.0-beta.1"
         assert manifest.authors == ["Alice <alice@acme.com>", "Bob <bob@acme.com>"]
         assert manifest.license == "MIT"
         assert manifest.mthds_version == "^1.0.0"
+        assert manifest.main_pipe == "extract_clause"
 
         # Dependencies
         assert len(manifest.dependencies) == 2
@@ -181,6 +188,7 @@ class TestRoundTrip:
         original = parse_methods_toml(MINIMAL_TOML)
         serialized = serialize_manifest_to_toml(original)
         restored = parse_methods_toml(serialized)
+        assert restored.name == original.name
         assert restored.address == original.address
         assert restored.version == original.version
         assert restored.description == original.description
@@ -190,12 +198,14 @@ class TestRoundTrip:
         serialized = serialize_manifest_to_toml(original)
         restored = parse_methods_toml(serialized)
 
+        assert restored.name == original.name
         assert restored.address == original.address
         assert restored.display_name == original.display_name
         assert restored.version == original.version
         assert restored.authors == original.authors
         assert restored.license == original.license
         assert restored.mthds_version == original.mthds_version
+        assert restored.main_pipe == original.main_pipe
 
         assert len(restored.dependencies) == len(original.dependencies)
         for alias in original.dependencies:
@@ -659,3 +669,131 @@ class TestEdgeCases:
         """)
         manifest = parse_methods_toml(toml)
         assert manifest.dependencies == {}
+
+
+# ===========================================================================
+# Name validation
+# ===========================================================================
+
+
+class TestNameValidation:
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "ab",
+            "my-method",
+            "my_method",
+            "a1",
+            "legal-contracts",
+            "a" * 25,
+            "method123",
+            "a-b_c",
+        ],
+    )
+    def test_valid_names(self, name: str):
+        assert is_valid_method_name(name)
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "a",
+            "A",
+            "1abc",
+            "-abc",
+            "_abc",
+            "My-Method",
+            "a" * 26,
+            "",
+            "ab cd",
+            "ab.cd",
+        ],
+    )
+    def test_invalid_names(self, name: str):
+        assert not is_valid_method_name(name)
+
+    def test_name_in_manifest(self):
+        toml = textwrap.dedent("""\
+            [package]
+            name = "my-method"
+            address = "github.com/acme/widgets"
+            version = "1.0.0"
+            description = "test"
+        """)
+        manifest = parse_methods_toml(toml)
+        assert manifest.name == "my-method"
+
+    def test_invalid_name_in_manifest(self):
+        toml = textwrap.dedent("""\
+            [package]
+            name = "My Method!"
+            address = "github.com/acme/widgets"
+            version = "1.0.0"
+            description = "test"
+        """)
+        with pytest.raises(ManifestValidationError, match="method name"):
+            parse_methods_toml(toml)
+
+    def test_manifest_without_name_backward_compat(self):
+        """Manifests without a name field should still parse (name is optional)."""
+        toml = textwrap.dedent("""\
+            [package]
+            address = "github.com/acme/widgets"
+            version = "1.0.0"
+            description = "A package without a name"
+        """)
+        manifest = parse_methods_toml(toml)
+        assert manifest.name is None
+        assert manifest.address == "github.com/acme/widgets"
+
+
+# ===========================================================================
+# Main pipe validation
+# ===========================================================================
+
+
+class TestMainPipeValidation:
+    def test_valid_main_pipe(self):
+        toml = textwrap.dedent("""\
+            [package]
+            name = "my-method"
+            address = "github.com/acme/widgets"
+            version = "1.0.0"
+            description = "test"
+            main_pipe = "extract_clause"
+        """)
+        manifest = parse_methods_toml(toml)
+        assert manifest.main_pipe == "extract_clause"
+
+    def test_invalid_main_pipe(self):
+        toml = textwrap.dedent("""\
+            [package]
+            name = "my-method"
+            address = "github.com/acme/widgets"
+            version = "1.0.0"
+            description = "test"
+            main_pipe = "extractClause"
+        """)
+        with pytest.raises(ManifestValidationError, match="main_pipe"):
+            parse_methods_toml(toml)
+
+    def test_main_pipe_none_by_default(self):
+        manifest = parse_methods_toml(MINIMAL_TOML)
+        assert manifest.main_pipe is None
+
+    def test_serialized_includes_name_and_main_pipe(self):
+        manifest = parse_methods_toml(FULL_TOML)
+        output = serialize_manifest_to_toml(manifest)
+        assert 'name = "acme-widgets"' in output
+        assert 'main_pipe = "extract_clause"' in output
+
+    def test_serialized_omits_name_and_main_pipe_when_none(self):
+        toml = textwrap.dedent("""\
+            [package]
+            address = "github.com/acme/widgets"
+            version = "1.0.0"
+            description = "test"
+        """)
+        manifest = parse_methods_toml(toml)
+        output = serialize_manifest_to_toml(manifest)
+        assert "name" not in output
+        assert "main_pipe" not in output
