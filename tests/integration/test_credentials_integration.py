@@ -71,11 +71,11 @@ class TestCredentialsIntegration:
         assert creds["api_key"] == ""
         assert creds["telemetry"] == "0"
 
-    def test_missing_file_source_is_default(self) -> None:
-        """With no credentials file, source is DEFAULT for all keys."""
-        for key in ("runner", "api_url", "api_key", "telemetry"):
-            entry = get_credential_value(key)
-            assert entry.source == CredentialSource.DEFAULT, f"Expected DEFAULT source for {key}, got {entry.source}"
+    @pytest.mark.parametrize("key", ["runner", "api_url", "api_key", "telemetry"])
+    def test_missing_file_source_is_default(self, key: str) -> None:
+        """With no credentials file, source is DEFAULT."""
+        entry = get_credential_value(key)
+        assert entry.source == CredentialSource.DEFAULT
 
     def test_overwrite_existing_value(self, tmp_path: Path) -> None:
         """Setting a key that already exists in the file overwrites the value."""
