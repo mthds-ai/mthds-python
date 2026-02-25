@@ -299,9 +299,11 @@ class TestDependencyResolver:
         )
 
         result = resolve_all_dependencies(manifest_a, tmp_path)
-        dep_b = next(dep for dep in result if dep.address == "github.com/acme/dep_b")
-        # dep_b should exist in results (it was resolved)
-        assert dep_b is not None
+        addresses = {dep.address for dep in result}
+        # Both deps resolved (diamond path traversed)
+        assert "github.com/acme/dep_b" in addresses
+        assert "github.com/acme/dep_c" in addresses
+        assert len(result) == 2
 
     # --- diamond conflict ---
 

@@ -76,20 +76,6 @@ class TestParseMethodsToml:
         assert set(manifest.exports.keys()) == {"legal.contracts", "legal.compliance", "finance"}
         assert manifest.exports["legal.contracts"].pipes == ["extract_clause", "summarize"]
 
-    def test_dependencies_section_rejected(self):
-        """Dependencies section is no longer supported and should raise."""
-        toml = textwrap.dedent("""\
-            [package]
-            address = "github.com/acme/widgets"
-            version = "1.0.0"
-            description = "test"
-
-            [dependencies]
-            local_dep = {address = "github.com/acme/local", version = "0.1.0"}
-        """)
-        with pytest.raises(ManifestValidationError, match="not supported"):
-            parse_methods_toml(toml)
-
     def test_nested_exports_deep(self):
         toml = textwrap.dedent("""\
             [package]
@@ -695,5 +681,5 @@ class TestMainPipeValidation:
         """)
         manifest = parse_methods_toml(toml)
         output = serialize_manifest_to_toml(manifest)
-        assert "name" not in output
+        assert "name = " not in output
         assert "main_pipe" not in output

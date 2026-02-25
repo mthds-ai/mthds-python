@@ -9,7 +9,7 @@ from mthds.package.manifest.schema import MethodsManifest
 
 
 def parse_methods_toml(content: str) -> MethodsManifest:
-    """Parse METHODS.toml content into an MethodsManifest model.
+    """Parse METHODS.toml content into a MethodsManifest model.
 
     Args:
         content: The raw TOML string
@@ -35,7 +35,7 @@ def parse_methods_toml(content: str) -> MethodsManifest:
 
 
 def serialize_manifest_to_toml(manifest: MethodsManifest) -> str:
-    """Serialize an MethodsManifest to a human-readable TOML string.
+    """Serialize a MethodsManifest to a human-readable TOML string.
 
     Args:
         manifest: The manifest model to serialize

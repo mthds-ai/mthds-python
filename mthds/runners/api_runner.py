@@ -44,8 +44,8 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
             Complete execution results including pipeline state and output.
         """
         client = MthdsAPIClient()
-        client.start_client()
         try:
+            client.start_client()
             return await client.execute_pipeline(
                 pipe_code=pipe_code,
                 mthds_content=mthds_content,
@@ -81,8 +81,8 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
             Initial response with pipeline_run_id and created_at timestamp.
         """
         client = MthdsAPIClient()
-        client.start_client()
         try:
+            client.start_client()
             return await client.start_pipeline(
                 pipe_code=pipe_code,
                 mthds_content=mthds_content,

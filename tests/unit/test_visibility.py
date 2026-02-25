@@ -1,7 +1,6 @@
 import pytest
 
 from mthds.package.bundle_metadata import BundleMetadata
-from mthds.package.dependency_resolver import PackageDependency
 from mthds.package.manifest.schema import DomainExports, MethodsManifest
 from mthds.package.visibility import PackageVisibilityChecker, check_visibility
 
@@ -14,20 +13,13 @@ class TestVisibility:
     @staticmethod
     def _make_manifest(
         exports: dict[str, DomainExports] | None = None,
-        dependencies: dict[str, PackageDependency] | None = None,
     ) -> MethodsManifest:
-        manifest = MethodsManifest(
+        return MethodsManifest(
             address="github.com/acme/pkg",
             version="1.0.0",
             description="test",
             exports=exports or {},
         )
-        # Inject dependencies via object.__setattr__ since the field was removed
-        # from the schema but visibility checking still reads it via getattr().
-        # Pydantic's __setattr__ would reject unknown fields, so we bypass it.
-        if dependencies:
-            object.__setattr__(manifest, "dependencies", dependencies)  # noqa: PLC2801
-        return manifest
 
     # --- No manifest (all public) ---
 
@@ -118,19 +110,17 @@ class TestVisibility:
 
     # --- validate_cross_package_references ---
 
-    def test_validate_cross_package_references_known_alias(self):
-        manifest = self._make_manifest(
-            dependencies={
-                "my_dep": PackageDependency(address="github.com/org/dep", version="^1.0.0"),
-            },
-        )
+    def test_validate_cross_package_references_always_error(self):
+        """Cross-package references are always flagged (dependencies removed from schema)."""
+        manifest = self._make_manifest()
         metadata = BundleMetadata(
             domain="legal",
             pipe_references=[("my_dep->scoring.compute_score", "pipe header")],
         )
         checker = PackageVisibilityChecker(manifest=manifest, bundle_metadatas=[metadata])
         errors = checker.validate_cross_package_references()
-        assert errors == []
+        assert len(errors) == 1
+        assert "my_dep" in errors[0].message
 
     def test_validate_cross_package_references_unknown_alias(self):
         manifest = self._make_manifest()
@@ -177,4 +167,4 @@ class TestVisibility:
             pipe_references=[("scoring.private_pipe", "pipe header")],
         )
         errors = check_visibility(manifest, [metadata])
-        assert len(errors) >= 1
+        assert len(errors) == 1

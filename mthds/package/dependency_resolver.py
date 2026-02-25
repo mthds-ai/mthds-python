@@ -328,8 +328,10 @@ def _remove_stale_subdep_constraints(
         resolved_map: Address -> resolved dependency (entries may be removed).
         constraints_by_address: Address -> list of version constraints (entries may be pruned).
     """
+    if old_manifest is None:
+        return
     old_deps: dict[str, Any] = getattr(old_manifest, "dependencies", {})
-    if old_manifest is None or not old_deps:
+    if not old_deps:
         return
 
     for old_sub in old_deps.values():
