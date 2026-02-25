@@ -149,11 +149,11 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
             PipelexRunnerError: If pipelex execution fails.
         """
         _ = (output_name, output_multiplicity, dynamic_output_concept_code)
-        _ensure_pipelex()
+        pipelex_path = _ensure_pipelex()
 
         tmp_dir = Path(tempfile.mkdtemp(prefix="mthds-"))
         try:
-            cmd: list[str] = ["pipelex", *self._library_args(), "run"]
+            cmd: list[str] = [pipelex_path, *self._library_args(), "run"]
 
             if mthds_content:
                 bundle_path = tmp_dir / "bundle.mthds"

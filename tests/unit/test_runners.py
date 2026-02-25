@@ -43,6 +43,7 @@ class TestRunners:
 
         runner = create_runner(None)
         assert isinstance(runner, ApiRunner)
+        assert runner.runner_type == RunnerType.API
 
     def test_create_runner_none_reads_credentials_pipelex(self, mocker: MockerFixture) -> None:
         """When runner_type is None and credentials say 'pipelex', returns PipelexRunner if available."""
@@ -54,6 +55,7 @@ class TestRunners:
 
         runner = create_runner(None)
         assert isinstance(runner, PipelexRunner)
+        assert runner.runner_type == RunnerType.PIPELEX
 
     def test_create_runner_none_invalid_configured_value_falls_back_to_api(self, mocker: MockerFixture) -> None:
         """When credentials contain an invalid runner value, fall back to ApiRunner."""
@@ -64,6 +66,7 @@ class TestRunners:
 
         runner = create_runner(None)
         assert isinstance(runner, ApiRunner)
+        assert runner.runner_type == RunnerType.API
 
     @pytest.mark.parametrize(
         ("runner_type", "expected_class"),
@@ -83,3 +86,4 @@ class TestRunners:
 
         runner = create_runner(runner_type)
         assert isinstance(runner, expected_class)
+        assert runner.runner_type == RunnerType.API

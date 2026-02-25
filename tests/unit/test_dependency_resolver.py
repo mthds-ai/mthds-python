@@ -5,12 +5,13 @@ from pytest_mock import MockerFixture
 from semantic_version import Version  # type: ignore[import-untyped]
 
 from mthds.package.dependency_resolver import (
+    PackageDependency,
     collect_mthds_files,
     determine_exported_pipes,
     resolve_all_dependencies,
 )
 from mthds.package.exceptions import DependencyResolveError, TransitiveDependencyError
-from mthds.package.manifest.schema import DomainExports, MethodsManifest, PackageDependency
+from mthds.package.manifest.schema import DomainExports, MethodsManifest
 
 
 class TestDependencyResolver:
@@ -25,13 +26,18 @@ class TestDependencyResolver:
         dependencies: dict[str, PackageDependency] | None = None,
         exports: dict[str, DomainExports] | None = None,
     ) -> MethodsManifest:
-        return MethodsManifest(
+        manifest = MethodsManifest(
             address=address,
             version=version,
             description="test",
-            dependencies=dependencies or {},
             exports=exports or {},
         )
+        # Inject dependencies via object.__setattr__ since the field was removed
+        # from the schema but the resolver still reads it via getattr().
+        # Pydantic's __setattr__ would reject unknown fields, so we bypass it.
+        if dependencies:
+            object.__setattr__(manifest, "dependencies", dependencies)  # noqa: PLC2801  # noqa: PLC2801
+        return manifest
 
     # --- collect_mthds_files ---
 
@@ -293,9 +299,11 @@ class TestDependencyResolver:
         )
 
         result = resolve_all_dependencies(manifest_a, tmp_path)
-        dep_b = next(dep for dep in result if dep.address == "github.com/acme/dep_b")
-        # dep_b should exist in results (it was resolved)
-        assert dep_b is not None
+        addresses = {dep.address for dep in result}
+        # Both deps resolved (diamond path traversed)
+        assert "github.com/acme/dep_b" in addresses
+        assert "github.com/acme/dep_c" in addresses
+        assert len(result) == 2
 
     # --- diamond conflict ---
 

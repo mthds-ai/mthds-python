@@ -303,7 +303,7 @@ mthds setup runner api
 
 ## Package
 
-Manage MTHDS packages: initialize, list, add dependencies, lock, install, update, and publish.
+Manage MTHDS packages: initialize, list, add dependencies, lock, install, and update.
 
 ### `mthds package init`
 
