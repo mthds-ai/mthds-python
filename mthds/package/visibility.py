@@ -152,8 +152,8 @@ class PackageVisibilityChecker:
         if self._manifest is None:
             return []
 
-        # Build alias lookup from manifest dependencies
-        known_aliases: set[str] = set(self._manifest.dependencies.keys())
+        # Build alias lookup from manifest dependencies (deprioritized — field removed from schema)
+        known_aliases: set[str] = set(getattr(self._manifest, "dependencies", {}).keys())
 
         errors: list[VisibilityError] = []
 

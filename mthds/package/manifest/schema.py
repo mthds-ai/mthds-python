@@ -5,7 +5,6 @@ from typing import Any, cast
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from mthds._compat import Self
-from mthds._utils.string_utils import is_snake_case
 from mthds.package.manifest.validation import is_domain_code_valid, is_pipe_code_valid
 
 # Semver regex: MAJOR.MINOR.PATCH with optional pre-release and build metadata
@@ -75,32 +74,6 @@ def is_valid_address(address: str) -> bool:
     return ADDRESS_PATTERN.match(address) is not None
 
 
-class PackageDependency(BaseModel):
-    """A dependency on another MTHDS package."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    address: str
-    version: str
-    path: str | None = None
-
-    @field_validator("address")
-    @classmethod
-    def validate_address(cls, address: str) -> str:
-        if not is_valid_address(address):
-            msg = f"Invalid package address '{address}'. Address must follow hostname/path pattern (e.g. 'github.com/org/repo')."
-            raise ValueError(msg)
-        return address
-
-    @field_validator("version")
-    @classmethod
-    def validate_version(cls, version: str) -> str:
-        if not is_valid_version_constraint(version):
-            msg = f"Invalid version constraint '{version}'. Must be a valid version range (e.g. '1.0.0', '^1.0.0', '>=1.0.0, <2.0.0')."
-            raise ValueError(msg)
-        return version
-
-
 class DomainExports(BaseModel):
     """Exports for a single domain within a package."""
 
@@ -153,7 +126,7 @@ def _walk_exports_table(table: dict[str, Any], prefix: str = "") -> dict[str, di
     return result
 
 
-_KNOWN_TOP_LEVEL_KEYS = frozenset({"package", "dependencies", "exports"})
+_KNOWN_TOP_LEVEL_KEYS = frozenset({"package", "exports"})
 
 
 class MethodsManifest(BaseModel):
@@ -176,7 +149,6 @@ class MethodsManifest(BaseModel):
     mthds_version: str | None = None
     main_pipe: str | None = None
 
-    dependencies: dict[str, PackageDependency] = Field(default_factory=dict)
     exports: dict[str, DomainExports] = Field(default_factory=dict)
 
     @model_validator(mode="before")
@@ -196,6 +168,11 @@ class MethodsManifest(BaseModel):
         if not isinstance(pkg_section, dict):
             return raw
 
+        # Reject [dependencies] — removed from the MTHDS standard
+        if "dependencies" in raw:
+            msg = "[dependencies] section is not supported. Dependencies have been removed from the MTHDS standard."
+            raise ValueError(msg)
+
         # Reject unknown top-level sections
         unknown = set(raw.keys()) - _KNOWN_TOP_LEVEL_KEYS
         if unknown:
@@ -204,16 +181,6 @@ class MethodsManifest(BaseModel):
 
         # Flatten [package] section to top-level fields
         result: dict[str, Any] = dict(cast("dict[str, Any]", pkg_section))
-
-        # Pass [dependencies] dict through directly (keys are aliases)
-        deps_section: Any = raw.get("dependencies", {})
-        if isinstance(deps_section, dict):
-            deps_dict = cast("dict[str, Any]", deps_section)
-            for alias, dep_data in deps_dict.items():
-                if not isinstance(dep_data, dict):
-                    msg = f"Invalid dependency '{alias}': expected a table with 'address' and 'version' keys, got {type(dep_data).__name__}"
-                    raise ValueError(msg)  # noqa: TRY004 — must be ValueError for Pydantic to wrap it
-            result["dependencies"] = deps_dict
 
         # Walk nested [exports] tables into flat list
         exports_section: Any = raw.get("exports", {})
@@ -304,15 +271,6 @@ class MethodsManifest(BaseModel):
             msg = f"Invalid mthds_version constraint '{mthds_version}'. Must be a valid version constraint (e.g. '1.0.0', '^1.0.0', '>=1.0.0')."
             raise ValueError(msg)
         return mthds_version
-
-    @model_validator(mode="after")
-    def validate_dependency_aliases(self) -> Self:
-        """Ensure all dependency alias keys are snake_case."""
-        for alias in self.dependencies:
-            if not is_snake_case(alias):
-                msg = f"Invalid dependency alias '{alias}'. Must be snake_case."
-                raise ValueError(msg)
-        return self
 
     @model_validator(mode="after")
     def validate_export_domains(self) -> Self:

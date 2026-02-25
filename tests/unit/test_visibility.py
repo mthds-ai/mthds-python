@@ -1,7 +1,8 @@
 import pytest
 
 from mthds.package.bundle_metadata import BundleMetadata
-from mthds.package.manifest.schema import DomainExports, MethodsManifest, PackageDependency
+from mthds.package.dependency_resolver import PackageDependency
+from mthds.package.manifest.schema import DomainExports, MethodsManifest
 from mthds.package.visibility import PackageVisibilityChecker, check_visibility
 
 
@@ -15,13 +16,18 @@ class TestVisibility:
         exports: dict[str, DomainExports] | None = None,
         dependencies: dict[str, PackageDependency] | None = None,
     ) -> MethodsManifest:
-        return MethodsManifest(
+        manifest = MethodsManifest(
             address="github.com/acme/pkg",
             version="1.0.0",
             description="test",
             exports=exports or {},
-            dependencies=dependencies or {},
         )
+        # Inject dependencies via object.__setattr__ since the field was removed
+        # from the schema but visibility checking still reads it via getattr().
+        # Pydantic's __setattr__ would reject unknown fields, so we bypass it.
+        if dependencies:
+            object.__setattr__(manifest, "dependencies", dependencies)  # noqa: PLC2801
+        return manifest
 
     # --- No manifest (all public) ---
 

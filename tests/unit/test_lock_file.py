@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from mthds.package.dependency_resolver import ResolvedDependency
+from mthds.package.dependency_resolver import PackageDependency, ResolvedDependency
 from mthds.package.exceptions import IntegrityError, LockFileError
 from mthds.package.lock_file import (
     LockedPackage,
@@ -16,7 +16,7 @@ from mthds.package.lock_file import (
     verify_lock_file,
     verify_locked_package,
 )
-from mthds.package.manifest.schema import MethodsManifest, PackageDependency
+from mthds.package.manifest.schema import MethodsManifest
 
 
 class TestLockFile:
@@ -166,7 +166,14 @@ class TestLockFile:
             address="github.com/acme/root",
             version="1.0.0",
             description="test",
-            dependencies={
+        )
+        # Inject dependencies via object.__setattr__ since the field was removed
+        # from the schema but generate_lock_file still reads it via getattr().
+        # Pydantic's __setattr__ would reject unknown fields, so we bypass it.
+        object.__setattr__(  # noqa: PLC2801
+            manifest,
+            "dependencies",
+            {
                 "local_dep": PackageDependency(address="github.com/acme/local", version="0.1.0", path="../local"),
             },
         )

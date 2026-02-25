@@ -15,12 +15,22 @@ from mthds.package.exceptions import (
     VCSFetchError,
     VersionResolutionError,
 )
-from mthds.package.manifest.schema import MethodsManifest, PackageDependency
+from mthds.package.manifest.schema import MethodsManifest
 from mthds.package.package_cache import get_cached_package_path, is_cached, store_in_cache
 from mthds.package.semver import parse_constraint, parse_version, select_minimum_version_for_multiple_constraints, version_satisfies
 from mthds.package.vcs_resolver import address_to_clone_url, clone_at_version, list_remote_version_tags, resolve_version_from_tags
 
 logger = logging.getLogger(__name__)
+
+
+class PackageDependency(BaseModel):
+    """Dependency entry — kept locally for the resolver (dependencies are no longer in the manifest schema)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    address: str
+    version: str
+    path: str | None = None
 
 
 class ResolvedDependency(BaseModel):
@@ -318,10 +328,11 @@ def _remove_stale_subdep_constraints(
         resolved_map: Address -> resolved dependency (entries may be removed).
         constraints_by_address: Address -> list of version constraints (entries may be pruned).
     """
-    if old_manifest is None or not old_manifest.dependencies:
+    old_deps: dict[str, Any] = getattr(old_manifest, "dependencies", {})
+    if old_manifest is None or not old_deps:
         return
 
-    for old_sub in old_manifest.dependencies.values():
+    for old_sub in old_deps.values():
         if old_sub.path is not None:
             continue
         constraints_list = constraints_by_address.get(old_sub.address)
@@ -416,8 +427,8 @@ def _resolve_transitive_tree(
 
             # Recurse into sub-dependencies of the re-resolved version,
             # which may differ from the previously resolved version
-            if re_resolved.manifest is not None and re_resolved.manifest.dependencies:
-                remote_sub_deps = {sub_alias: sub for sub_alias, sub in re_resolved.manifest.dependencies.items() if sub.path is None}
+            if re_resolved.manifest is not None and getattr(re_resolved.manifest, "dependencies", {}):
+                remote_sub_deps = {sub_alias: sub for sub_alias, sub in getattr(re_resolved.manifest, "dependencies", {}).items() if sub.path is None}
                 if remote_sub_deps:
                     resolution_stack.add(dep.address)
                     try:
@@ -455,8 +466,10 @@ def _resolve_transitive_tree(
             resolved_map[dep.address] = resolved_dep
 
             # Recurse into sub-dependencies (remote only)
-            if resolved_dep.manifest is not None and resolved_dep.manifest.dependencies:
-                remote_sub_deps = {sub_alias: sub for sub_alias, sub in resolved_dep.manifest.dependencies.items() if sub.path is None}
+            if resolved_dep.manifest is not None and getattr(resolved_dep.manifest, "dependencies", {}):
+                remote_sub_deps = {
+                    sub_alias: sub for sub_alias, sub in getattr(resolved_dep.manifest, "dependencies", {}).items() if sub.path is None
+                }
                 if remote_sub_deps:
                     _resolve_transitive_tree(
                         deps=remote_sub_deps,
@@ -500,7 +513,7 @@ def resolve_all_dependencies(
     local_resolved: list[ResolvedDependency] = []
     remote_deps: dict[str, PackageDependency] = {}
 
-    for alias, dep in manifest.dependencies.items():
+    for alias, dep in getattr(manifest, "dependencies", {}).items():
         if dep.path is not None:
             resolved_dep = _resolve_local_dependency(alias, dep, package_root)
             local_resolved.append(resolved_dep)
