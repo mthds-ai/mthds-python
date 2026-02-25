@@ -9,7 +9,7 @@ from mthds.package.manifest.schema import MethodsManifest
 
 
 def parse_methods_toml(content: str) -> MethodsManifest:
-    """Parse METHODS.toml content into an MethodsManifest model.
+    """Parse METHODS.toml content into a MethodsManifest model.
 
     Args:
         content: The raw TOML string
@@ -35,7 +35,7 @@ def parse_methods_toml(content: str) -> MethodsManifest:
 
 
 def serialize_manifest_to_toml(manifest: MethodsManifest) -> str:
-    """Serialize an MethodsManifest to a human-readable TOML string.
+    """Serialize a MethodsManifest to a human-readable TOML string.
 
     Args:
         manifest: The manifest model to serialize
@@ -47,6 +47,8 @@ def serialize_manifest_to_toml(manifest: MethodsManifest) -> str:
 
     # [package] section
     package_table = tomlkit.table()
+    if manifest.name is not None:
+        package_table.add("name", manifest.name)
     package_table.add("address", manifest.address)
     if manifest.display_name is not None:
         package_table.add("display_name", manifest.display_name)
@@ -58,20 +60,9 @@ def serialize_manifest_to_toml(manifest: MethodsManifest) -> str:
         package_table.add("license", manifest.license)
     if manifest.mthds_version is not None:
         package_table.add("mthds_version", manifest.mthds_version)
+    if manifest.main_pipe is not None:
+        package_table.add("main_pipe", manifest.main_pipe)
     doc.add("package", package_table)
-
-    # [dependencies] section
-    if manifest.dependencies:
-        doc.add(tomlkit.nl())
-        deps_table = tomlkit.table()
-        for alias, dep in manifest.dependencies.items():
-            dep_table = tomlkit.inline_table()
-            dep_table.append("address", dep.address)
-            dep_table.append("version", dep.version)
-            if dep.path is not None:
-                dep_table.append("path", dep.path)
-            deps_table.add(alias, dep_table)
-        doc.add("dependencies", deps_table)
 
     # [exports] section — build nested tables from dotted domain paths
     if manifest.exports:

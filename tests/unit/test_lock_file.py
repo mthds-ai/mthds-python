@@ -16,7 +16,7 @@ from mthds.package.lock_file import (
     verify_lock_file,
     verify_locked_package,
 )
-from mthds.package.manifest.schema import MethodsManifest, PackageDependency
+from mthds.package.manifest.schema import MethodsManifest
 
 
 class TestLockFile:
@@ -158,18 +158,9 @@ class TestLockFile:
 
     # --- generate_lock_file ---
 
-    def test_generate_lock_file_skips_local(self, tmp_path: Path):
-        """Local deps (with path) are excluded from the lock file."""
+    def test_generate_lock_file_remote_only(self, tmp_path: Path):
+        """Only remote deps (passed by caller) appear in the lock file."""
         (tmp_path / "file.txt").write_text("content")
-
-        manifest = MethodsManifest(
-            address="github.com/acme/root",
-            version="1.0.0",
-            description="test",
-            dependencies={
-                "local_dep": PackageDependency(address="github.com/acme/local", version="0.1.0", path="../local"),
-            },
-        )
 
         remote_manifest = MethodsManifest(
             address="github.com/acme/remote",
@@ -186,16 +177,10 @@ class TestLockFile:
                 exported_pipe_codes=None,
             ),
         ]
-        lock = generate_lock_file(manifest, resolved)
+        lock = generate_lock_file(resolved)
         assert "github.com/acme/remote" in lock.packages
-        assert "github.com/acme/local" not in lock.packages
 
     def test_generate_lock_file_remote_without_manifest(self, tmp_path: Path):
-        manifest = MethodsManifest(
-            address="github.com/acme/root",
-            version="1.0.0",
-            description="test",
-        )
         resolved = [
             ResolvedDependency(
                 alias="bad_dep",
@@ -207,7 +192,7 @@ class TestLockFile:
             ),
         ]
         with pytest.raises(LockFileError, match="no manifest"):
-            generate_lock_file(manifest, resolved)
+            generate_lock_file(resolved)
 
     # --- verify_locked_package ---
 
@@ -226,7 +211,6 @@ class TestLockFile:
         pkg_path.mkdir(parents=True)
         (pkg_path / "file.txt").write_text("hello")
 
-        actual_hash = compute_directory_hash(pkg_path)
         wrong_hash = "sha256:" + "0" * 64
 
         locked = LockedPackage(
@@ -234,10 +218,8 @@ class TestLockFile:
             hash=wrong_hash,
             source="https://github.com/org/repo",
         )
-        # Only fail if actual hash differs (it should, since 000... is fake)
-        if actual_hash != wrong_hash:
-            with pytest.raises(IntegrityError, match="Integrity check failed"):
-                verify_locked_package(locked, "github.com/org/repo", tmp_path)
+        with pytest.raises(IntegrityError, match="Integrity check failed"):
+            verify_locked_package(locked, "github.com/org/repo", tmp_path)
 
     def test_verify_locked_package_correct(self, tmp_path: Path):
         pkg_path = tmp_path / "github.com" / "org" / "repo" / "1.0.0"

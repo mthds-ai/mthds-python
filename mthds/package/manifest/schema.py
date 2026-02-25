@@ -5,7 +5,6 @@ from typing import Any, cast
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from mthds._compat import Self
-from mthds._utils.string_utils import is_snake_case
 from mthds.package.manifest.validation import is_domain_code_valid, is_pipe_code_valid
 
 # Semver regex: MAJOR.MINOR.PATCH with optional pre-release and build metadata
@@ -36,6 +35,14 @@ RESERVED_DOMAINS: frozenset[str] = frozenset({"native", "mthds", "pipelex"})
 
 MTHDS_STANDARD_VERSION: str = "1.0.0"
 
+# Method name: lowercase alphanumeric + hyphens/underscores, 2-25 chars, must start with a letter
+METHOD_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{1,24}$")
+
+
+def is_valid_method_name(name: str) -> bool:
+    """Check if a method name is valid (2-25 lowercase chars, starts with letter, allows digits/hyphens/underscores)."""
+    return METHOD_NAME_PATTERN.match(name) is not None
+
 
 def is_reserved_domain_path(domain_path: str) -> bool:
     """Check if a domain path starts with a reserved domain segment."""
@@ -65,32 +72,6 @@ def is_valid_version_constraint(constraint: str) -> bool:
 def is_valid_address(address: str) -> bool:
     """Check if an address contains at least one dot before a slash (hostname pattern)."""
     return ADDRESS_PATTERN.match(address) is not None
-
-
-class PackageDependency(BaseModel):
-    """A dependency on another MTHDS package."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    address: str
-    version: str
-    path: str | None = None
-
-    @field_validator("address")
-    @classmethod
-    def validate_address(cls, address: str) -> str:
-        if not is_valid_address(address):
-            msg = f"Invalid package address '{address}'. Address must follow hostname/path pattern (e.g. 'github.com/org/repo')."
-            raise ValueError(msg)
-        return address
-
-    @field_validator("version")
-    @classmethod
-    def validate_version(cls, version: str) -> str:
-        if not is_valid_version_constraint(version):
-            msg = f"Invalid version constraint '{version}'. Must be a valid version range (e.g. '1.0.0', '^1.0.0', '>=1.0.0, <2.0.0')."
-            raise ValueError(msg)
-        return version
 
 
 class DomainExports(BaseModel):
@@ -145,7 +126,7 @@ def _walk_exports_table(table: dict[str, Any], prefix: str = "") -> dict[str, di
     return result
 
 
-_KNOWN_TOP_LEVEL_KEYS = frozenset({"package", "dependencies", "exports"})
+_KNOWN_TOP_LEVEL_KEYS = frozenset({"package", "exports"})
 
 
 class MethodsManifest(BaseModel):
@@ -158,6 +139,7 @@ class MethodsManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    name: str | None = None
     address: str
     display_name: str | None = None
     version: str
@@ -165,8 +147,8 @@ class MethodsManifest(BaseModel):
     authors: list[str] = Field(default_factory=list)
     license: str | None = None
     mthds_version: str | None = None
+    main_pipe: str | None = None
 
-    dependencies: dict[str, PackageDependency] = Field(default_factory=dict)
     exports: dict[str, DomainExports] = Field(default_factory=dict)
 
     @model_validator(mode="before")
@@ -186,6 +168,11 @@ class MethodsManifest(BaseModel):
         if not isinstance(pkg_section, dict):
             return raw
 
+        # Reject [dependencies] — removed from the MTHDS standard
+        if "dependencies" in raw:
+            msg = "[dependencies] section is not supported. Dependencies have been removed from the MTHDS standard."
+            raise ValueError(msg)
+
         # Reject unknown top-level sections
         unknown = set(raw.keys()) - _KNOWN_TOP_LEVEL_KEYS
         if unknown:
@@ -195,22 +182,28 @@ class MethodsManifest(BaseModel):
         # Flatten [package] section to top-level fields
         result: dict[str, Any] = dict(cast("dict[str, Any]", pkg_section))
 
-        # Pass [dependencies] dict through directly (keys are aliases)
-        deps_section: Any = raw.get("dependencies", {})
-        if isinstance(deps_section, dict):
-            deps_dict = cast("dict[str, Any]", deps_section)
-            for alias, dep_data in deps_dict.items():
-                if not isinstance(dep_data, dict):
-                    msg = f"Invalid dependency '{alias}': expected a table with 'address' and 'version' keys, got {type(dep_data).__name__}"
-                    raise ValueError(msg)  # noqa: TRY004 — must be ValueError for Pydantic to wrap it
-            result["dependencies"] = deps_dict
-
         # Walk nested [exports] tables into flat list
         exports_section: Any = raw.get("exports", {})
         if isinstance(exports_section, dict):
             result["exports"] = _walk_exports_table(cast("dict[str, Any]", exports_section))
 
         return result
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, name: str | None) -> str | None:
+        if name is not None and not is_valid_method_name(name):
+            msg = f"Invalid method name '{name}'. Must be 2-25 lowercase chars (letters, digits, hyphens, underscores), starting with a letter."
+            raise ValueError(msg)
+        return name
+
+    @field_validator("main_pipe")
+    @classmethod
+    def validate_main_pipe(cls, main_pipe: str | None) -> str | None:
+        if main_pipe is not None and not is_pipe_code_valid(main_pipe):
+            msg = f"Invalid main_pipe '{main_pipe}'. Must be a valid snake_case pipe code."
+            raise ValueError(msg)
+        return main_pipe
 
     @field_validator("address")
     @classmethod
@@ -278,15 +271,6 @@ class MethodsManifest(BaseModel):
             msg = f"Invalid mthds_version constraint '{mthds_version}'. Must be a valid version constraint (e.g. '1.0.0', '^1.0.0', '>=1.0.0')."
             raise ValueError(msg)
         return mthds_version
-
-    @model_validator(mode="after")
-    def validate_dependency_aliases(self) -> Self:
-        """Ensure all dependency alias keys are snake_case."""
-        for alias in self.dependencies:
-            if not is_snake_case(alias):
-                msg = f"Invalid dependency alias '{alias}'. Must be snake_case."
-                raise ValueError(msg)
-        return self
 
     @model_validator(mode="after")
     def validate_export_domains(self) -> Self:
