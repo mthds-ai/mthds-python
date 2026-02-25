@@ -44,19 +44,3 @@ class DependencyResolveError(MthdsPackageError):
 
 class TransitiveDependencyError(MthdsPackageError):
     """Raised for cycles or unsatisfiable diamond constraints in transitive resolution."""
-
-
-class MethodNotFoundError(MthdsPackageError):
-    """Raised when no installed method matches the given name."""
-
-
-class DuplicateMethodNameError(MthdsPackageError):
-    """Raised when two installed methods share the same name."""
-
-
-class AmbiguousPipeCodeError(MthdsPackageError):
-    """Raised when a pipe code is found in multiple installed methods' exports."""
-
-
-class PipeCodeNotFoundError(MthdsPackageError):
-    """Raised when a pipe code is not found in any installed method's exports."""
