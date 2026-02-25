@@ -213,7 +213,11 @@ def load_credentials() -> dict[str, str]:
 
 def _cli_key_for(internal_key: str) -> str:
     """Reverse-lookup the CLI flag name for an internal key."""
-    return next(cli_k for cli_k, int_k in _KEY_ALIASES.items() if int_k == internal_key)
+    for cli_k, int_k in _KEY_ALIASES.items():
+        if int_k == internal_key:
+            return cli_k
+    msg = f"No CLI key alias found for internal key '{internal_key}'"
+    raise KeyError(msg)
 
 
 def get_credential_value(key: str) -> CredentialEntry:

@@ -163,8 +163,8 @@ class PackageVisibilityChecker:
 
                 msg = (
                     f"Cross-package reference '{pipe_ref_str}' in {context} "
-                    f"(domain '{metadata.domain}'): alias '{alias}' is not declared "
-                    "in [dependencies] of METHODS.toml."
+                    f"(domain '{metadata.domain}'): dependencies are not supported "
+                    "in this version of the MTHDS standard."
                 )
                 errors.append(
                     VisibilityError(

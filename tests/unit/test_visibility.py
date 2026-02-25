@@ -121,6 +121,7 @@ class TestVisibility:
         errors = checker.validate_cross_package_references()
         assert len(errors) == 1
         assert "my_dep" in errors[0].message
+        assert "not supported" in errors[0].message
 
     def test_validate_cross_package_references_unknown_alias(self):
         manifest = self._make_manifest()
