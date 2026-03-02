@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.1.0] - 2026-03-02
+
+### Breaking Changes
+
+- **Method names: strict snake_case** — `METHOD_NAME_PATTERN` now enforces snake_case only (pattern `[a-z][a-z0-9_]{1,24}`). Hyphens are no longer allowed — names like `my-method` must become `my_method`.
+
 ## [v0.0.7] - 2026-03-01
 
 ### Added

@@ -12,7 +12,7 @@ from mthds.package.manifest.schema import MethodsManifest, is_valid_method_name
 
 MINIMAL_TOML = textwrap.dedent("""\
     [package]
-    name = "acme-widgets"
+    name = "acme_widgets"
     address = "github.com/acme/widgets"
     version = "1.0.0"
     description = "A minimal package"
@@ -20,7 +20,7 @@ MINIMAL_TOML = textwrap.dedent("""\
 
 FULL_TOML = textwrap.dedent("""\
     [package]
-    name = "acme-widgets"
+    name = "acme_widgets"
     address = "github.com/acme/widgets"
     display_name = "Acme Widgets"
     version = "2.1.0-beta.1"
@@ -49,7 +49,7 @@ FULL_TOML = textwrap.dedent("""\
 class TestParseMethodsToml:
     def test_minimal(self):
         manifest = parse_methods_toml(MINIMAL_TOML)
-        assert manifest.name == "acme-widgets"
+        assert manifest.name == "acme_widgets"
         assert manifest.address == "github.com/acme/widgets"
         assert manifest.version == "1.0.0"
         assert manifest.description == "A minimal package"
@@ -62,7 +62,7 @@ class TestParseMethodsToml:
 
     def test_full(self):
         manifest = parse_methods_toml(FULL_TOML)
-        assert manifest.name == "acme-widgets"
+        assert manifest.name == "acme_widgets"
         assert manifest.address == "github.com/acme/widgets"
         assert manifest.display_name == "Acme Widgets"
         assert manifest.version == "2.1.0-beta.1"
@@ -567,13 +567,11 @@ class TestNameValidation:
         "name",
         [
             "ab",
-            "my-method",
             "my_method",
             "a1",
-            "legal-contracts",
+            "legal_contracts",
             "a" * 25,
             "method123",
-            "a-b_c",
         ],
     )
     def test_valid_names(self, name: str):
@@ -592,6 +590,7 @@ class TestNameValidation:
             "",
             "ab cd",
             "ab.cd",
+            "my-method",
         ],
     )
     def test_invalid_names(self, name: str):
@@ -600,13 +599,13 @@ class TestNameValidation:
     def test_name_in_manifest(self):
         toml = textwrap.dedent("""\
             [package]
-            name = "my-method"
+            name = "my_method"
             address = "github.com/acme/widgets"
             version = "1.0.0"
             description = "test"
         """)
         manifest = parse_methods_toml(toml)
-        assert manifest.name == "my-method"
+        assert manifest.name == "my_method"
 
     def test_invalid_name_in_manifest(self):
         toml = textwrap.dedent("""\
@@ -641,7 +640,7 @@ class TestMainPipeValidation:
     def test_valid_main_pipe(self):
         toml = textwrap.dedent("""\
             [package]
-            name = "my-method"
+            name = "my_method"
             address = "github.com/acme/widgets"
             version = "1.0.0"
             description = "test"
@@ -656,7 +655,7 @@ class TestMainPipeValidation:
     def test_invalid_main_pipe(self):
         toml = textwrap.dedent("""\
             [package]
-            name = "my-method"
+            name = "my_method"
             address = "github.com/acme/widgets"
             version = "1.0.0"
             description = "test"
@@ -672,7 +671,7 @@ class TestMainPipeValidation:
     def test_main_pipe_not_in_exports(self):
         toml = textwrap.dedent("""\
             [package]
-            name = "my-method"
+            name = "my_method"
             address = "github.com/acme/widgets"
             version = "1.0.0"
             description = "test"
@@ -687,7 +686,7 @@ class TestMainPipeValidation:
     def test_main_pipe_without_exports(self):
         toml = textwrap.dedent("""\
             [package]
-            name = "my-method"
+            name = "my_method"
             address = "github.com/acme/widgets"
             version = "1.0.0"
             description = "test"
@@ -699,7 +698,7 @@ class TestMainPipeValidation:
     def test_main_pipe_in_one_of_multiple_domains(self):
         toml = textwrap.dedent("""\
             [package]
-            name = "my-method"
+            name = "my_method"
             address = "github.com/acme/widgets"
             version = "1.0.0"
             description = "test"
@@ -717,7 +716,7 @@ class TestMainPipeValidation:
     def test_serialized_includes_name_and_main_pipe(self):
         manifest = parse_methods_toml(FULL_TOML)
         output = serialize_manifest_to_toml(manifest)
-        assert 'name = "acme-widgets"' in output
+        assert 'name = "acme_widgets"' in output
         assert 'main_pipe = "extract_clause"' in output
 
     def test_serialized_omits_name_and_main_pipe_when_none(self):

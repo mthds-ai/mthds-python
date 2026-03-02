@@ -243,7 +243,7 @@ mypy: env
 
 pylint: env
 	$(call PRINT_TITLE,"Linting with pylint")
-	$(VENV_PYLINT) --rcfile pyproject.toml mthds
+	$(VENV_PYLINT) --rcfile pyproject.toml mthds tests
 
 
 ##########################################################################################
