@@ -3,7 +3,7 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from mthds.client.models.stuff import DictStuffAbstract, StuffType
+from mthds.models.stuff import DictStuffAbstract, StuffType
 
 WorkingMemoryType = TypeVar("WorkingMemoryType", bound="WorkingMemoryAbstract[Any]")
 

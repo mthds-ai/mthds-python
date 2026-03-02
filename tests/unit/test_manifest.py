@@ -646,6 +646,9 @@ class TestMainPipeValidation:
             version = "1.0.0"
             description = "test"
             main_pipe = "extract_clause"
+
+            [exports.legal]
+            pipes = ["extract_clause"]
         """)
         manifest = parse_methods_toml(toml)
         assert manifest.main_pipe == "extract_clause"
@@ -665,6 +668,51 @@ class TestMainPipeValidation:
     def test_main_pipe_none_by_default(self):
         manifest = parse_methods_toml(MINIMAL_TOML)
         assert manifest.main_pipe is None
+
+    def test_main_pipe_not_in_exports(self):
+        toml = textwrap.dedent("""\
+            [package]
+            name = "my-method"
+            address = "github.com/acme/widgets"
+            version = "1.0.0"
+            description = "test"
+            main_pipe = "extract_clause"
+
+            [exports.legal]
+            pipes = ["summarize"]
+        """)
+        with pytest.raises(ManifestValidationError, match="main_pipe"):
+            parse_methods_toml(toml)
+
+    def test_main_pipe_without_exports(self):
+        toml = textwrap.dedent("""\
+            [package]
+            name = "my-method"
+            address = "github.com/acme/widgets"
+            version = "1.0.0"
+            description = "test"
+            main_pipe = "extract_clause"
+        """)
+        with pytest.raises(ManifestValidationError, match="main_pipe"):
+            parse_methods_toml(toml)
+
+    def test_main_pipe_in_one_of_multiple_domains(self):
+        toml = textwrap.dedent("""\
+            [package]
+            name = "my-method"
+            address = "github.com/acme/widgets"
+            version = "1.0.0"
+            description = "test"
+            main_pipe = "compute_tax"
+
+            [exports.legal]
+            pipes = ["extract_clause"]
+
+            [exports.finance]
+            pipes = ["compute_tax"]
+        """)
+        manifest = parse_methods_toml(toml)
+        assert manifest.main_pipe == "compute_tax"
 
     def test_serialized_includes_name_and_main_pipe(self):
         manifest = parse_methods_toml(FULL_TOML)

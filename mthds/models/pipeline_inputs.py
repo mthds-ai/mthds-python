@@ -2,7 +2,7 @@ from typing import Any, Sequence
 
 from typing_extensions import TypeAlias
 
-from mthds.client.models.stuff import DictStuffAbstract, StuffContentAbstract
+from mthds.models.stuff import DictStuffAbstract, StuffContentAbstract
 
 # StuffContentOrData represents all possible formats for pipeline inputs input:
 # Case 1: Direct content (no 'concept' key)

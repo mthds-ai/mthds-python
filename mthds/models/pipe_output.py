@@ -3,7 +3,7 @@ from typing import Generic
 
 from pydantic import BaseModel, ConfigDict
 
-from mthds.client.models.working_memory import DictWorkingMemoryAbstract, WorkingMemoryType
+from mthds.models.working_memory import DictWorkingMemoryAbstract, WorkingMemoryType
 
 VariableMultiplicity = bool | int
 

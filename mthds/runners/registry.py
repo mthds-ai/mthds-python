@@ -2,9 +2,9 @@
 
 import shutil
 
-from mthds.client.models.pipe_output import DictPipeOutputAbstract
 from mthds.client.protocol import RunnerProtocol
 from mthds.config.credentials import load_credentials
+from mthds.models.pipe_output import DictPipeOutputAbstract
 from mthds.runners.api_runner import ApiRunner
 from mthds.runners.pipelex_runner import PipelexRunner
 from mthds.runners.types import RunnerType

@@ -24,7 +24,7 @@ jobs:
           owner: mthds-ai
           repositories: |
             cla-signatures
-            mthds
+            mthds-python
 
       - name: "CLA Assistant"
         if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'
@@ -37,6 +37,6 @@ jobs:
           path-to-document: "https://github.com/mthds-ai/mthds-python/blob/main/CLA.md"
           branch: main
           allowlist: ${{ vars.CLA_ALLOWLIST }}
-          remote-organization-name: Pipelex
+          remote-organization-name: mthds-ai
           remote-repository-name: cla-signatures
           signed-commit-message: "$contributorName has signed the CLA in $owner/$repo#$pullRequestNo"

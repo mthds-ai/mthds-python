@@ -133,6 +133,35 @@ def resolve_version_from_tags(
     raise VersionResolutionError(msg)
 
 
+def clone_default_branch(clone_url: str, destination: Path) -> None:
+    """Clone a git repository's default branch with depth 1.
+
+    Args:
+        clone_url: The git clone URL.
+        destination: The local directory to clone into.
+
+    Raises:
+        VCSFetchError: If the clone operation fails.
+    """
+    try:
+        subprocess.run(  # noqa: S603
+            ["git", "clone", "--depth", "1", clone_url, str(destination)],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=120,
+        )
+    except FileNotFoundError as exc:
+        msg = "git is not installed or not found on PATH"
+        raise VCSFetchError(msg) from exc
+    except subprocess.CalledProcessError as exc:
+        msg = f"Failed to clone '{clone_url}': {exc.stderr.strip()}"
+        raise VCSFetchError(msg) from exc
+    except subprocess.TimeoutExpired as exc:
+        msg = f"Timed out cloning '{clone_url}'"
+        raise VCSFetchError(msg) from exc
+
+
 def clone_at_version(clone_url: str, version_tag: str, destination: Path) -> None:
     """Clone a git repository at a specific tag with depth 1.
 
