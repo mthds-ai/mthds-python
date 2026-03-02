@@ -287,3 +287,16 @@ class MethodsManifest(BaseModel):
                 )
                 raise ValueError(msg)
         return self
+
+    @model_validator(mode="after")
+    def validate_main_pipe_in_exports(self) -> Self:
+        """Ensure main_pipe, when set, appears in at least one domain's exported pipes."""
+        if self.main_pipe is None:
+            return self
+        all_exported_pipes: set[str] = set()
+        for domain_exports in self.exports.values():
+            all_exported_pipes.update(domain_exports.pipes)
+        if self.main_pipe not in all_exported_pipes:
+            msg = f"main_pipe '{self.main_pipe}' is not listed in any domain's exported pipes."
+            raise ValueError(msg)
+        return self

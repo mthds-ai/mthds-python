@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.0.7] - 2026-03-01
+
+### Added
+
+- Added `clone_default_branch()` to `mthds/package/vcs_resolver.py` — shallow-clones a git repository's default branch (`git clone --depth 1`), alongside the existing `clone_at_version()`. Same error handling pattern (catches `FileNotFoundError`, `CalledProcessError`, `TimeoutExpired` → raises `VCSFetchError`).
+- **`main_pipe` must be in exports** — added `validate_main_pipe_in_exports` model validator to `MethodsManifest`. When `main_pipe` is set, it must appear in at least one domain's exported pipes, otherwise a `ManifestValidationError` is raised.
+
+### Changed
+
+- **Moved models from `mthds.client.models` to `mthds.models`** — `concept`, `pipe_output`, `pipeline_inputs`, `stuff`, and `working_memory` modules relocated to a top-level `mthds/models/` package. All internal imports (`client`, `pipeline`, `protocol`, `runners`) updated accordingly. The old `mthds/client/models/` directory has been removed.
+
 ## [v0.0.6] - 2026-02-25
 
 ### Breaking Changes

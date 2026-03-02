@@ -3,7 +3,7 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
-from mthds.client.models.concept import ConceptType
+from mthds.models.concept import ConceptType
 
 StuffContentType = TypeVar("StuffContentType", bound="StuffContentAbstract")
 StuffType = TypeVar("StuffType", bound="StuffAbstract[Any, Any]")
