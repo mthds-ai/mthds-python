@@ -196,7 +196,7 @@ class TestDependencyResolver:
 
         call_count = 0
 
-        def mock_list_tags(_url: str) -> list:
+        def mock_list_tags(_url: str) -> list[tuple[Version, str]]:
             return [(Version("1.0.0"), "v1.0.0")]
 
         mocker.patch("mthds.package.dependency_resolver.list_remote_version_tags", side_effect=mock_list_tags)

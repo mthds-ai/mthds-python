@@ -86,4 +86,5 @@ class TestRunners:
 
         runner = create_runner(runner_type)
         assert isinstance(runner, expected_class)
+        assert isinstance(runner, ApiRunner)
         assert runner.runner_type == RunnerType.API

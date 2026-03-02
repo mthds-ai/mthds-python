@@ -1,6 +1,6 @@
 [project]
 name = "mthds"
-version = "0.0.7"
+version = "0.0.8"
 description = "The Python interface for methods — base structures for structured outputs and the base runner for executing methods via API."
 authors = [{ name = "Evotis S.A.S.", email = "oss@pipelex.com" }]
 maintainers = [{ name = "Pipelex staff", email = "oss@pipelex.com" }]
@@ -58,7 +58,7 @@ pythonpath = ["."]
 check_untyped_defs = true
 exclude = "^.*\\.venv/.*$"
 mypy_path = "."
-packages = ["mthds"]
+packages = ["mthds", "tests"]
 plugins = ["pydantic.mypy"]
 python_version = "3.11"
 warn_return_any = true
@@ -81,7 +81,7 @@ module = [
 
 [tool.pyright]
 pythonVersion = "3.11"
-include = ["mthds"]
+include = ["mthds", "tests"]
 exclude = ["**/__pycache__", ".venv", ".git", "build", "dist"]
 analyzeUnannotatedFunctions = true
 deprecateTypingAliases = false

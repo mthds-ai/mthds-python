@@ -35,12 +35,12 @@ RESERVED_DOMAINS: frozenset[str] = frozenset({"native", "mthds", "pipelex"})
 
 MTHDS_STANDARD_VERSION: str = "1.0.0"
 
-# Method name: lowercase alphanumeric + hyphens/underscores, 2-25 chars, must start with a letter
-METHOD_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{1,24}$")
+# Method name: snake_case, 2-25 chars, must start with a letter
+METHOD_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,24}$")
 
 
 def is_valid_method_name(name: str) -> bool:
-    """Check if a method name is valid (2-25 lowercase chars, starts with letter, allows digits/hyphens/underscores)."""
+    """Check if a method name is valid (2-25 lowercase snake_case chars, starts with letter, allows digits/underscores)."""
     return METHOD_NAME_PATTERN.match(name) is not None
 
 
@@ -193,7 +193,7 @@ class MethodsManifest(BaseModel):
     @classmethod
     def validate_name(cls, name: str | None) -> str | None:
         if name is not None and not is_valid_method_name(name):
-            msg = f"Invalid method name '{name}'. Must be 2-25 lowercase chars (letters, digits, hyphens, underscores), starting with a letter."
+            msg = f"Invalid method name '{name}'. Must be 2-25 lowercase snake_case chars (letters, digits, underscores), starting with a letter."
             raise ValueError(msg)
         return name
 
