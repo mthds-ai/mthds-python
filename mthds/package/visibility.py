@@ -140,43 +140,17 @@ class PackageVisibilityChecker:
         return errors
 
     def validate_cross_package_references(self) -> list[VisibilityError]:
-        """Validate cross-package references (using '->' syntax).
+        """No-op: cross-package reference validation is deferred to the consuming runtime.
 
-        Checks that:
-        - If a ref contains '->' and the alias IS in dependencies -> log info
-        - If a ref contains '->' and the alias is NOT in dependencies -> error
+        Cross-package refs (the '->' syntax) are resolved at runtime via address-based
+        dependency loading (e.g., pipelex's _load_address_based_dependencies), which has
+        visibility into installed method packages. This layer only sees manifest + bundle
+        metadata and cannot determine whether a referenced package is installed.
 
         Returns:
-            List of VisibilityError for unknown dependency aliases.
+            Always returns an empty list.
         """
-        if self._manifest is None:
-            return []
-
-        errors: list[VisibilityError] = []
-
-        for metadata in self._bundle_metadatas:
-            for pipe_ref_str, context in metadata.pipe_references:
-                if not QualifiedRef.has_cross_package_prefix(pipe_ref_str):
-                    continue
-
-                alias, _remainder = QualifiedRef.split_cross_package_ref(pipe_ref_str)
-
-                msg = (
-                    f"Cross-package reference '{pipe_ref_str}' in {context} "
-                    f"(domain '{metadata.domain}'): dependencies are not supported "
-                    "in this version of the MTHDS standard."
-                )
-                errors.append(
-                    VisibilityError(
-                        pipe_ref=pipe_ref_str,
-                        source_domain=metadata.domain,
-                        target_domain=alias,
-                        context=context,
-                        message=msg,
-                    )
-                )
-
-        return errors
+        return []
 
     def validate_reserved_domains(self) -> list[VisibilityError]:
         """Check that no bundle declares a domain starting with a reserved segment.

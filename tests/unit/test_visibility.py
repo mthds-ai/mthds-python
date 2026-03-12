@@ -110,8 +110,8 @@ class TestVisibility:
 
     # --- validate_cross_package_references ---
 
-    def test_validate_cross_package_references_always_error(self):
-        """Cross-package references are always flagged (dependencies removed from schema)."""
+    def test_validate_cross_package_references_no_errors(self):
+        """Cross-package references are not validated here (deferred to runtime)."""
         manifest = self._make_manifest()
         metadata = BundleMetadata(
             domain="legal",
@@ -119,11 +119,10 @@ class TestVisibility:
         )
         checker = PackageVisibilityChecker(manifest=manifest, bundle_metadatas=[metadata])
         errors = checker.validate_cross_package_references()
-        assert len(errors) == 1
-        assert "my_dep" in errors[0].message
-        assert "not supported" in errors[0].message
+        assert errors == []
 
-    def test_validate_cross_package_references_unknown_alias(self):
+    def test_validate_cross_package_references_skipped(self):
+        """Cross-package references with any alias are skipped (deferred to runtime)."""
         manifest = self._make_manifest()
         metadata = BundleMetadata(
             domain="legal",
@@ -131,8 +130,7 @@ class TestVisibility:
         )
         checker = PackageVisibilityChecker(manifest=manifest, bundle_metadatas=[metadata])
         errors = checker.validate_cross_package_references()
-        assert len(errors) == 1
-        assert "unknown_dep" in errors[0].message
+        assert errors == []
 
     # --- validate_reserved_domains ---
 
