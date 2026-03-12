@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.1.1] - 2026-03-12
+
+### Changed
+
+- **Cross-package reference validation deferred to runtime** — `PackageVisibilityChecker.validate_cross_package_references()` is now a no-op. Cross-package refs (the `->` syntax) are resolved at runtime by the consuming runtime (e.g., Pipelex's address-based dependency loading), which has visibility into installed method packages. The base `mthds` layer only sees manifest and bundle metadata and cannot determine whether a referenced package is installed.
+
 ## [v0.1.0] - 2026-03-02
 
 ### Breaking Changes
