@@ -75,7 +75,7 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
     async def execute_pipeline(
         self,
         pipe_code: str | None = None,
-        mthds_content: str | None = None,
+        mthds_contents: list[str] | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -85,7 +85,7 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
 
         Args:
             pipe_code: The code identifying the pipeline to execute
-            mthds_content: Content of the pipeline bundle to execute
+            mthds_contents: List of MTHDS bundle contents to load
             inputs: Inputs passed to the pipeline
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
@@ -94,13 +94,13 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
         Returns:
             Complete execution results including pipeline state and output
         """
-        if not pipe_code and not mthds_content:
-            msg = "Either pipe_code or mthds_content must be provided to the API execute_pipeline."
+        if not pipe_code and not mthds_contents:
+            msg = "Either pipe_code or mthds_contents must be provided to the API execute_pipeline."
             raise PipelineRequestError(msg)
 
         pipeline_request = PipelineRequest(
             pipe_code=pipe_code,
-            mthds_content=mthds_content,
+            mthds_contents=mthds_contents,
             inputs=inputs,
             output_name=output_name,
             output_multiplicity=output_multiplicity,
@@ -113,7 +113,7 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
     async def start_pipeline(
         self,
         pipe_code: str | None = None,
-        mthds_content: str | None = None,
+        mthds_contents: list[str] | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -123,7 +123,7 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
 
         Args:
             pipe_code: The code identifying the pipeline to execute
-            mthds_content: Content of the pipeline bundle to execute
+            mthds_contents: List of MTHDS bundle contents to load
             inputs: Inputs passed to the pipeline
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
@@ -132,13 +132,13 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
         Returns:
             Initial response with pipeline_run_id and created_at timestamp
         """
-        if not pipe_code and not mthds_content:
-            msg = "Either pipe_code or mthds_content must be provided to the API start_pipeline."
+        if not pipe_code and not mthds_contents:
+            msg = "Either pipe_code or mthds_contents must be provided to the API start_pipeline."
             raise PipelineRequestError(msg)
 
         pipeline_request = PipelineRequest(
             pipe_code=pipe_code,
-            mthds_content=mthds_content,
+            mthds_contents=mthds_contents,
             inputs=inputs,
             output_name=output_name,
             output_multiplicity=output_multiplicity,

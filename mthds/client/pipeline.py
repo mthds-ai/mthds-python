@@ -29,7 +29,7 @@ class PipelineRequest(BaseModel):
 
     Attributes:
         pipe_code (str | None): Code of the pipe to execute
-        mthds_content (str | None): Content of the pipeline bundle to execute
+        mthds_contents (list[str] | None): List of MTHDS bundle contents to load
         inputs (PipelineInputs | WorkingMemory | None): Inputs in PipelineInputs format - Pydantic validation is skipped
             to preserve the flexible format (dicts, strings, StuffContent objects, etc.)
         output_name (str | None): Name of the output slot to write to
@@ -39,7 +39,7 @@ class PipelineRequest(BaseModel):
     """
 
     pipe_code: str | None = None
-    mthds_content: str | None = None
+    mthds_contents: list[str] | None = None
     inputs: Annotated[PipelineInputs | WorkingMemoryAbstract[Any] | None, SkipValidation] = None
     output_name: str | None = None
     output_multiplicity: VariableMultiplicity | None = None
@@ -48,11 +48,11 @@ class PipelineRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validate_request(cls, values: dict[str, Any]):
-        if values.get("pipe_code") is None and values.get("mthds_content") is None:
+        if values.get("pipe_code") is None and not values.get("mthds_contents"):
             msg = (
-                "pipe_code and mthds_content cannot be None together. Its either: Both of them, or if there is no mthds_content, "
-                "then pipe_code must be provided and must reference a pipe already registered in the library."
-                "If mthds_content is provided but no pipe_code, mthds_content must have a main_pipe property."
+                "pipe_code and mthds_contents cannot both be empty. Either: both are provided, or if there are no mthds_contents, "
+                "then pipe_code must be provided and must reference a pipe already registered in the library. "
+                "If mthds_contents is provided but no pipe_code, the first content must have a main_pipe property."
             )
             raise PipelineRequestError(msg)
         return values
@@ -61,7 +61,7 @@ class PipelineRequest(BaseModel):
     def from_working_memory(
         cls,
         pipe_code: str | None,
-        mthds_content: str | None,
+        mthds_contents: list[str] | None = None,
         working_memory: WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -71,7 +71,7 @@ class PipelineRequest(BaseModel):
 
         Args:
             pipe_code: The code identifying the pipeline to execute
-            mthds_content: Content of the pipeline bundle to execute
+            mthds_contents: List of MTHDS bundle contents to load
             working_memory: The WorkingMemory to convert
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
@@ -94,7 +94,7 @@ class PipelineRequest(BaseModel):
 
         return cls(
             pipe_code=pipe_code,
-            mthds_content=mthds_content,
+            mthds_contents=mthds_contents,
             inputs=cast("PipelineInputs", pipeline_inputs),
             output_name=output_name,
             output_multiplicity=output_multiplicity,
@@ -112,9 +112,15 @@ class PipelineRequest(BaseModel):
             PipelineRequest object with dictionary working_memory
 
         """
+        # Support both singular "mthds_content" (legacy) and plural "mthds_contents"
+        mthds_contents = request_body.get("mthds_contents")
+        if mthds_contents is None:
+            mthds_content = request_body.get("mthds_content")
+            if mthds_content is not None:
+                mthds_contents = [mthds_content]
         return cls(
             pipe_code=request_body.get("pipe_code"),
-            mthds_content=request_body.get("mthds_content"),
+            mthds_contents=mthds_contents,
             inputs=request_body.get("inputs", {}),
             output_name=request_body.get("output_name"),
             output_multiplicity=request_body.get("output_multiplicity"),

@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.2.0] - 2026-03-19
+
+### Breaking Changes
+
+- **`mthds_content` → `mthds_contents`** — All runner protocol methods (`execute_pipeline`, `start_pipeline`) and `PipelineRequest` now use `mthds_contents: list[str] | None` instead of `mthds_content: str | None`. This applies to `RunnerProtocol`, `MthdsAPIClient`, `ApiRunner`, and `PipelexRunner`. Callers passing a single bundle content string should wrap it in a list: `mthds_contents=[content]`.
+- **`PipelineRequest.from_body()` legacy compat** — `from_body()` still accepts `mthds_content` (singular) in request bodies for backward compatibility, wrapping it into a single-element list.
+
 ## [v0.1.1] - 2026-03-12
 
 ### Changed
