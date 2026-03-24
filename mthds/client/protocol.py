@@ -23,7 +23,7 @@ class RunnerProtocol(Protocol, Generic[PipeOutputT]):
     async def execute_pipeline(
         self,
         pipe_code: str | None = None,
-        mthds_content: str | None = None,
+        mthds_contents: list[str] | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -33,7 +33,7 @@ class RunnerProtocol(Protocol, Generic[PipeOutputT]):
 
         Args:
             pipe_code (str): The code identifying the pipeline to execute
-            mthds_content (str | None): Content of the pipeline bundle to execute
+            mthds_contents (list[str] | None): List of MTHDS bundle contents to load
             inputs (PipelineInputs | WorkingMemoryAbstract | None): Inputs passed to the pipeline
             output_name (str | None): Target output slot name
             output_multiplicity (PipeOutputMultiplicity | None): Output multiplicity setting
@@ -52,7 +52,7 @@ class RunnerProtocol(Protocol, Generic[PipeOutputT]):
     async def start_pipeline(
         self,
         pipe_code: str | None = None,
-        mthds_content: str | None = None,
+        mthds_contents: list[str] | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -62,7 +62,7 @@ class RunnerProtocol(Protocol, Generic[PipeOutputT]):
 
         Args:
             pipe_code (str): The code identifying the pipeline to execute
-            mthds_content (str | None): Content of the pipeline bundle to execute
+            mthds_contents (list[str] | None): List of MTHDS bundle contents to load
             inputs (PipelineInputs | WorkingMemory | None): Inputs passed to the pipeline
             output_name (str | None): Target output slot name
             output_multiplicity (VariableMultiplicity | None): Output multiplicity setting
