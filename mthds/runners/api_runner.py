@@ -24,7 +24,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
     async def execute_pipeline(
         self,
         pipe_code: str | None = None,
-        mthds_content: str | None = None,
+        mthds_contents: list[str] | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -34,7 +34,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
 
         Args:
             pipe_code: The code identifying the pipeline to execute.
-            mthds_content: Content of the pipeline bundle to execute.
+            mthds_contents: List of MTHDS bundle contents to load.
             inputs: Inputs passed to the pipeline.
             output_name: Name of the output slot to write to.
             output_multiplicity: Output multiplicity setting.
@@ -48,7 +48,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
             client.start_client()
             return await client.execute_pipeline(
                 pipe_code=pipe_code,
-                mthds_content=mthds_content,
+                mthds_contents=mthds_contents,
                 inputs=inputs,
                 output_name=output_name,
                 output_multiplicity=output_multiplicity,
@@ -61,7 +61,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
     async def start_pipeline(
         self,
         pipe_code: str | None = None,
-        mthds_content: str | None = None,
+        mthds_contents: list[str] | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -71,7 +71,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
 
         Args:
             pipe_code: The code identifying the pipeline to execute.
-            mthds_content: Content of the pipeline bundle to execute.
+            mthds_contents: List of MTHDS bundle contents to load.
             inputs: Inputs passed to the pipeline.
             output_name: Name of the output slot to write to.
             output_multiplicity: Output multiplicity setting.
@@ -85,7 +85,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
             client.start_client()
             return await client.start_pipeline(
                 pipe_code=pipe_code,
-                mthds_content=mthds_content,
+                mthds_contents=mthds_contents,
                 inputs=inputs,
                 output_name=output_name,
                 output_multiplicity=output_multiplicity,
