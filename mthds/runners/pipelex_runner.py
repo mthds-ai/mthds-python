@@ -123,7 +123,7 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
     async def execute_pipeline(
         self,
         pipe_code: str | None = None,
-        mthds_content: str | None = None,
+        mthds_contents: list[str] | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -131,12 +131,12 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
     ) -> DictPipelineExecuteResponse:
         """Execute a pipeline via the pipelex CLI subprocess.
 
-        Writes mthds_content and inputs to temp files, runs `pipelex run`,
+        Writes mthds_contents and inputs to temp files, runs `pipelex run`,
         and parses the output JSON back into a typed response.
 
         Args:
             pipe_code: The code identifying the pipeline to execute.
-            mthds_content: Content of the pipeline bundle to execute.
+            mthds_contents: List of MTHDS bundle contents to load.
             inputs: Inputs passed to the pipeline.
             output_name: Unused by pipelex CLI.
             output_multiplicity: Unused by pipelex CLI.
@@ -155,10 +155,11 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
         try:
             cmd: list[str] = [pipelex_path, *self._library_args(), "run"]
 
-            if mthds_content:
-                bundle_path = tmp_dir / "bundle.mthds"
-                bundle_path.write_text(mthds_content, encoding="utf-8")
-                cmd.append(str(bundle_path))
+            if mthds_contents:
+                for idx, content in enumerate(mthds_contents):
+                    bundle_path = tmp_dir / f"bundle_{idx}.mthds"
+                    bundle_path.write_text(content, encoding="utf-8")
+                    cmd.append(str(bundle_path))
                 if pipe_code:
                     cmd.extend(["--pipe", pipe_code])
             elif pipe_code:
@@ -184,7 +185,7 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
     async def start_pipeline(
         self,
         pipe_code: str | None = None,
-        mthds_content: str | None = None,
+        mthds_contents: list[str] | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -194,7 +195,7 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
 
         Args:
             pipe_code: Unused.
-            mthds_content: Unused.
+            mthds_contents: Unused.
             inputs: Unused.
             output_name: Unused.
             output_multiplicity: Unused.
@@ -203,6 +204,6 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
         Raises:
             NotImplementedError: Always, since pipelex CLI is synchronous.
         """
-        _ = (pipe_code, mthds_content, inputs, output_name, output_multiplicity, dynamic_output_concept_code)
+        _ = (pipe_code, mthds_contents, inputs, output_name, output_multiplicity, dynamic_output_concept_code)
         msg = "start_pipeline is not supported by the pipelex CLI runner. Use execute_pipeline instead."
         raise NotImplementedError(msg)
