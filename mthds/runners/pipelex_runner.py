@@ -127,7 +127,7 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
-        dynamic_output_concept_code: str | None = None,
+        dynamic_output_concept_ref: str | None = None,
     ) -> DictPipelineExecuteResponse:
         """Execute a pipeline via the pipelex CLI subprocess.
 
@@ -140,7 +140,7 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
             inputs: Inputs passed to the pipeline.
             output_name: Unused by pipelex CLI.
             output_multiplicity: Unused by pipelex CLI.
-            dynamic_output_concept_code: Unused by pipelex CLI.
+            dynamic_output_concept_ref: Unused by pipelex CLI.
 
         Returns:
             Complete execution results including pipeline state and output.
@@ -148,7 +148,7 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
         Raises:
             PipelexRunnerError: If pipelex execution fails.
         """
-        _ = (output_name, output_multiplicity, dynamic_output_concept_code)
+        _ = (output_name, output_multiplicity, dynamic_output_concept_ref)
         pipelex_path = _ensure_pipelex()
 
         tmp_dir = Path(tempfile.mkdtemp(prefix="mthds-"))
@@ -189,7 +189,7 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
-        dynamic_output_concept_code: str | None = None,
+        dynamic_output_concept_ref: str | None = None,
     ) -> DictPipelineStartResponse:
         """Start a pipeline asynchronously — not supported by pipelex CLI.
 
@@ -199,11 +199,11 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
             inputs: Unused.
             output_name: Unused.
             output_multiplicity: Unused.
-            dynamic_output_concept_code: Unused.
+            dynamic_output_concept_ref: Unused.
 
         Raises:
             NotImplementedError: Always, since pipelex CLI is synchronous.
         """
-        _ = (pipe_code, mthds_contents, inputs, output_name, output_multiplicity, dynamic_output_concept_code)
+        _ = (pipe_code, mthds_contents, inputs, output_name, output_multiplicity, dynamic_output_concept_ref)
         msg = "start_pipeline is not supported by the pipelex CLI runner. Use execute_pipeline instead."
         raise NotImplementedError(msg)

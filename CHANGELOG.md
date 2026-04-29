@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.3.0] - 2026-04-29
+
+### Breaking Changes
+
+- **`dynamic_output_concept_code` → `dynamic_output_concept_ref`** — Renamed across `RunnerProtocol`, `MthdsAPIClient`, `ApiRunner`, `PipelexRunner`, and `PipelineRequest`. The HTTP request body key consumed by `PipelineRequest.from_body()` is also renamed; API callers must update their payloads accordingly. Aligns the parameter name with pipelex core, where this value is a concept ref (e.g. `document_qa.ReferenceCount`), not a bare code.
+
 ## [v0.2.0] - 2026-03-19
 
 ### Breaking Changes

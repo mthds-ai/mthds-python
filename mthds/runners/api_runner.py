@@ -28,7 +28,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
-        dynamic_output_concept_code: str | None = None,
+        dynamic_output_concept_ref: str | None = None,
     ) -> DictPipelineExecuteResponse:
         """Execute a pipeline synchronously via the MTHDS API.
 
@@ -38,7 +38,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
             inputs: Inputs passed to the pipeline.
             output_name: Name of the output slot to write to.
             output_multiplicity: Output multiplicity setting.
-            dynamic_output_concept_code: Override for the dynamic output concept code.
+            dynamic_output_concept_ref: Override for the dynamic output concept code.
 
         Returns:
             Complete execution results including pipeline state and output.
@@ -52,7 +52,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
                 inputs=inputs,
                 output_name=output_name,
                 output_multiplicity=output_multiplicity,
-                dynamic_output_concept_code=dynamic_output_concept_code,
+                dynamic_output_concept_ref=dynamic_output_concept_ref,
             )
         finally:
             await client.close()
@@ -65,7 +65,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
-        dynamic_output_concept_code: str | None = None,
+        dynamic_output_concept_ref: str | None = None,
     ) -> DictPipelineStartResponse:
         """Start a pipeline execution asynchronously via the MTHDS API.
 
@@ -75,7 +75,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
             inputs: Inputs passed to the pipeline.
             output_name: Name of the output slot to write to.
             output_multiplicity: Output multiplicity setting.
-            dynamic_output_concept_code: Override for the dynamic output concept code.
+            dynamic_output_concept_ref: Override for the dynamic output concept code.
 
         Returns:
             Initial response with pipeline_run_id and created_at timestamp.
@@ -89,7 +89,7 @@ class ApiRunner(RunnerProtocol[DictPipeOutputAbstract]):
                 inputs=inputs,
                 output_name=output_name,
                 output_multiplicity=output_multiplicity,
-                dynamic_output_concept_code=dynamic_output_concept_code,
+                dynamic_output_concept_ref=dynamic_output_concept_ref,
             )
         finally:
             await client.close()

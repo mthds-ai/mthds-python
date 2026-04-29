@@ -27,7 +27,7 @@ class RunnerProtocol(Protocol, Generic[PipeOutputT]):
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
-        dynamic_output_concept_code: str | None = None,
+        dynamic_output_concept_ref: str | None = None,
     ) -> PipelineExecuteResponse[PipeOutputT]:
         """Execute a pipeline synchronously and wait for its completion.
 
@@ -37,7 +37,7 @@ class RunnerProtocol(Protocol, Generic[PipeOutputT]):
             inputs (PipelineInputs | WorkingMemoryAbstract | None): Inputs passed to the pipeline
             output_name (str | None): Target output slot name
             output_multiplicity (PipeOutputMultiplicity | None): Output multiplicity setting
-            dynamic_output_concept_code (str | None): Override for dynamic output concept
+            dynamic_output_concept_ref (str | None): Override for dynamic output concept
         Returns:
             PipelineResponse: Complete execution results including pipeline state and output
 
@@ -56,7 +56,7 @@ class RunnerProtocol(Protocol, Generic[PipeOutputT]):
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
-        dynamic_output_concept_code: str | None = None,
+        dynamic_output_concept_ref: str | None = None,
     ) -> PipelineStartResponse[PipeOutputT]:
         """Start a pipeline execution asynchronously without waiting for completion.
 
@@ -66,7 +66,7 @@ class RunnerProtocol(Protocol, Generic[PipeOutputT]):
             inputs (PipelineInputs | WorkingMemory | None): Inputs passed to the pipeline
             output_name (str | None): Target output slot name
             output_multiplicity (VariableMultiplicity | None): Output multiplicity setting
-            dynamic_output_concept_code (str | None): Override for dynamic output concept
+            dynamic_output_concept_ref (str | None): Override for dynamic output concept
 
         Returns:
             PipelineResponse: Initial response with pipeline_run_id and created_at timestamp
