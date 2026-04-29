@@ -34,7 +34,7 @@ class PipelineRequest(BaseModel):
             to preserve the flexible format (dicts, strings, StuffContent objects, etc.)
         output_name (str | None): Name of the output slot to write to
         output_multiplicity (VariableMultiplicity | None): Output multiplicity setting
-        dynamic_output_concept_code (str | None): Override for the dynamic output concept code
+        dynamic_output_concept_ref (str | None): Override for the dynamic output concept ref
 
     """
 
@@ -43,7 +43,7 @@ class PipelineRequest(BaseModel):
     inputs: Annotated[PipelineInputs | WorkingMemoryAbstract[Any] | None, SkipValidation] = None
     output_name: str | None = None
     output_multiplicity: VariableMultiplicity | None = None
-    dynamic_output_concept_code: str | None = None
+    dynamic_output_concept_ref: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -65,7 +65,7 @@ class PipelineRequest(BaseModel):
         working_memory: WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
-        dynamic_output_concept_code: str | None = None,
+        dynamic_output_concept_ref: str | None = None,
     ) -> PipelineRequest:
         """Create a PipelineRequest from a WorkingMemory object.
 
@@ -75,7 +75,7 @@ class PipelineRequest(BaseModel):
             working_memory: The WorkingMemory to convert
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
-            dynamic_output_concept_code: Override for the dynamic output concept code
+            dynamic_output_concept_ref: Override for the dynamic output concept ref
         Returns:
             PipelineRequest with the working memory serialized to reduced format
 
@@ -98,7 +98,7 @@ class PipelineRequest(BaseModel):
             inputs=cast("PipelineInputs", pipeline_inputs),
             output_name=output_name,
             output_multiplicity=output_multiplicity,
-            dynamic_output_concept_code=dynamic_output_concept_code,
+            dynamic_output_concept_ref=dynamic_output_concept_ref,
         )
 
     @classmethod
@@ -124,7 +124,7 @@ class PipelineRequest(BaseModel):
             inputs=request_body.get("inputs", {}),
             output_name=request_body.get("output_name"),
             output_multiplicity=request_body.get("output_multiplicity"),
-            dynamic_output_concept_code=request_body.get("dynamic_output_concept_code"),
+            dynamic_output_concept_ref=request_body.get("dynamic_output_concept_ref"),
         )
 
 
