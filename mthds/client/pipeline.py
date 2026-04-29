@@ -34,7 +34,7 @@ class PipelineRequest(BaseModel):
             to preserve the flexible format (dicts, strings, StuffContent objects, etc.)
         output_name (str | None): Name of the output slot to write to
         output_multiplicity (VariableMultiplicity | None): Output multiplicity setting
-        dynamic_output_concept_ref (str | None): Override for the dynamic output concept code
+        dynamic_output_concept_ref (str | None): Override for the dynamic output concept ref
 
     """
 
@@ -75,7 +75,7 @@ class PipelineRequest(BaseModel):
             working_memory: The WorkingMemory to convert
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
-            dynamic_output_concept_ref: Override for the dynamic output concept code
+            dynamic_output_concept_ref: Override for the dynamic output concept ref
         Returns:
             PipelineRequest with the working memory serialized to reduced format
 
