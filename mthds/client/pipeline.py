@@ -135,9 +135,9 @@ class StartRequest(RunRequest):
     Mirrors `StartRequest` in `mthds-protocol.openapi.yaml`, with the hosted
     `method_id` extension:
 
-    - `run_id` — client-supplied run identifier; bare runners accept it, the
-      hosted API rejects it with 422 (the server-generated id in `StartAck` is
-      always authoritative).
+    - `pipeline_run_id` — client-supplied run identifier; bare runners accept
+      it, the hosted API rejects it with 422 (the server-generated id in
+      `StartAck` is always authoritative).
     - `callback_urls` — completion webhooks, HMAC-signed by the runner via
       `X-Completion-Signature`. http/https only; private/loopback/metadata
       hosts are rejected server-side.
@@ -147,7 +147,7 @@ class StartRequest(RunRequest):
       over-validate.
     """
 
-    run_id: str | None = Field(default=None, max_length=128)
+    pipeline_run_id: str | None = Field(default=None, max_length=128)
     callback_urls: list[str] | None = None
     method_id: str | None = Field(default=None, min_length=1)
 
@@ -166,7 +166,7 @@ class RunState(StrEnum):
 class RunResponse(BaseModel):
     """Common shape of the protocol's run responses (`StartAck` ⊂ `RunResult`)."""
 
-    run_id: str
+    pipeline_run_id: str
     created_at: str
     state: RunState
     finished_at: str | None = None
@@ -241,7 +241,7 @@ class DictRunResult(RunResult[DictPipeOutputAbstract]):
     def from_pipe_output(
         cls,
         pipe_output: PipeOutputAbstract[WorkingMemoryAbstract[StuffType]],
-        run_id: str = "",
+        pipeline_run_id: str = "",
         created_at: str = "",
         state: RunState = RunState.COMPLETED,
         finished_at: str | None = None,
@@ -250,7 +250,7 @@ class DictRunResult(RunResult[DictPipeOutputAbstract]):
 
         Args:
             pipe_output: The PipeOutput to convert
-            run_id: Unique identifier for the run
+            pipeline_run_id: Unique identifier for the run
             created_at: Timestamp when the run was created
             state: Current state of the run
             finished_at: Timestamp when the run finished
@@ -259,7 +259,7 @@ class DictRunResult(RunResult[DictPipeOutputAbstract]):
 
         """
         return cls(
-            run_id=run_id,
+            pipeline_run_id=pipeline_run_id,
             created_at=created_at,
             state=state,
             finished_at=finished_at,

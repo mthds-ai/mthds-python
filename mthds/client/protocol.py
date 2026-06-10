@@ -66,7 +66,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-        run_id: str | None = None,
+        pipeline_run_id: str | None = None,
         callback_urls: list[str] | None = None,
         method_id: str | None = None,
     ) -> StartAck[PipeOutputT]:
@@ -79,8 +79,8 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             output_name: Target output slot name
             output_multiplicity: Output multiplicity setting
             dynamic_output_concept_ref: Override for dynamic output concept
-            run_id: Client-supplied run identifier — bare runners only. The
-                hosted API always generates the id server-side and rejects a
+            pipeline_run_id: Client-supplied run identifier — bare runners only.
+                The hosted API always generates the id server-side and rejects a
                 client-supplied one with 422 (never silently ignores it).
             callback_urls: Completion webhooks (HMAC-signed by the runner).
             method_id: HOSTED EXTENSION — id of a stored method in the active
@@ -88,7 +88,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
                 runners do not implement it.
 
         Returns:
-            StartAck with the authoritative `run_id` and `created_at` timestamp
+            StartAck with the authoritative `pipeline_run_id` and `created_at` timestamp
 
         Raises:
             ClientAuthenticationError: If an API token is missing for API execution.

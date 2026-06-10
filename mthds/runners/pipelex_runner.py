@@ -113,7 +113,7 @@ def _run_result_from_working_memory_dump(raw_memory: dict[str, Any]) -> DictRunR
     aliases: dict[str, str] = cast("dict[str, str]", aliases_obj) if isinstance(aliases_obj, dict) else {}
     working_memory = DictWorkingMemoryAbstract.model_validate({"root": dict_root, "aliases": aliases})
     return DictRunResult(
-        run_id="",
+        pipeline_run_id="",
         created_at="",
         state=RunState.COMPLETED,
         pipe_output=DictPipeOutputAbstract(working_memory=working_memory, pipeline_run_id=""),
@@ -241,7 +241,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-        run_id: str | None = None,
+        pipeline_run_id: str | None = None,
         callback_urls: list[str] | None = None,
         method_id: str | None = None,
     ) -> DictStartAck:
@@ -254,14 +254,24 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name: Unused.
             output_multiplicity: Unused.
             dynamic_output_concept_ref: Unused.
-            run_id: Unused.
+            pipeline_run_id: Unused.
             callback_urls: Unused.
             method_id: Unused.
 
         Raises:
             NotImplementedError: Always, since the pipelex CLI is synchronous.
         """
-        _ = (pipe_code, mthds_contents, inputs, output_name, output_multiplicity, dynamic_output_concept_ref, run_id, callback_urls, method_id)
+        _ = (
+            pipe_code,
+            mthds_contents,
+            inputs,
+            output_name,
+            output_multiplicity,
+            dynamic_output_concept_ref,
+            pipeline_run_id,
+            callback_urls,
+            method_id,
+        )
         msg = "start is not supported by the pipelex CLI runner. Use execute instead."
         raise NotImplementedError(msg)
 

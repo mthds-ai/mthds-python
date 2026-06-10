@@ -86,8 +86,8 @@ class TestRuns:
 
     def test_run_public_runner_tier_without_identity(self) -> None:
         """Identity fields are optional so a runner-tier run (no org) still parses."""
-        run = RunPublic(run_id="run_1", status=RunStatus.RUNNING, created_at="2026-06-10T00:00:00Z")
-        assert run.run_id == "run_1"
+        run = RunPublic(pipeline_run_id="run_1", status=RunStatus.RUNNING, created_at="2026-06-10T00:00:00Z")
+        assert run.pipeline_run_id == "run_1"
         assert run.status == RunStatus.RUNNING
         assert run.org_id is None
         assert run.created_by_user_id is None
@@ -96,7 +96,7 @@ class TestRuns:
     def test_run_public_platform_tier_with_identity(self) -> None:
         """A platform-tier run carries org + creator + method linkage."""
         run = RunPublic(
-            run_id="run_2",
+            pipeline_run_id="run_2",
             org_id="org_x",
             created_by_user_id="user_y",
             method_id="mt_123",
@@ -113,14 +113,14 @@ class TestRuns:
 
     def test_run_read_defaults(self) -> None:
         """RunRead defaults degraded=False and retry_after_seconds=None."""
-        run = RunRead(run_id="run_1", status=RunStatus.RUNNING, created_at="2026-06-10T00:00:00Z")
+        run = RunRead(pipeline_run_id="run_1", status=RunStatus.RUNNING, created_at="2026-06-10T00:00:00Z")
         assert run.degraded is False
         assert run.retry_after_seconds is None
 
     def test_run_read_degraded(self) -> None:
         """A degraded read carries the last-known status + a retry hint."""
         run = RunRead(
-            run_id="run_1",
+            pipeline_run_id="run_1",
             status=RunStatus.RUNNING,
             created_at="2026-06-10T00:00:00Z",
             degraded=True,
@@ -133,13 +133,13 @@ class TestRuns:
 
     def test_run_result_main_stuff_list_stays_list(self) -> None:
         """A list output stays a top-level array — main_stuff is Any, not dict (avoid mthds-js bug)."""
-        result = RunResults(run_id="run_1", main_stuff=[{"color": "red"}, {"color": "blue"}])
+        result = RunResults(pipeline_run_id="run_1", main_stuff=[{"color": "red"}, {"color": "blue"}])
         assert result.main_stuff == [{"color": "red"}, {"color": "blue"}]
         assert isinstance(result.main_stuff, list)
 
     def test_run_result_main_stuff_object_and_defaults(self) -> None:
         """A structured output is an object; both artifacts default to None when absent."""
-        result = RunResults(run_id="run_1", main_stuff={"answer": "42"})
+        result = RunResults(pipeline_run_id="run_1", main_stuff={"answer": "42"})
         assert result.main_stuff == {"answer": "42"}
         assert result.graph_spec is None
 
@@ -148,21 +148,23 @@ class TestRuns:
     def test_run_result_state_running(self) -> None:
         """A `running` payload discriminates to RunResultRunning."""
         adapter: TypeAdapter[RunResultState] = TypeAdapter(RunResultState)
-        state = adapter.validate_python({"state": "running", "run_id": "run_1", "retry_after_seconds": 3})
+        state = adapter.validate_python({"state": "running", "pipeline_run_id": "run_1", "retry_after_seconds": 3})
         assert isinstance(state, RunResultRunning)
         assert state.retry_after_seconds == 3
 
     def test_run_result_state_completed(self) -> None:
         """A `completed` payload carries the RunResult artifacts."""
         adapter: TypeAdapter[RunResultState] = TypeAdapter(RunResultState)
-        state = adapter.validate_python({"state": "completed", "run_id": "run_1", "result": {"run_id": "run_1", "main_stuff": [1, 2]}})
+        state = adapter.validate_python(
+            {"state": "completed", "pipeline_run_id": "run_1", "result": {"pipeline_run_id": "run_1", "main_stuff": [1, 2]}}
+        )
         assert isinstance(state, RunResultCompleted)
         assert state.result.main_stuff == [1, 2]
 
     def test_run_result_state_failed(self) -> None:
         """A `failed` payload carries the terminal status + message."""
         adapter: TypeAdapter[RunResultState] = TypeAdapter(RunResultState)
-        state = adapter.validate_python({"state": "failed", "run_id": "run_1", "status": "FAILED", "message": "boom"})
+        state = adapter.validate_python({"state": "failed", "pipeline_run_id": "run_1", "status": "FAILED", "message": "boom"})
         assert isinstance(state, RunResultFailed)
         assert state.status == RunStatus.FAILED
         assert state.message == "boom"

@@ -2,7 +2,7 @@
 
 Long method runs outlive the hosted gateway's ~30s synchronous cap, so the SDK
 submits a run (`POST /v1/start`), then polls a self-healing endpoint by bare
-`run_id` until the run reaches a terminal state. All state lives behind the id
+`pipeline_run_id` until the run reaches a terminal state. All state lives behind the id
 (DynamoDB + Temporal on the platform), so a caller can drop the poll loop and
 resume later with just the id.
 
@@ -12,8 +12,8 @@ bare runner 404s these routes, which the client translates into
 
 Wire contract mirrors `pipelex-platform`:
     POST /v1/start                  -> StartAck         (start, 202)
-    GET  /v1/runs/{run_id}/status   -> RunRead          (status, self-healing)
-    GET  /v1/runs/{run_id}/results  -> 202 / 200 / 409  (results)
+    GET  /v1/runs/{pipeline_run_id}/status   -> RunRead          (status, self-healing)
+    GET  /v1/runs/{pipeline_run_id}/results  -> 202 / 200 / 409  (results)
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ class RunPublic(BaseModel):
     server can evolve its payload (default `extra="ignore"`).
     """
 
-    run_id: str
+    pipeline_run_id: str
     org_id: str | None = None
     created_by_user_id: str | None = None
     method_id: str | None = None
@@ -122,7 +122,7 @@ class RunResults(BaseModel):
     Either may be `None` when the run is partial mid-write.
     """
 
-    run_id: str
+    pipeline_run_id: str
     graph_spec: Any = None
     main_stuff: Any = None
 
@@ -134,7 +134,7 @@ class RunResultRunning(BaseModel):
     """HTTP 202 — the run is in-flight; poll again after `retry_after_seconds`."""
 
     state: Literal["running"] = "running"
-    run_id: str
+    pipeline_run_id: str
     retry_after_seconds: int | None = None
 
 
@@ -142,7 +142,7 @@ class RunResultCompleted(BaseModel):
     """HTTP 200 — the run is `COMPLETED`; `result` carries the artifacts."""
 
     state: Literal["completed"] = "completed"
-    run_id: str
+    pipeline_run_id: str
     result: RunResults
 
 
@@ -150,7 +150,7 @@ class RunResultFailed(BaseModel):
     """HTTP 409 — the run reached a terminal non-`COMPLETED` status."""
 
     state: Literal["failed"] = "failed"
-    run_id: str
+    pipeline_run_id: str
     status: RunStatus
     message: str
 

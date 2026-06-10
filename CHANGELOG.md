@@ -4,19 +4,19 @@
 
 ### Breaking Changes
 
-- **`RunnerProtocol` → `MTHDSProtocol`** — the protocol abstraction now mirrors the MTHDS Protocol standard (`mthds-protocol.openapi.yaml` on mthds.ai) with exactly five methods: `execute` (was `execute_pipeline`), `start` (was `start_pipeline`; gains `run_id`, `callback_urls`, and hosted-only `method_id` kwargs), and new `validate`, `models`, `version`.
+- **`RunnerProtocol` → `MTHDSProtocol`** — the protocol abstraction now mirrors the MTHDS Protocol standard (`mthds-protocol.openapi.yaml` on mthds.ai) with exactly five methods: `execute` (was `execute_pipeline`), `start` (was `start_pipeline`; gains `pipeline_run_id`, `callback_urls`, and hosted-only `method_id` kwargs), and new `validate`, `models`, `version`.
 - **Single `/v1` base path** — `MthdsAPIClient` now composes every endpoint as `{MTHDS_API_URL}/v1/{endpoint}`; the `runner/v1` and `platform/v1` prefixes are gone. **Minimum server versions:** the hosted MTHDS API after the `/v1` cutover, or a `pipelex-api` image that mounts at `/v1` — a self-hoster upgrading this SDK before the runner image will 404 on every `/v1/*` call (including the `/version` handshake itself).
-- **Wire field renames** — `pipeline_run_id` → `run_id` and `pipeline_state` → `state` across all request/response models.
+- **Wire field rename** — `pipeline_state` → `state` across all request/response models. The run identifier KEEPS the name `pipeline_run_id` everywhere on the wire (D1 as revised 2026-06-10).
 - **Wire model renames** — `PipelineRequest` → `RunRequest` (+ new `StartRequest`), `PipelineResponse` → `RunResponse`, `PipelineExecuteResponse` → `RunResult`, `PipelineStartResponse` → `StartAck`, `DictPipelineExecuteResponse` → `DictRunResult`, `DictPipelineStartResponse` → `DictStartAck`, `PipelineState` → `RunState`, runs `RunResult` → `RunResults`, `StartRunRequest` folded into `StartRequest`.
 - **`ApiRunner` deleted** — `create_runner(RunnerType.API)` returns the `MthdsAPIClient` itself (it IS the API runner). Note the client resolves credentials eagerly at construction.
-- **Run-lifecycle methods renamed and re-pathed** — `start_run` folded into `start` (`POST /v1/start`, 202 StartAck); `get_run` → `get_run_status` (`GET /v1/runs/{run_id}/status`); `get_result` → `get_run_result` (`GET /v1/runs/{run_id}/results`). `wait_for_result` behavior unchanged. Run polling remains a hosted-API extension (bare runners raise `RunLifecycleUnavailableError`).
+- **Run-lifecycle methods renamed and re-pathed** — `start_run` folded into `start` (`POST /v1/start`, 202 StartAck); `get_run` → `get_run_status` (`GET /v1/runs/{pipeline_run_id}/status`); `get_result` → `get_run_result` (`GET /v1/runs/{pipeline_run_id}/results`). `wait_for_result` behavior unchanged. Run polling remains a hosted-API extension (bare runners raise `RunLifecycleUnavailableError`).
 - **Blocking `execute` against the hosted API requires the `/v1` surface** — the previously released blocking `execute_pipeline` against `api.pipelex.com/runner/v1/pipeline/execute` stopped working when the public execute/start side door was closed (Phase 0 of the MTHDS Protocol unification); use `start` + polling against the hosted API instead.
 
 ### Added
 
 - `validate(mthds_contents, allow_signatures)` → `ValidationReport`; `models(category)` → `ModelDeck`; `version()` → `VersionInfo` (the feature-detection handshake) on both `MthdsAPIClient` and `PipelexRunner` (the local CLI runner implements `validate` + `version`; `models`/`start` raise `NotImplementedError`).
-- `RunStillRunningError` — typed error raised by `execute()` if a server ever answers `202 + StartAck` (the protocol's optional async degrade), carrying `run_id`, `retry_after_seconds`, and `location`.
-- `StartRequest` model with `run_id` (bare-runner only — the hosted API rejects client-supplied run ids with 422), `callback_urls`, and `method_id` (hosted extension; `method_id`-alone is now accepted client-side).
+- `RunStillRunningError` — typed error raised by `execute()` if a server ever answers `202 + StartAck` (the protocol's optional async degrade), carrying `run_id` (the run identifier), `retry_after_seconds`, and `location`.
+- `StartRequest` model with `pipeline_run_id` (bare-runner only — the hosted API rejects client-supplied run ids with 422), `callback_urls`, and `method_id` (hosted extension; `method_id`-alone is now accepted client-side).
 
 
 ## [v0.3.0] - 2026-04-29

@@ -208,7 +208,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-        run_id: str | None = None,
+        pipeline_run_id: str | None = None,
         callback_urls: list[str] | None = None,
         method_id: str | None = None,
     ) -> DictStartAck:
@@ -221,15 +221,17 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
             dynamic_output_concept_ref: Override for the dynamic output concept ref
-            run_id: Client-supplied run identifier — bare runners only; the hosted API
-                rejects it with 422 (the returned `run_id` is always authoritative)
+            pipeline_run_id: Client-supplied run identifier — bare runners only; the
+                hosted API rejects it with 422 (the returned `pipeline_run_id` is
+                always authoritative)
             callback_urls: Completion webhooks (HMAC-signed via X-Completion-Signature)
             method_id: HOSTED EXTENSION — stored method id, mutually exclusive with
                 `mthds_contents`
 
         Returns:
-            StartAck with the authoritative `run_id` and `created_at` timestamp. On a
-            hosted deployment the id is durable — poll `get_run_status` / `get_run_result`.
+            StartAck with the authoritative `pipeline_run_id` and `created_at`
+            timestamp. On a hosted deployment the id is durable — poll
+            `get_run_status` / `get_run_result`.
         """
         if not pipe_code and not mthds_contents and not method_id:
             msg = "Either pipe_code, mthds_contents or method_id must be provided to the API start."
@@ -242,7 +244,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name=output_name,
             output_multiplicity=output_multiplicity,
             dynamic_output_concept_ref=dynamic_output_concept_ref,
-            run_id=run_id,
+            pipeline_run_id=pipeline_run_id,
             callback_urls=callback_urls,
             method_id=method_id,
         )
@@ -321,7 +323,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 body = cast("dict[str, Any]", raw)
         except ValueError:
             body = {}
-        ack_run_id = body.get("run_id")
+        ack_run_id = body.get("pipeline_run_id")
         run_id = ack_run_id if isinstance(ack_run_id, str) else ""
         msg = (
             f"execute() was accepted asynchronously (202): run {run_id or '<unknown>'} is still "
@@ -377,13 +379,13 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         if status_code in {202, 503}:
             retry_after = _parse_retry_after(response.headers)
             return RunResultRunning(
-                run_id=run_id,
+                pipeline_run_id=run_id,
                 retry_after_seconds=retry_after if retry_after is not None else _DEFAULT_DEGRADED_RETRY_SECONDS,
             )
         if status_code == 409:
             message = _parse_error_message(response) or "Run finished without a result."
             return RunResultFailed(
-                run_id=run_id,
+                pipeline_run_id=run_id,
                 status=_extract_run_status_from_message(message),
                 message=message,
             )
@@ -391,7 +393,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         self._raise_if_lifecycle_unavailable(response, url)
         response.raise_for_status()
         result = RunResults.model_validate(response.json())
-        return RunResultCompleted(run_id=run_id, result=result)
+        return RunResultCompleted(pipeline_run_id=run_id, result=result)
 
     async def wait_for_result(self, run_id: str, options: WaitForResultOptions | None = None) -> RunResults:
         """Poll a run to a terminal state and return its result.
@@ -402,7 +404,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         awaiting task raises `asyncio.CancelledError` out of this loop, leaving the run resumable.
 
         Args:
-            run_id: The `run_id` returned by `start`.
+            run_id: The `pipeline_run_id` returned by `start`.
             options: Poll-loop tuning (interval, timeout, on_poll callback).
 
         Returns:

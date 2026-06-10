@@ -23,7 +23,7 @@ from mthds.client.client import MthdsAPIClient
 async with MthdsAPIClient() as client:
     # Synchronous execution — the full output comes back in the response
     result = await client.execute(mthds_contents=[bundle_text], inputs={"topic": {"concept": "Text", "content": "owls"}})
-    print(result.run_id, result.state, result.main_stuff_name)
+    print(result.pipeline_run_id, result.state, result.main_stuff_name)
 
     # Validation (dry-run included); raises on an invalid bundle (HTTP 422 problem)
     report = await client.validate([bundle_text])
@@ -33,7 +33,7 @@ async with MthdsAPIClient() as client:
     info = await client.version()          # {protocol_version, implementation, implementation_version, runtime_version}
 ```
 
-`execute` may raise `RunStillRunningError` if a server answers `202 + StartAck` (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`.
+`execute` may raise `RunStillRunningError` if a server answers `202 + StartAck` (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `pipeline_run_id`, `retry_after_seconds`, and `location`.
 
 ## The run-lifecycle extension (hosted API only)
 
@@ -42,12 +42,12 @@ async with MthdsAPIClient() as client:
 ```python
 async with MthdsAPIClient() as client:
     ack = await client.start(method_id="mt_123", inputs=inputs)        # POST /v1/start → 202 StartAck
-    status = await client.get_run_status(ack.run_id)                   # GET /v1/runs/{id}/status (self-healing)
-    results = await client.wait_for_result(ack.run_id)                 # polls GET /v1/runs/{id}/results
+    status = await client.get_run_status(ack.pipeline_run_id)                   # GET /v1/runs/{id}/status (self-healing)
+    results = await client.wait_for_result(ack.pipeline_run_id)                 # polls GET /v1/runs/{id}/results
     print(results.main_stuff)
 ```
 
-- `start` accepts `method_id` (a stored method in your org's catalog — hosted extension, mutually exclusive with `mthds_contents`), `callback_urls` (HMAC-signed completion webhooks, protocol feature), and `run_id` (bare-runner only: the hosted API always generates the id server-side and rejects a client-supplied one with 422).
+- `start` accepts `method_id` (a stored method in your org's catalog — hosted extension, mutually exclusive with `mthds_contents`), `callback_urls` (HMAC-signed completion webhooks, protocol feature), and `pipeline_run_id` (bare-runner only: the hosted API always generates the id server-side and rejects a client-supplied one with 422).
 - `wait_for_result` resolves on `COMPLETED`, raises `RunFailedError` on any other terminal status, `RunTimeoutError` when its budget elapses (the run keeps executing — resume by id), and honors the server's `Retry-After`.
 
 ## Runners
@@ -72,7 +72,7 @@ async with MthdsAPIClient() as client:
 | `PipelineState` | `RunState` |
 | `RunResult` (runs artifacts) | `RunResults` |
 | `ApiRunner` | deleted — use `MthdsAPIClient` |
-| Wire fields `pipeline_run_id` / `pipeline_state` | `run_id` / `state` |
+| Wire field `pipeline_state` | `state` (`pipeline_run_id` is unchanged) |
 | Paths `{base}/runner/v1/*` + `{base}/platform/v1/*` | `{base}/v1/*` |
 
 Server requirements: the hosted MTHDS API after the `/v1` cutover, or a `pipelex-api` image that mounts its API at `/v1`. Upgrading the SDK against an older server 404s on every call, including the `/version` handshake.

@@ -50,7 +50,7 @@ class TestMthdsAPIClientLifecycle:
     def test_start_targets_v1_url(self, mocker: MockerFixture) -> None:
         """Start posts to <base>/v1/start; a trailing slash on the base is stripped."""
         client = MthdsAPIClient(api_token="t", api_base_url=f"{_BASE_URL}/")
-        body = {"run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
+        body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
 
         asyncio.run(client.start(method_id="mt_1"))
@@ -76,17 +76,17 @@ class TestMthdsAPIClientLifecycle:
     def test_start_returns_start_ack(self, mocker: MockerFixture) -> None:
         """A 202 from POST /v1/start parses into a StartAck with the authoritative run_id."""
         client = self._client()
-        body = {"run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
+        body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
 
         ack = asyncio.run(client.start(method_id="mt_1"))
-        assert ack.run_id == "run_1"
+        assert ack.pipeline_run_id == "run_1"
         assert ack.created_at == "2026-06-10T00:00:00Z"
 
     def test_start_request_shape_with_method_id(self, mocker: MockerFixture) -> None:
         """method_id rides the StartRequest body; absent fields are pruned (exclude_none)."""
         client = self._client()
-        body = {"run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
+        body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
 
         asyncio.run(client.start(method_id="mt_1", callback_urls=["https://example.com/done"]))
@@ -94,14 +94,14 @@ class TestMthdsAPIClientLifecycle:
         assert '"method_id":"mt_1"' in sent
         assert '"callback_urls":["https://example.com/done"]' in sent
         assert "pipe_code" not in sent
-        assert "run_id" not in sent
+        assert "pipeline_run_id" not in sent
 
     # ── get_run_status ───────────────────────────────────────────
 
     def test_get_run_status_populates_degraded_and_retry_after(self, mocker: MockerFixture) -> None:
         """get_run_status hits /v1/runs/{id}/status, parses RunRead, and lifts Retry-After."""
         client = self._client()
-        body = {"run_id": "run_1", "status": "RUNNING", "created_at": "2026-06-10T00:00:00Z", "degraded": True}
+        body = {"pipeline_run_id": "run_1", "status": "RUNNING", "created_at": "2026-06-10T00:00:00Z", "degraded": True}
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body, headers={"Retry-After": "7"})))
 
         run = asyncio.run(client.get_run_status("run_1"))
@@ -133,7 +133,7 @@ class TestMthdsAPIClientLifecycle:
         """A 200 on /v1/runs/{id}/results maps to RunResultCompleted; a list main_stuff stays a top-level array."""
         client = self._client()
         body: dict[str, object] = {
-            "run_id": "run_1",
+            "pipeline_run_id": "run_1",
             "main_stuff": [{"color": "red"}, {"color": "blue"}],
             "graph_spec": {"nodes": []},
         }
@@ -186,7 +186,7 @@ class TestMthdsAPIClientLifecycle:
     def test_execute_202_raises_typed_still_running(self, mocker: MockerFixture) -> None:
         """A 202 + StartAck on execute raises RunStillRunningError carrying run_id + hints."""
         client = self._client()
-        body = {"run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
+        body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         headers = {"Retry-After": "10", "Location": "/v1/runs/run_1/results"}
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body, headers=headers)))
 
@@ -201,14 +201,14 @@ class TestMthdsAPIClientLifecycle:
     def test_wait_for_result_polls_until_completed(self, mocker: MockerFixture) -> None:
         """The loop polls past a running state and returns the completed result; on_poll fires per wait."""
         client = self._client()
-        result = RunResults(run_id="run_1", main_stuff={"answer": "42"})
+        result = RunResults(pipeline_run_id="run_1", main_stuff={"answer": "42"})
         mocker.patch.object(
             client,
             "get_run_result",
             mocker.AsyncMock(
                 side_effect=[
-                    RunResultRunning(run_id="run_1", retry_after_seconds=0),
-                    RunResultCompleted(run_id="run_1", result=result),
+                    RunResultRunning(pipeline_run_id="run_1", retry_after_seconds=0),
+                    RunResultCompleted(pipeline_run_id="run_1", result=result),
                 ]
             ),
         )
@@ -226,7 +226,7 @@ class TestMthdsAPIClientLifecycle:
         mocker.patch.object(
             client,
             "get_run_result",
-            mocker.AsyncMock(return_value=RunResultFailed(run_id="run_1", status=RunStatus.CANCELLED, message="cancelled")),
+            mocker.AsyncMock(return_value=RunResultFailed(pipeline_run_id="run_1", status=RunStatus.CANCELLED, message="cancelled")),
         )
 
         with pytest.raises(RunFailedError) as exc_info:
@@ -244,7 +244,7 @@ class TestMthdsAPIClientLifecycle:
         mocker.patch.object(
             client,
             "get_run_result",
-            mocker.AsyncMock(return_value=RunResultRunning(run_id="run_1", retry_after_seconds=0)),
+            mocker.AsyncMock(return_value=RunResultRunning(pipeline_run_id="run_1", retry_after_seconds=0)),
         )
 
         with pytest.raises(RunTimeoutError) as exc_info:
