@@ -3,10 +3,11 @@
 import shutil
 
 from mthds.client.client import MthdsAPIClient
+from mthds.client.exceptions import ClientAuthenticationError
 from mthds.client.protocol import MTHDSProtocol
 from mthds.config.credentials import load_credentials
 from mthds.models.pipe_output import DictPipeOutputAbstract
-from mthds.runners.pipelex_runner import PipelexRunner
+from mthds.runners.pipelex_runner import PipelexRunner, PipelexRunnerError
 from mthds.runners.types import RunnerType
 
 
@@ -44,4 +45,16 @@ def create_runner(
         case RunnerType.PIPELEX:
             if shutil.which("pipelex") is not None:
                 return PipelexRunner(library_dirs=library_dirs)
-            return MthdsAPIClient()
+            # Fallback to the API client. Its constructor resolves credentials
+            # eagerly — in a credential-less environment that asked for the
+            # LOCAL runner, surface one combined, actionable error instead of
+            # a bare authentication failure.
+            try:
+                return MthdsAPIClient()
+            except ClientAuthenticationError as exc:
+                msg = (
+                    "The pipelex runner was requested but 'pipelex' is not on PATH, and the API "
+                    "fallback has no credentials configured. Install pipelex "
+                    "(curl -sSL https://pipelex.com/install.sh | sh) or set MTHDS_API_KEY."
+                )
+                raise PipelexRunnerError(msg) from exc

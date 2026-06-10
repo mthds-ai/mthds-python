@@ -289,6 +289,10 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         """
         pipelex_path = _ensure_pipelex()
 
+        if not mthds_contents:
+            msg = "mthds_contents must contain at least one bundle to validate."
+            raise PipelexRunnerError(msg)
+
         tmp_dir = Path(tempfile.mkdtemp(prefix="mthds-"))
         try:
             # `pipelex validate bundle` takes ONE path — a bundle file or a directory.
