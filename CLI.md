@@ -217,9 +217,11 @@ Configuration values are resolved in this order: **environment variables > crede
 | Key | Environment Variable | Default | Description |
 |---|---|---|---|
 | `runner` | `MTHDS_RUNNER` | `api` | Default runner (`api` or `pipelex`) |
-| `api-url` | `PIPELEX_API_URL` | `https://api.pipelex.com` | MTHDS API base URL |
-| `api-key` | `PIPELEX_API_KEY` | (empty) | API authentication key |
+| `api-url` | `MTHDS_API_URL` | `https://api.pipelex.com` | MTHDS API base URL |
+| `api-key` | `MTHDS_API_KEY` | (empty) | API authentication key |
 | `telemetry` | `DISABLE_TELEMETRY` | `0` | Set to `1` to disable telemetry |
+
+The legacy `PIPELEX_API_URL` / `PIPELEX_API_KEY` environment variables (and credentials-file keys) are still read and migrated automatically; the `MTHDS_` names are canonical.
 
 ### `mthds config set`
 

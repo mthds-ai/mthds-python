@@ -26,6 +26,8 @@ class TestCredentialsIntegration:
         mocker.patch("mthds.config.credentials.CONFIG_DIR", config_dir)
         mocker.patch("mthds.config.credentials.CREDENTIALS_PATH", credentials_path)
         mocker.patch("mthds.config.credentials._migrate_if_needed")
+        # Hermetic env: a real MTHDS_*/PIPELEX_* var on the dev/CI machine must not leak in.
+        mocker.patch.dict("os.environ", clear=True)
 
     def test_write_and_read_credentials(self, tmp_path: Path) -> None:
         """Writing credentials to a temp file and reading back returns the same values."""
@@ -43,8 +45,8 @@ class TestCredentialsIntegration:
         assert creds_path.is_file()
         content = creds_path.read_text(encoding="utf-8")
         assert "MTHDS_RUNNER=pipelex" in content
-        assert "PIPELEX_API_KEY=secret-123" in content
-        assert "PIPELEX_API_URL=https://custom.example.com" in content
+        assert "MTHDS_API_KEY=secret-123" in content
+        assert "MTHDS_API_URL=https://custom.example.com" in content
 
     def test_env_override_file(self, mocker: MockerFixture) -> None:
         """Environment variables take precedence over values in the credentials file."""

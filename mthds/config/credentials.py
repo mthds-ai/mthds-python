@@ -12,9 +12,12 @@ import json
 import os
 from enum import unique
 from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from mthds._compat import StrEnum
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 # ── Types ───────────────────────────────────────────────────────────
 
@@ -44,12 +47,20 @@ _LEGACY_ENV_LOCAL_PATH = CONFIG_DIR / ".env.local"
 
 # ── Credential keys ────────────────────────────────────────────────
 
-# Map from internal key to credential key (env var name and file key share the same names)
+# Map from internal key to the canonical credential key (env var name and file key share the same names).
+# The package is vendor-neutral ``mthds``, so the public keys use the ``MTHDS_`` prefix.
 _CREDENTIAL_KEYS: dict[str, str] = {
-    "api_url": "PIPELEX_API_URL",
-    "api_key": "PIPELEX_API_KEY",
+    "api_url": "MTHDS_API_URL",
+    "api_key": "MTHDS_API_KEY",
     "runner": "MTHDS_RUNNER",
     "telemetry": "DISABLE_TELEMETRY",
+}
+
+# Legacy credential keys, still honored on read (env var or credentials file) and transparently
+# migrated to the canonical ``MTHDS_`` keys. Maps internal key to its old storage key.
+_LEGACY_CREDENTIAL_KEYS: dict[str, str] = {
+    "api_url": "PIPELEX_API_URL",
+    "api_key": "PIPELEX_API_KEY",
 }
 
 # Defaults
@@ -74,6 +85,37 @@ VALID_KEYS: list[str] = list(_KEY_ALIASES.keys())
 def resolve_key(cli_key: str) -> str | None:
     """Resolve a CLI flag name to an internal credential key."""
     return _KEY_ALIASES.get(cli_key)
+
+
+def _lookup_in_store(internal_key: str, store: Mapping[str, str]) -> str | None:
+    """Look up the value for an internal key in a storage mapping (file entries or environ).
+
+    The canonical ``MTHDS_`` key takes precedence; a legacy ``PIPELEX_`` key is honored as a
+    fallback so older credentials files and environments keep working without a manual rewrite.
+    An empty canonical value is treated as absent for the purpose of choosing between the two,
+    so a real (non-empty) legacy value is never shadowed by a stray empty canonical entry.
+
+    Args:
+        internal_key: The internal credential key (e.g. "api_url").
+        store: A mapping keyed by storage/env names (e.g. parsed credentials file or os.environ).
+
+    Returns:
+        The first non-empty value among the canonical then legacy keys; an empty string if only
+        empty values are present (preserving "explicitly set" semantics); None when neither key
+        is present.
+    """
+    canonical_key = _CREDENTIAL_KEYS[internal_key]
+    legacy_key = _LEGACY_CREDENTIAL_KEYS.get(internal_key)
+    candidate_keys = [canonical_key] if legacy_key is None else [canonical_key, legacy_key]
+
+    found_empty = False
+    for store_key in candidate_keys:
+        if store_key in store:
+            value = store[store_key]
+            if value:
+                return value
+            found_empty = True
+    return "" if found_empty else None
 
 
 # ── Dotenv parser / serializer ─────────────────────────────────────
@@ -151,9 +193,9 @@ def _migrate_if_needed() -> None:
             if isinstance(config.get("runner"), str):
                 migrated["MTHDS_RUNNER"] = str(config["runner"])
             if isinstance(config.get("apiUrl"), str):
-                migrated["PIPELEX_API_URL"] = str(config["apiUrl"])
+                migrated["MTHDS_API_URL"] = str(config["apiUrl"])
             if isinstance(config.get("apiKey"), str):
-                migrated["PIPELEX_API_KEY"] = str(config["apiKey"])
+                migrated["MTHDS_API_KEY"] = str(config["apiKey"])
             if isinstance(config.get("telemetry"), bool):
                 migrated["DISABLE_TELEMETRY"] = "0" if config["telemetry"] else "1"
 
@@ -197,14 +239,15 @@ def load_credentials() -> dict[str, str]:
     file_entries = _read_credentials_file()
     merged = dict(_DEFAULTS)
 
-    # Apply file values
-    for internal_key, file_key in _CREDENTIAL_KEYS.items():
-        if file_key in file_entries:
-            merged[internal_key] = file_entries[file_key]
+    # Apply file values (canonical key wins over legacy alias)
+    for internal_key in _CREDENTIAL_KEYS:
+        file_val = _lookup_in_store(internal_key, file_entries)
+        if file_val is not None:
+            merged[internal_key] = file_val
 
-    # Env vars take precedence
-    for internal_key, env_name in _CREDENTIAL_KEYS.items():
-        env_val = os.environ.get(env_name)
+    # Env vars take precedence over file and defaults
+    for internal_key in _CREDENTIAL_KEYS:
+        env_val = _lookup_in_store(internal_key, os.environ)
         if env_val is not None:
             merged[internal_key] = env_val
 
@@ -231,15 +274,14 @@ def get_credential_value(key: str) -> CredentialEntry:
     """
     cli_key = _cli_key_for(key)
 
-    env_name = _CREDENTIAL_KEYS[key]
-    env_val = os.environ.get(env_name)
+    env_val = _lookup_in_store(key, os.environ)
     if env_val is not None:
         return CredentialEntry(key=key, cli_key=cli_key, value=env_val, source=CredentialSource.ENV)
 
     file_entries = _read_credentials_file()
-    file_key = _CREDENTIAL_KEYS[key]
-    if file_key in file_entries:
-        return CredentialEntry(key=key, cli_key=cli_key, value=file_entries[file_key], source=CredentialSource.FILE)
+    file_val = _lookup_in_store(key, file_entries)
+    if file_val is not None:
+        return CredentialEntry(key=key, cli_key=cli_key, value=file_val, source=CredentialSource.FILE)
 
     return CredentialEntry(key=key, cli_key=cli_key, value=_DEFAULTS[key], source=CredentialSource.DEFAULT)
 
@@ -254,6 +296,10 @@ def set_credential_value(key: str, value: str) -> None:
     file_entries = _read_credentials_file()
     file_key = _CREDENTIAL_KEYS[key]
     file_entries[file_key] = value
+    # Drop any stale legacy alias so the file converges on the canonical key.
+    legacy_key = _LEGACY_CREDENTIAL_KEYS.get(key)
+    if legacy_key is not None:
+        file_entries.pop(legacy_key, None)
     _write_credentials_file(file_entries)
 
 
