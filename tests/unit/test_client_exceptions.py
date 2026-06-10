@@ -6,6 +6,7 @@ from mthds.client.exceptions import (
     ClientAuthenticationError,
     PipelineRequestError,
     RunFailedError,
+    RunStillRunningError,
     RunTimeoutError,
 )
 from mthds.client.runs import RunStatus
@@ -30,11 +31,21 @@ class TestClientExceptions:
         assert exc.timeout_seconds == 1200.0
         assert str(exc) == msg
 
+    def test_run_still_running_error_attributes(self) -> None:
+        """RunStillRunningError carries the run id and the 202 hints (Retry-After + Location)."""
+        msg = "execute() was accepted asynchronously (202): run run_1 is still running server-side."
+        exc = RunStillRunningError(msg, run_id="run_1", retry_after_seconds=10, location="/v1/runs/run_1/results")
+        assert exc.run_id == "run_1"
+        assert exc.retry_after_seconds == 10
+        assert exc.location == "/v1/runs/run_1/results"
+        assert str(exc) == msg
+
     @pytest.mark.parametrize(
         ("child_cls", "parent_cls"),
         [
             (RunFailedError, PipelineRequestError),
             (RunTimeoutError, PipelineRequestError),
+            (RunStillRunningError, PipelineRequestError),
         ],
     )
     def test_run_errors_subclass_pipeline_request_error(self, child_cls: type, parent_cls: type) -> None:

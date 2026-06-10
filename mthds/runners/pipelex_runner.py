@@ -1,20 +1,22 @@
-"""Pipelex runner — implements RunnerProtocol by delegating to the pipelex CLI."""
+"""Pipelex runner — implements MTHDSProtocol by delegating to the pipelex CLI."""
 
 import json
+import re
 import shutil
 import subprocess  # noqa: S404
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from typing_extensions import override
 
-from mthds.client.pipeline import DictPipelineExecuteResponse, DictPipelineStartResponse
-from mthds.client.protocol import RunnerProtocol
+from mthds.client.pipeline import MAIN_STUFF_NAME, DictRunResult, DictStartAck, RunState
+from mthds.client.protocol import MTHDSProtocol
+from mthds.client.protocol_models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.models.pipe_output import DictPipeOutputAbstract, VariableMultiplicity
 from mthds.models.pipeline_inputs import PipelineInputs
 from mthds.models.stuff import StuffType
-from mthds.models.working_memory import WorkingMemoryAbstract
+from mthds.models.working_memory import DictWorkingMemoryAbstract, WorkingMemoryAbstract
 from mthds.runners.types import RunnerType
 
 
@@ -42,12 +44,13 @@ def _ensure_pipelex() -> str:
     return path
 
 
-def run_subprocess(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess[bytes]:
+def run_subprocess(cmd: list[str], *, timeout: int = 600, capture_output: bool = False) -> subprocess.CompletedProcess[bytes]:
     """Run a subprocess command with standard error handling.
 
     Args:
         cmd: Command to run.
         timeout: Timeout in seconds.
+        capture_output: Capture stdout/stderr instead of inheriting them.
 
     Returns:
         Completed process result.
@@ -60,6 +63,7 @@ def run_subprocess(cmd: list[str], *, timeout: int = 600) -> subprocess.Complete
             cmd,
             check=False,
             timeout=timeout,
+            capture_output=capture_output,
         )
         if result.returncode != 0:
             msg = f"pipelex exited with code {result.returncode}"
@@ -71,6 +75,50 @@ def run_subprocess(cmd: list[str], *, timeout: int = 600) -> subprocess.Complete
     except subprocess.TimeoutExpired as exc:
         msg = "Execution timed out (10 min limit)."
         raise PipelexRunnerError(msg) from exc
+
+
+def _run_result_from_working_memory_dump(raw_memory: dict[str, Any]) -> DictRunResult:
+    """Map the CLI's working-memory dump onto the SDK's DictRunResult shape.
+
+    `pipelex run ... --working-memory-path` writes the runtime's full working
+    memory (`{root: {name: {stuff_code, stuff_name, concept: {...}, content}},
+    aliases}`). The SDK's wire shape keeps only `{concept: <ref string>,
+    content}` per stuff — the same reduction the API runner performs
+    server-side.
+
+    Args:
+        raw_memory: The parsed working-memory JSON written by the CLI.
+
+    Returns:
+        DictRunResult for the completed local run (no run id — local runs are
+        not tracked).
+    """
+    dict_root: dict[str, dict[str, Any]] = {}
+    raw_root_obj = raw_memory.get("root", {})
+    raw_root: dict[str, Any] = cast("dict[str, Any]", raw_root_obj) if isinstance(raw_root_obj, dict) else {}
+    for stuff_name, stuff_raw in raw_root.items():
+        stuff: dict[str, Any] = cast("dict[str, Any]", stuff_raw) if isinstance(stuff_raw, dict) else {}
+        concept_raw = stuff.get("concept")
+        concept_ref: str
+        if isinstance(concept_raw, dict):
+            concept_dict = cast("dict[str, Any]", concept_raw)
+            code = str(concept_dict.get("code", ""))
+            domain_code = concept_dict.get("domain_code")
+            concept_ref = f"{domain_code}.{code}" if domain_code else code
+        else:
+            concept_ref = str(concept_raw)
+        dict_root[stuff_name] = {"concept": concept_ref, "content": stuff.get("content")}
+
+    aliases_obj = raw_memory.get("aliases", {})
+    aliases: dict[str, str] = cast("dict[str, str]", aliases_obj) if isinstance(aliases_obj, dict) else {}
+    working_memory = DictWorkingMemoryAbstract.model_validate({"root": dict_root, "aliases": aliases})
+    return DictRunResult(
+        run_id="",
+        created_at="",
+        state=RunState.COMPLETED,
+        pipe_output=DictPipeOutputAbstract(working_memory=working_memory, pipeline_run_id=""),
+        main_stuff_name=aliases.get(MAIN_STUFF_NAME, MAIN_STUFF_NAME),
+    )
 
 
 def _serialize_inputs(inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None) -> dict[str, Any] | None:
@@ -92,8 +140,8 @@ def _serialize_inputs(inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] 
     return inputs.model_dump(serialize_as_any=True)  # type: ignore[union-attr]
 
 
-class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
-    """Runner that implements RunnerProtocol by delegating to the pipelex CLI."""
+class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
+    """Runner that implements MTHDSProtocol by delegating to the pipelex CLI."""
 
     def __init__(self, library_dirs: list[str] | None = None) -> None:
         """Initialize the pipelex runner.
@@ -120,7 +168,7 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
         return RunnerType.PIPELEX
 
     @override
-    async def execute_pipeline(
+    async def execute(
         self,
         pipe_code: str | None = None,
         mthds_contents: list[str] | None = None,
@@ -128,8 +176,8 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-    ) -> DictPipelineExecuteResponse:
-        """Execute a pipeline via the pipelex CLI subprocess.
+    ) -> DictRunResult:
+        """Execute a method via the pipelex CLI subprocess.
 
         Writes mthds_contents and inputs to temp files, runs `pipelex run`,
         and parses the output JSON back into a typed response.
@@ -159,11 +207,12 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
                 for idx, content in enumerate(mthds_contents):
                     bundle_path = tmp_dir / f"bundle_{idx}.mthds"
                     bundle_path.write_text(content, encoding="utf-8")
-                    cmd.append(str(bundle_path))
+                target = tmp_dir / "bundle_0.mthds" if len(mthds_contents) == 1 else tmp_dir
+                cmd.extend(["bundle", str(target)])
                 if pipe_code:
                     cmd.extend(["--pipe", pipe_code])
             elif pipe_code:
-                cmd.append(pipe_code)
+                cmd.extend(["pipe", pipe_code])
 
             serialized_inputs = _serialize_inputs(inputs)
             if serialized_inputs is not None:
@@ -171,18 +220,20 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
                 inputs_path.write_text(json.dumps(serialized_inputs), encoding="utf-8")
                 cmd.extend(["-i", str(inputs_path)])
 
-            output_path = tmp_dir / "output.json"
-            cmd.extend(["--output", str(output_path)])
+            working_memory_path = tmp_dir / "working_memory.json"
+            cmd.extend(["--working-memory-path", str(working_memory_path)])
+            cmd.extend(["-o", str(tmp_dir / "results")])
+            cmd.append("--no-pretty-print")
 
             run_subprocess(cmd)
 
-            raw: dict[str, Any] = json.loads(output_path.read_text(encoding="utf-8"))
-            return DictPipelineExecuteResponse.from_api_response(raw)
+            raw_memory: dict[str, Any] = json.loads(working_memory_path.read_text(encoding="utf-8"))
+            return _run_result_from_working_memory_dump(raw_memory)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     @override
-    async def start_pipeline(
+    async def start(
         self,
         pipe_code: str | None = None,
         mthds_contents: list[str] | None = None,
@@ -190,8 +241,11 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-    ) -> DictPipelineStartResponse:
-        """Start a pipeline asynchronously — not supported by pipelex CLI.
+        run_id: str | None = None,
+        callback_urls: list[str] | None = None,
+        method_id: str | None = None,
+    ) -> DictStartAck:
+        """Start a method asynchronously — not supported by the pipelex CLI.
 
         Args:
             pipe_code: Unused.
@@ -200,10 +254,95 @@ class PipelexRunner(RunnerProtocol[DictPipeOutputAbstract]):
             output_name: Unused.
             output_multiplicity: Unused.
             dynamic_output_concept_ref: Unused.
+            run_id: Unused.
+            callback_urls: Unused.
+            method_id: Unused.
 
         Raises:
-            NotImplementedError: Always, since pipelex CLI is synchronous.
+            NotImplementedError: Always, since the pipelex CLI is synchronous.
         """
-        _ = (pipe_code, mthds_contents, inputs, output_name, output_multiplicity, dynamic_output_concept_ref)
-        msg = "start_pipeline is not supported by the pipelex CLI runner. Use execute_pipeline instead."
+        _ = (pipe_code, mthds_contents, inputs, output_name, output_multiplicity, dynamic_output_concept_ref, run_id, callback_urls, method_id)
+        msg = "start is not supported by the pipelex CLI runner. Use execute instead."
         raise NotImplementedError(msg)
+
+    @override
+    async def validate(
+        self,
+        mthds_contents: list[str],
+        allow_signatures: bool = False,
+    ) -> ValidationReport:
+        """Validate MTHDS bundles via `pipelex validate`.
+
+        The CLI reports validity through its exit code; it does not emit the
+        protocol's structural artifacts, so a passing validation returns an
+        empty `ValidationReport`.
+
+        Args:
+            mthds_contents: MTHDS contents to load (always a list, even for one file).
+            allow_signatures: Tolerate unimplemented pipe signatures.
+
+        Returns:
+            An empty ValidationReport when the bundle is valid.
+
+        Raises:
+            PipelexRunnerError: If validation fails or pipelex is unavailable.
+        """
+        pipelex_path = _ensure_pipelex()
+
+        tmp_dir = Path(tempfile.mkdtemp(prefix="mthds-"))
+        try:
+            # `pipelex validate bundle` takes ONE path — a bundle file or a directory.
+            # Write all contents into the temp dir and validate the directory, which
+            # covers both the single- and multi-bundle cases.
+            for idx, content in enumerate(mthds_contents):
+                bundle_path = tmp_dir / f"bundle_{idx}.mthds"
+                bundle_path.write_text(content, encoding="utf-8")
+            target = tmp_dir / "bundle_0.mthds" if len(mthds_contents) == 1 else tmp_dir
+            cmd: list[str] = [pipelex_path, *self._library_args(), "validate", "bundle", str(target)]
+            if allow_signatures:
+                cmd.append("--allow-signatures")
+
+            run_subprocess(cmd)
+            return ValidationReport()
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    @override
+    async def models(self, category: ModelCategory | None = None) -> ModelDeck:
+        """The model deck — not supported by the pipelex CLI runner.
+
+        Args:
+            category: Unused.
+
+        Raises:
+            NotImplementedError: The CLI has no machine-readable deck output; use the API runner.
+        """
+        _ = category
+        msg = "models is not supported by the pipelex CLI runner. Use the API runner instead."
+        raise NotImplementedError(msg)
+
+    @override
+    async def version(self) -> VersionInfo:
+        """Protocol + implementation versions, from `pipelex --version`.
+
+        Returns:
+            VersionInfo with the local pipelex version as both implementation
+            and runtime version.
+
+        Raises:
+            PipelexRunnerError: If pipelex is unavailable or the output is unparsable.
+        """
+        pipelex_path = _ensure_pipelex()
+        result = run_subprocess([pipelex_path, "--version"], timeout=60, capture_output=True)
+        output = result.stdout.decode("utf-8").strip()
+        match = re.search(r"(\d+\.\d+\.\d+\S*)", output)
+        if match is None:
+            msg = f"Could not parse a version from `pipelex --version` output: {output!r}"
+            raise PipelexRunnerError(msg)
+        local_version = match.group(1)
+        return VersionInfo(
+            protocol_version="0.1.0",
+            implementation="pipelex-cli",
+            implementation_version=local_version,
+            runtime_version=local_version,
+        )

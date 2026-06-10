@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from pydantic.functional_validators import SkipValidation
 from typing_extensions import Annotated
 
@@ -24,8 +24,9 @@ MAIN_STUFF_NAME = "main_stuff"
 PipeOutputT = TypeVar("PipeOutputT")
 
 
-class PipelineRequest(BaseModel):
-    """Request for executing a pipeline.
+class RunRequest(BaseModel):
+    """Body of the protocol's `POST /execute` — mirrors `RunRequest` in
+    `mthds-protocol.openapi.yaml`.
 
     Attributes:
         pipe_code (str | None): Code of the pipe to execute
@@ -48,7 +49,7 @@ class PipelineRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validate_request(cls, values: dict[str, Any]):
-        if values.get("pipe_code") is None and not values.get("mthds_contents"):
+        if values.get("pipe_code") is None and not values.get("mthds_contents") and not values.get("method_id"):
             msg = (
                 "pipe_code and mthds_contents cannot both be empty. Either: both are provided, or if there are no mthds_contents, "
                 "then pipe_code must be provided and must reference a pipe already registered in the library. "
@@ -66,18 +67,18 @@ class PipelineRequest(BaseModel):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-    ) -> PipelineRequest:
-        """Create a PipelineRequest from a WorkingMemory object.
+    ) -> RunRequest:
+        """Create a RunRequest from a WorkingMemory object.
 
         Args:
-            pipe_code: The code identifying the pipeline to execute
+            pipe_code: The code identifying the pipe to execute
             mthds_contents: List of MTHDS bundle contents to load
             working_memory: The WorkingMemory to convert
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
             dynamic_output_concept_ref: Override for the dynamic output concept ref
         Returns:
-            PipelineRequest with the working memory serialized to reduced format
+            RunRequest with the working memory serialized to reduced format
 
         """
         pipeline_inputs: dict[str, dict[str, Any]] = {}
@@ -102,14 +103,14 @@ class PipelineRequest(BaseModel):
         )
 
     @classmethod
-    def from_body(cls, request_body: dict[str, Any]) -> PipelineRequest:
-        """Create a PipelineRequest from raw request body dictionary.
+    def from_body(cls, request_body: dict[str, Any]) -> RunRequest:
+        """Create a RunRequest from raw request body dictionary.
 
         Args:
             request_body: Raw dictionary from API request body
 
         Returns:
-            PipelineRequest object with dictionary working_memory
+            RunRequest object with dictionary working_memory
 
         """
         # Support both singular "mthds_content" (legacy) and plural "mthds_contents"
@@ -128,56 +129,85 @@ class PipelineRequest(BaseModel):
         )
 
 
-class PipelineState(StrEnum):
+class StartRequest(RunRequest):
+    """Body of the protocol's `POST /start` — `RunRequest` plus the async extras.
+
+    Mirrors `StartRequest` in `mthds-protocol.openapi.yaml`, with the hosted
+    `method_id` extension:
+
+    - `run_id` — client-supplied run identifier; bare runners accept it, the
+      hosted API rejects it with 422 (the server-generated id in `StartAck` is
+      always authoritative).
+    - `callback_urls` — completion webhooks, HMAC-signed by the runner via
+      `X-Completion-Signature`. http/https only; private/loopback/metadata
+      hosts are rejected server-side.
+    - `method_id` — HOSTED EXTENSION: a stored method in the active org's
+      catalog, mutually exclusive with `mthds_contents`. The platform is the
+      source of truth for which combinations it accepts; the SDK does not
+      over-validate.
+    """
+
+    run_id: str | None = Field(default=None, max_length=128)
+    callback_urls: list[str] | None = None
+    method_id: str | None = Field(default=None, min_length=1)
+
+
+class RunState(StrEnum):
+    """Run lifecycle state — mirrors the protocol's `RunState` enum."""
+
+    STARTED = "STARTED"
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
     ERROR = "ERROR"
-    STARTED = "STARTED"
 
 
-class PipelineResponse(BaseModel):
-    """Response for pipeline start requests (no output yet)."""
+class RunResponse(BaseModel):
+    """Common shape of the protocol's run responses (`StartAck` ⊂ `RunResult`)."""
 
-    pipeline_run_id: str
+    run_id: str
     created_at: str
-    pipeline_state: PipelineState
+    state: RunState
     finished_at: str | None = None
     main_stuff_name: str | None = None
 
     @classmethod
     def from_api_response(cls, response: dict[str, Any]) -> Self:
-        """Create a PipelineResponse from an API response dictionary.
+        """Create a run response from an API response dictionary.
 
         Args:
             response: Dictionary containing the API response data
 
         Returns:
-            PipelineResponse instance created from the response data
+            Run response instance created from the response data
 
         """
         return cls.model_validate(response)
 
 
-class PipelineExecuteResponse(PipelineResponse, ABC, Generic[PipeOutputT]):
-    """Abstract response for completed pipeline execution, includes pipe_output."""
+class RunResult(RunResponse, ABC, Generic[PipeOutputT]):
+    """Abstract result of a completed execution (`POST /execute` 200, callback
+    payloads) — includes `pipe_output`.
+    """
 
     pipe_output: PipeOutputT
 
 
-class PipelineStartResponse(PipelineResponse, ABC, Generic[PipeOutputT]):
-    """Abstract response for started pipeline execution, pipe_output is optional."""
+class StartAck(RunResponse, ABC, Generic[PipeOutputT]):
+    """Abstract ack of a started execution (`POST /start` 202); `pipe_output`
+    is absent on the wire and optional here for implementation extensions.
+    """
 
     pipe_output: PipeOutputT | None = None
 
 
-class DictPipelineStartResponse(PipelineStartResponse[DictPipeOutputAbstract]):
-    """Concrete pipeline start response with Dict-serialized output."""
+class DictStartAck(StartAck[DictPipeOutputAbstract]):
+    """Concrete start ack with Dict-serialized output."""
 
 
-class DictPipelineExecuteResponse(PipelineExecuteResponse[DictPipeOutputAbstract]):
-    """Concrete pipeline execution response with Dict-serialized output."""
+class DictRunResult(RunResult[DictPipeOutputAbstract]):
+    """Concrete execution result with Dict-serialized output."""
 
     _dict_stuff_class: ClassVar[type[DictStuffAbstract]] = DictStuffAbstract
     _dict_working_memory_class: ClassVar[type[DictWorkingMemoryAbstract]] = DictWorkingMemoryAbstract
@@ -211,27 +241,27 @@ class DictPipelineExecuteResponse(PipelineExecuteResponse[DictPipeOutputAbstract
     def from_pipe_output(
         cls,
         pipe_output: PipeOutputAbstract[WorkingMemoryAbstract[StuffType]],
-        pipeline_run_id: str = "",
+        run_id: str = "",
         created_at: str = "",
-        pipeline_state: PipelineState = PipelineState.COMPLETED,
+        state: RunState = RunState.COMPLETED,
         finished_at: str | None = None,
-    ) -> DictPipelineExecuteResponse:
-        """Create a DictPipelineExecuteResponse from a PipeOutput object.
+    ) -> DictRunResult:
+        """Create a DictRunResult from a PipeOutput object.
 
         Args:
             pipe_output: The PipeOutput to convert
-            pipeline_run_id: Unique identifier for the pipeline run
-            created_at: Timestamp when the pipeline was created
-            pipeline_state: Current state of the pipeline
-            finished_at: Timestamp when the pipeline finished
+            run_id: Unique identifier for the run
+            created_at: Timestamp when the run was created
+            state: Current state of the run
+            finished_at: Timestamp when the run finished
         Returns:
-            DictPipelineExecuteResponse with the pipe output serialized to reduced format
+            DictRunResult with the pipe output serialized to reduced format
 
         """
         return cls(
-            pipeline_run_id=pipeline_run_id,
+            run_id=run_id,
             created_at=created_at,
-            pipeline_state=pipeline_state,
+            state=state,
             finished_at=finished_at,
             pipe_output=cls._dict_pipe_output_class(
                 working_memory=cls._serialize_working_memory(pipe_output.working_memory),

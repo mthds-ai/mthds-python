@@ -1,0 +1,110 @@
+"""Tests for MthdsAPIClient's protocol discovery + validation surface (validate/models/version), httpx mocked."""
+
+import asyncio
+
+import httpx
+import pytest
+from pytest_mock import MockerFixture
+
+from mthds.client.client import MthdsAPIClient
+from mthds.client.protocol import MTHDSProtocol
+from mthds.client.protocol_models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
+
+_BASE_URL = "http://localhost:8081"
+
+
+def _response(status_code: int, *, json: object = None, headers: dict[str, str] | None = None) -> httpx.Response:
+    """Build a constructed httpx.Response with a request attached (so raise_for_status works)."""
+    request = httpx.Request("GET", f"{_BASE_URL}/x")
+    if json is None:
+        return httpx.Response(status_code, headers=headers or {}, request=request)
+    return httpx.Response(status_code, json=json, headers=headers or {}, request=request)
+
+
+class TestMthdsAPIClientProtocol:
+    """Tests for validate/models/version and the protocol conformance of the client."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_credentials(self, mocker: MockerFixture) -> None:
+        """Keep construction hermetic — never touch the real credentials file/env."""
+        mocker.patch(
+            "mthds.client.client.load_credentials",
+            return_value={"api_key": "", "api_url": "", "runner": "api", "telemetry": "0"},
+        )
+
+    def _client(self) -> MthdsAPIClient:
+        return MthdsAPIClient(api_token="test-token", api_base_url=_BASE_URL)
+
+    def test_client_satisfies_protocol(self) -> None:
+        """MthdsAPIClient structurally satisfies MTHDSProtocol (runtime-checkable)."""
+        client = self._client()
+        assert isinstance(client, MTHDSProtocol)
+
+    # ── validate ─────────────────────────────────────────────────
+
+    def test_validate_posts_contents_and_parses_report(self, mocker: MockerFixture) -> None:
+        """Validate posts to /v1/validate with mthds_contents + allow_signatures and parses the report."""
+        client = self._client()
+        body: dict[str, object] = {"blueprint": {"domain": "answer"}, "graph_spec": {"nodes": []}, "pipe_structures": {}}
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
+
+        report = asyncio.run(client.validate(['domain = "answer"'], allow_signatures=True))
+        assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/validate"
+        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
+        assert '"allow_signatures": true' in sent
+        assert isinstance(report, ValidationReport)
+        assert report.blueprint == {"domain": "answer"}
+
+    def test_validate_invalid_bundle_raises_http_error(self, mocker: MockerFixture) -> None:
+        """A 422 problem (invalid bundle) surfaces as an HTTP error, not a report."""
+        client = self._client()
+        body = {"type": "about:blank", "title": "Validation failed", "status": 422}
+        mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(422, json=body)))
+
+        with pytest.raises(httpx.HTTPStatusError):
+            asyncio.run(client.validate(["domain = "]))
+
+    # ── models ───────────────────────────────────────────────────
+
+    def test_models_parses_deck(self, mocker: MockerFixture) -> None:
+        """Models hits /v1/models and parses the deck shape."""
+        client = self._client()
+        body: dict[str, object] = {
+            "models": [{"name": "gpt-test", "type": "llm"}],
+            "aliases": {"best": "gpt-test"},
+            "waterfalls": {"default": ["gpt-test"]},
+        }
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
+
+        deck = asyncio.run(client.models())
+        assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/models"
+        assert isinstance(deck, ModelDeck)
+        assert deck.models[0].name == "gpt-test"
+        assert deck.aliases == {"best": "gpt-test"}
+
+    def test_models_category_filter_rides_querystring(self, mocker: MockerFixture) -> None:
+        """A category filter is sent as ?type=<category>."""
+        client = self._client()
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json={})))
+
+        asyncio.run(client.models(ModelCategory.LLM))
+        assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/models?type=llm"
+
+    # ── version ──────────────────────────────────────────────────
+
+    def test_version_parses_handshake(self, mocker: MockerFixture) -> None:
+        """Version hits /v1/version and parses the VersionInfo handshake."""
+        client = self._client()
+        body = {
+            "protocol_version": "0.1.0",
+            "implementation": "pipelex-api",
+            "implementation_version": "0.3.0",
+            "runtime_version": "0.32.1",
+        }
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
+
+        info = asyncio.run(client.version())
+        assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/version"
+        assert isinstance(info, VersionInfo)
+        assert info.implementation == "pipelex-api"
+        assert info.runtime_version == "0.32.1"

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 import time
 from typing import Any, cast
@@ -12,21 +13,21 @@ from mthds.client.exceptions import (
     PipelineRequestError,
     RunFailedError,
     RunLifecycleUnavailableError,
+    RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.client.pipeline import DictPipelineExecuteResponse, DictPipelineStartResponse, PipelineRequest
-from mthds.client.protocol import RunnerProtocol
+from mthds.client.pipeline import DictRunResult, DictStartAck, RunRequest, StartRequest
+from mthds.client.protocol import MTHDSProtocol
+from mthds.client.protocol_models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.client.runs import (
     PollInfo,
-    RunPublic,
     RunRead,
-    RunResult,
     RunResultCompleted,
     RunResultFailed,
     RunResultRunning,
+    RunResults,
     RunResultState,
     RunStatus,
-    StartRunRequest,
     WaitForResultOptions,
 )
 from mthds.config.credentials import load_credentials
@@ -34,29 +35,31 @@ from mthds.models.pipe_output import DictPipeOutputAbstract, VariableMultiplicit
 from mthds.models.pipeline_inputs import PipelineInputs
 from mthds.models.stuff import StuffType
 from mthds.models.working_memory import WorkingMemoryAbstract
+from mthds.runners.types import RunnerType
 
-# The SDK derives both surfaces from one origin (MTHDS_API_URL). Self-host open question §7:
-# default to the hosted runner prefix /runner/v1 (a bare pipelex-api serves /api/v1, no platform).
-_RUNNER_PREFIX = "runner/v1"
-_PLATFORM_PREFIX = "platform/v1"
-_PLATFORM_RUNS = "runs"
+# The SDK composes every endpoint from one origin (MTHDS_API_URL): `{base}/v1/{endpoint}`.
+# The same paths are served by the hosted MTHDS API (api.pipelex.com/v1) and by a bare
+# pipelex-api runner (localhost:8081/v1) — the protocol surface is identical; only the
+# hosted extensions (run polling, method_id) differ, detectable via GET /version.
+_API_PREFIX = "v1"
+_RUNS = "runs"
 
 _DEFAULT_REQUEST_TIMEOUT_SECONDS = 1200.0  # runner blocking-execute ceiling
 _POLL_REQUEST_TIMEOUT_SECONDS = 30.0  # single status/result GETs; the hosted gateway caps responses at ~30s
 _DEFAULT_DEGRADED_RETRY_SECONDS = 5  # matches the platform's _DEGRADE_RETRY_AFTER_SECONDS
 
 
-class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
-    """Client for the MTHDS API — runner (execution) + platform (durable run lifecycle).
+class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
+    """Client for any MTHDS runner — protocol surface + hosted run-lifecycle extension.
 
-    One base URL (`MTHDS_API_URL`); the SDK derives both surfaces under it:
-    - **runner** (`<base>/runner/v1/*`) — blocking `execute_pipeline` / fire-and-forget `start_pipeline`.
-    - **platform** (`<base>/platform/v1/runs*`) — the durable run lifecycle (`start_run` / `get_run` /
-      `get_result` / `wait_for_result`) that survives long runs and lets a caller resume by id.
-
-    The platform surface is served only by a deployment that includes the pipelex-platform block
-    (the hosted MTHDS API); a bare `pipelex-api` runner 404s those routes, which the lifecycle
-    methods translate into a clear `RunLifecycleUnavailableError`.
+    One base URL (`MTHDS_API_URL`); every endpoint is `<base>/v1/<endpoint>`:
+    - **protocol** (`execute` / `start` / `validate` / `models` / `version`) — works against
+      any MTHDS-compliant runner, hosted or bare.
+    - **run lifecycle** (`get_run_status` / `get_run_result` / `wait_for_result`) — the durable
+      polling extension that survives long runs and lets a caller resume by id. Served only by
+      a deployment that includes the platform block (the hosted MTHDS API); a bare `pipelex-api`
+      runner 404s those routes, which the lifecycle methods translate into a clear
+      `RunLifecycleUnavailableError`.
     """
 
     def __init__(
@@ -80,6 +83,11 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
 
         self.client: httpx.AsyncClient | None = None
 
+    @property
+    def runner_type(self) -> RunnerType:
+        """Return the runner type (the API client IS the API runner — parity D8)."""
+        return RunnerType.API
+
     # ── Lifecycle ──────────────────────────────────────────────────────
 
     def start_client(self) -> "MthdsAPIClient":
@@ -102,13 +110,9 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
 
     # ── URL resolution ─────────────────────────────────────────────────
 
-    def _runner_url(self, endpoint: str) -> str:
-        """Build a runner URL: `<base>/runner/v1/<endpoint>`."""
-        return f"{self.api_base_url}/{_RUNNER_PREFIX}/{endpoint}"
-
-    def _platform_url(self, endpoint: str) -> str:
-        """Build a platform (run-lifecycle) URL: `<base>/platform/v1/<endpoint>`."""
-        return f"{self.api_base_url}/{_PLATFORM_PREFIX}/{endpoint}"
+    def _url(self, endpoint: str) -> str:
+        """Build an API URL: `<base>/v1/<endpoint>`."""
+        return f"{self.api_base_url}/{_API_PREFIX}/{endpoint}"
 
     # ── Transport ──────────────────────────────────────────────────────
 
@@ -133,25 +137,6 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
             headers["Content-Type"] = "application/json"
         return await self.client.request(method, url, content=content, headers=headers, timeout=request_timeout)
 
-    async def _make_api_call(self, endpoint: str, pipeline_request: PipelineRequest | None = None) -> dict[str, Any]:
-        """POST a pipeline request to a runner endpoint and return the parsed body.
-
-        Args:
-            endpoint: Runner endpoint relative to `/runner/v1` (e.g. "pipeline/execute").
-            pipeline_request: Request body to send, or None for a bodyless call.
-
-        Returns:
-            The JSON-decoded response from the runner.
-
-        Raises:
-            httpx.HTTPStatusError: If the runner returns a non-2xx status.
-        """
-        content = pipeline_request.model_dump_json().encode("utf-8") if pipeline_request is not None else None
-        response = await self._send("POST", self._runner_url(endpoint), content=content, request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS)
-        response.raise_for_status()
-        response_data: dict[str, Any] = response.json()
-        return response_data
-
     def _raise_if_lifecycle_unavailable(self, response: httpx.Response, url: str) -> None:
         """Translate a "route absent" 404 (a bare pipelex-api with no platform block) into a clear
         `RunLifecycleUnavailableError`. The platform's own 404s (run not found / cross-org) carry a
@@ -161,16 +146,16 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
             return
         if _is_missing_route_404(response):
             msg = (
-                f"The durable run lifecycle is not available: {url} returned 404. The platform routes "
-                f"(/{_PLATFORM_PREFIX}/{_PLATFORM_RUNS}*) are served only by a deployment that includes the "
-                "platform block (the hosted MTHDS API); MTHDS_API_URL points at a bare pipelex-api runner."
+                f"The durable run lifecycle is not available: {url} returned 404. Run polling is a "
+                f"hosted-API extension (/{_API_PREFIX}/{_RUNS}/*), not part of the MTHDS Protocol; "
+                "MTHDS_API_URL points at a bare runner that does not serve it."
             )
             raise RunLifecycleUnavailableError(msg, api_url=self.api_base_url)
 
-    # ── Runner surface (blocking execution) ─────────────────────────────
+    # ── Protocol surface ─────────────────────────────────────────────────
 
     @override
-    async def execute_pipeline(
+    async def execute(
         self,
         pipe_code: str | None = None,
         mthds_contents: list[str] | None = None,
@@ -178,103 +163,191 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-    ) -> DictPipelineExecuteResponse:
-        """Execute a pipeline synchronously and wait for its completion.
+    ) -> DictRunResult:
+        """Execute a method synchronously and wait for its completion — `POST /v1/execute`.
 
         Args:
-            pipe_code: The code identifying the pipeline to execute
+            pipe_code: The code identifying the pipe to execute
             mthds_contents: List of MTHDS bundle contents to load
-            inputs: Inputs passed to the pipeline
+            inputs: Inputs passed to the method
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
             dynamic_output_concept_ref: Override for the dynamic output concept ref
 
         Returns:
-            Complete execution results including pipeline state and output
-        """
-        if not pipe_code and not mthds_contents:
-            msg = "Either pipe_code or mthds_contents must be provided to the API execute_pipeline."
-            raise PipelineRequestError(msg)
-
-        pipeline_request = PipelineRequest(
-            pipe_code=pipe_code,
-            mthds_contents=mthds_contents,
-            inputs=inputs,
-            output_name=output_name,
-            output_multiplicity=output_multiplicity,
-            dynamic_output_concept_ref=dynamic_output_concept_ref,
-        )
-        response = await self._make_api_call("pipeline/execute", pipeline_request=pipeline_request)
-        return DictPipelineExecuteResponse.from_api_response(response)
-
-    @override
-    async def start_pipeline(
-        self,
-        pipe_code: str | None = None,
-        mthds_contents: list[str] | None = None,
-        inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
-        output_name: str | None = None,
-        output_multiplicity: VariableMultiplicity | None = None,
-        dynamic_output_concept_ref: str | None = None,
-    ) -> DictPipelineStartResponse:
-        """Start a pipeline execution asynchronously without waiting for completion.
-
-        Args:
-            pipe_code: The code identifying the pipeline to execute
-            mthds_contents: List of MTHDS bundle contents to load
-            inputs: Inputs passed to the pipeline
-            output_name: Name of the output slot to write to
-            output_multiplicity: Output multiplicity setting
-            dynamic_output_concept_ref: Override for the dynamic output concept ref
-
-        Returns:
-            Initial response with pipeline_run_id and created_at timestamp
-        """
-        if not pipe_code and not mthds_contents:
-            msg = "Either pipe_code or mthds_contents must be provided to the API start_pipeline."
-            raise PipelineRequestError(msg)
-
-        pipeline_request = PipelineRequest(
-            pipe_code=pipe_code,
-            mthds_contents=mthds_contents,
-            inputs=inputs,
-            output_name=output_name,
-            output_multiplicity=output_multiplicity,
-            dynamic_output_concept_ref=dynamic_output_concept_ref,
-        )
-        response = await self._make_api_call("pipeline/start", pipeline_request=pipeline_request)
-        return DictPipelineStartResponse.from_api_response(response)
-
-    # ── Platform surface (durable run lifecycle) ────────────────────────
-
-    async def start_run(self, request: StartRunRequest) -> RunPublic:
-        """Start a run — `POST /platform/v1/runs`. Returns the created run record; the run executes
-        asynchronously. Poll `get_result` / `wait_for_result` (or `get_run` for status) by the
-        returned `pipeline_run_id`.
+            Complete execution results including run state and output
 
         Raises:
-            RunLifecycleUnavailableError: If the platform routes are absent (a bare runner).
-            httpx.HTTPStatusError: For any other non-2xx response.
+            RunStillRunningError: If the server answers `202 + StartAck` (the protocol's
+                optional async degrade) — the run continues server-side; resume by `run_id`.
         """
-        url = self._platform_url(_PLATFORM_RUNS)
-        content = request.model_dump_json(exclude_none=True).encode("utf-8")
-        response = await self._send("POST", url, content=content, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
-        self._raise_if_lifecycle_unavailable(response, url)
-        response.raise_for_status()
-        return RunPublic.model_validate(response.json())
+        if not pipe_code and not mthds_contents:
+            msg = "Either pipe_code or mthds_contents must be provided to the API execute."
+            raise PipelineRequestError(msg)
 
-    async def get_run(self, run_id: str) -> RunRead:
-        """Fetch a run's status by bare id — `GET /platform/v1/runs/by-id/{run_id}`.
+        run_request = RunRequest(
+            pipe_code=pipe_code,
+            mthds_contents=mthds_contents,
+            inputs=inputs,
+            output_name=output_name,
+            output_multiplicity=output_multiplicity,
+            dynamic_output_concept_ref=dynamic_output_concept_ref,
+        )
+        content = run_request.model_dump_json().encode("utf-8")
+        response = await self._send("POST", self._url("execute"), content=content, request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS)
+        self._raise_if_execute_degraded(response)
+        response.raise_for_status()
+        return DictRunResult.from_api_response(response.json())
+
+    @override
+    async def start(
+        self,
+        pipe_code: str | None = None,
+        mthds_contents: list[str] | None = None,
+        inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
+        output_name: str | None = None,
+        output_multiplicity: VariableMultiplicity | None = None,
+        dynamic_output_concept_ref: str | None = None,
+        run_id: str | None = None,
+        callback_urls: list[str] | None = None,
+        method_id: str | None = None,
+    ) -> DictStartAck:
+        """Start a method asynchronously — `POST /v1/start` (202 StartAck).
+
+        Args:
+            pipe_code: The code identifying the pipe to execute
+            mthds_contents: List of MTHDS bundle contents to load
+            inputs: Inputs passed to the method
+            output_name: Name of the output slot to write to
+            output_multiplicity: Output multiplicity setting
+            dynamic_output_concept_ref: Override for the dynamic output concept ref
+            run_id: Client-supplied run identifier — bare runners only; the hosted API
+                rejects it with 422 (the returned `run_id` is always authoritative)
+            callback_urls: Completion webhooks (HMAC-signed via X-Completion-Signature)
+            method_id: HOSTED EXTENSION — stored method id, mutually exclusive with
+                `mthds_contents`
+
+        Returns:
+            StartAck with the authoritative `run_id` and `created_at` timestamp. On a
+            hosted deployment the id is durable — poll `get_run_status` / `get_run_result`.
+        """
+        if not pipe_code and not mthds_contents and not method_id:
+            msg = "Either pipe_code, mthds_contents or method_id must be provided to the API start."
+            raise PipelineRequestError(msg)
+
+        start_request = StartRequest(
+            pipe_code=pipe_code,
+            mthds_contents=mthds_contents,
+            inputs=inputs,
+            output_name=output_name,
+            output_multiplicity=output_multiplicity,
+            dynamic_output_concept_ref=dynamic_output_concept_ref,
+            run_id=run_id,
+            callback_urls=callback_urls,
+            method_id=method_id,
+        )
+        content = start_request.model_dump_json(exclude_none=True).encode("utf-8")
+        response = await self._send("POST", self._url("start"), content=content, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        return DictStartAck.from_api_response(response.json())
+
+    @override
+    async def validate(
+        self,
+        mthds_contents: list[str],
+        allow_signatures: bool = False,
+    ) -> ValidationReport:
+        """Parse, validate, and dry-run an MTHDS bundle — `POST /v1/validate`.
+
+        Args:
+            mthds_contents: MTHDS contents to load (always a list, even for one file)
+            allow_signatures: Tolerate unimplemented pipe signatures (strict by default)
+
+        Returns:
+            ValidationReport with the structural artifacts of a valid bundle.
+
+        Raises:
+            httpx.HTTPStatusError: 422 when the bundle is invalid (RFC 7807 problem body).
+        """
+        body = {"mthds_contents": mthds_contents, "allow_signatures": allow_signatures}
+        response = await self._send(
+            "POST",
+            self._url("validate"),
+            content=json.dumps(body).encode("utf-8"),
+            request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return ValidationReport.model_validate(response.json())
+
+    @override
+    async def models(self, category: ModelCategory | None = None) -> ModelDeck:
+        """The model deck the runner can route to — `GET /v1/models[?type=]`.
+
+        Args:
+            category: Optional filter (`llm`, `extract`, `img_gen`, `search`).
+
+        Returns:
+            ModelDeck with presets, aliases, and routing waterfalls.
+        """
+        endpoint = f"models?type={quote(category, safe='')}" if category is not None else "models"
+        response = await self._send("GET", self._url(endpoint), content=None, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        return ModelDeck.model_validate(response.json())
+
+    @override
+    async def version(self) -> VersionInfo:
+        """Protocol + implementation versions — `GET /v1/version` (public).
+
+        Returns:
+            VersionInfo — the handshake for feature detection (hosted extensions or not).
+        """
+        response = await self._send("GET", self._url("version"), content=None, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        return VersionInfo.model_validate(response.json())
+
+    def _raise_if_execute_degraded(self, response: httpx.Response) -> None:
+        """Map the protocol's optional `202 + StartAck` execute degrade to a typed error.
+
+        Hosted does not emit 202 today, but the protocol permits it; raising a typed
+        error (with the `run_id` + `Location` + `Retry-After` hints) beats a generic
+        validation failure on an unexpected body shape.
+        """
+        if response.status_code != 202:
+            return
+        body: dict[str, Any] = {}
+        try:
+            raw = response.json()
+            if isinstance(raw, dict):
+                body = cast("dict[str, Any]", raw)
+        except ValueError:
+            body = {}
+        ack_run_id = body.get("run_id")
+        run_id = ack_run_id if isinstance(ack_run_id, str) else ""
+        msg = (
+            f"execute() was accepted asynchronously (202): run {run_id or '<unknown>'} is still "
+            "running server-side. Poll its results (hosted) or use start() with callback_urls."
+        )
+        raise RunStillRunningError(
+            msg,
+            run_id=run_id,
+            retry_after_seconds=_parse_retry_after(response.headers),
+            location=response.headers.get("location"),
+        )
+
+    # ── Hosted extension: durable run lifecycle (NOT part of the protocol) ──
+
+    async def get_run_status(self, run_id: str) -> RunRead:
+        """Fetch a run's status by bare id — `GET /v1/runs/{run_id}/status`.
 
         Self-healing: a finished-but-unrecorded run resolves to its true terminal status on read.
         `degraded=True` means Temporal was unreachable and `status` is the last-known value;
         `retry_after_seconds` carries the server's `Retry-After` hint when present.
 
         Raises:
-            RunLifecycleUnavailableError: If the platform routes are absent (a bare runner).
+            RunLifecycleUnavailableError: If the lifecycle routes are absent (a bare runner).
             httpx.HTTPStatusError: For a genuine run-not-found 404 or any other non-2xx response.
         """
-        url = self._platform_url(f"{_PLATFORM_RUNS}/by-id/{quote(run_id, safe='')}")
+        url = self._url(f"{_RUNS}/{quote(run_id, safe='')}/status")
         response = await self._send("GET", url, content=None, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
         self._raise_if_lifecycle_unavailable(response, url)
         response.raise_for_status()
@@ -284,8 +357,8 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
             run = run.model_copy(update={"retry_after_seconds": retry_after})
         return run
 
-    async def get_result(self, run_id: str) -> RunResultState:
-        """Single-shot result lookup — `GET /platform/v1/runs/by-id/{run_id}/result`.
+    async def get_run_result(self, run_id: str) -> RunResultState:
+        """Single-shot result lookup — `GET /v1/runs/{run_id}/results`.
 
         Maps the platform's poll semantics to a discriminated union:
         - HTTP 202 → `running` (in-flight, with the `Retry-After` hint)
@@ -294,33 +367,33 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
         - HTTP 409 → `failed` (terminal non-`COMPLETED`)
 
         Raises:
-            RunLifecycleUnavailableError: If the platform routes are absent (a bare runner).
+            RunLifecycleUnavailableError: If the lifecycle routes are absent (a bare runner).
             httpx.HTTPStatusError: For a genuine run-not-found 404 or any other non-2xx response.
         """
-        url = self._platform_url(f"{_PLATFORM_RUNS}/by-id/{quote(run_id, safe='')}/result")
+        url = self._url(f"{_RUNS}/{quote(run_id, safe='')}/results")
         response = await self._send("GET", url, content=None, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
         status_code = response.status_code
 
         if status_code in {202, 503}:
             retry_after = _parse_retry_after(response.headers)
             return RunResultRunning(
-                pipeline_run_id=run_id,
+                run_id=run_id,
                 retry_after_seconds=retry_after if retry_after is not None else _DEFAULT_DEGRADED_RETRY_SECONDS,
             )
         if status_code == 409:
             message = _parse_error_message(response) or "Run finished without a result."
             return RunResultFailed(
-                pipeline_run_id=run_id,
+                run_id=run_id,
                 status=_extract_run_status_from_message(message),
                 message=message,
             )
 
         self._raise_if_lifecycle_unavailable(response, url)
         response.raise_for_status()
-        result = RunResult.model_validate(response.json())
-        return RunResultCompleted(pipeline_run_id=run_id, result=result)
+        result = RunResults.model_validate(response.json())
+        return RunResultCompleted(run_id=run_id, result=result)
 
-    async def wait_for_result(self, run_id: str, options: WaitForResultOptions | None = None) -> RunResult:
+    async def wait_for_result(self, run_id: str, options: WaitForResultOptions | None = None) -> RunResults:
         """Poll a run to a terminal state and return its result.
 
         Resolves on `COMPLETED`, raises `RunFailedError` on any other terminal status, and raises
@@ -329,7 +402,7 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
         awaiting task raises `asyncio.CancelledError` out of this loop, leaving the run resumable.
 
         Args:
-            run_id: The `pipeline_run_id` returned by `start_run`.
+            run_id: The `run_id` returned by `start`.
             options: Poll-loop tuning (interval, timeout, on_poll callback).
 
         Returns:
@@ -340,7 +413,7 @@ class MthdsAPIClient(RunnerProtocol[DictPipeOutputAbstract]):
         attempt = 0
 
         while True:
-            state = await self.get_result(run_id)
+            state = await self.get_run_result(run_id)
             if isinstance(state, RunResultCompleted):
                 return state.result
             if isinstance(state, RunResultFailed):

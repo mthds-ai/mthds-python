@@ -2,10 +2,10 @@
 
 import shutil
 
-from mthds.client.protocol import RunnerProtocol
+from mthds.client.client import MthdsAPIClient
+from mthds.client.protocol import MTHDSProtocol
 from mthds.config.credentials import load_credentials
 from mthds.models.pipe_output import DictPipeOutputAbstract
-from mthds.runners.api_runner import ApiRunner
 from mthds.runners.pipelex_runner import PipelexRunner
 from mthds.runners.types import RunnerType
 
@@ -13,18 +13,22 @@ from mthds.runners.types import RunnerType
 def create_runner(
     runner_type: RunnerType | None = None,
     library_dirs: list[str] | None = None,
-) -> RunnerProtocol[DictPipeOutputAbstract]:
+) -> MTHDSProtocol[DictPipeOutputAbstract]:
     """Create a runner instance based on the given type or configuration.
 
     When no runner_type is provided, reads the default from credentials.
     For pipelex, falls back to API if pipelex is not installed.
+
+    The API runner IS the client: `MthdsAPIClient` implements the protocol
+    directly (plus the hosted run-lifecycle extension), so there is no
+    separate wrapper class.
 
     Args:
         runner_type: Runner type to create. None means auto-detect.
         library_dirs: Directories to pass via -L to pipelex for library search.
 
     Returns:
-        A RunnerProtocol instance.
+        An MTHDSProtocol instance.
     """
     if runner_type is None:
         credentials = load_credentials()
@@ -36,8 +40,8 @@ def create_runner(
 
     match runner_type:
         case RunnerType.API:
-            return ApiRunner()
+            return MthdsAPIClient()
         case RunnerType.PIPELEX:
             if shutil.which("pipelex") is not None:
                 return PipelexRunner(library_dirs=library_dirs)
-            return ApiRunner()
+            return MthdsAPIClient()

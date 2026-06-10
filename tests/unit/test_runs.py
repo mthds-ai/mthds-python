@@ -1,21 +1,21 @@
-"""Tests for mthds.client.runs — run-lifecycle models for the platform polling surface."""
+"""Tests for mthds.client.runs — run-lifecycle models for the hosted polling surface."""
 
 from dataclasses import FrozenInstanceError
 
 import pytest
 from pydantic import TypeAdapter
 
+from mthds.client.pipeline import StartRequest
 from mthds.client.runs import (
     PollInfo,
     RunPublic,
     RunRead,
-    RunResult,
     RunResultCompleted,
     RunResultFailed,
     RunResultRunning,
+    RunResults,
     RunResultState,
     RunStatus,
-    StartRunRequest,
     WaitForResultOptions,
 )
 
@@ -48,29 +48,29 @@ class TestRuns:
         adapter = TypeAdapter(RunStatus)
         assert adapter.validate_python("TIMED_OUT") == RunStatus.TIMED_OUT
 
-    # ── StartRunRequest ──────────────────────────────────────────
+    # ── StartRequest ──────────────────────────────────────────
 
     def test_start_run_request_method_id_alone_is_valid(self) -> None:
-        """A body with only method_id is accepted client-side (D5 — do not over-validate)."""
-        request = StartRunRequest(method_id="mt_123")
+        """A body with only method_id is accepted client-side (the platform is the source of truth)."""
+        request = StartRequest(method_id="mt_123")
         assert request.method_id == "mt_123"
         assert request.pipe_code is None
         assert request.mthds_contents is None
 
     def test_start_run_request_serializes_only_set_fields(self) -> None:
         """method_id-alone serializes to a minimal body (exclude_none)."""
-        request = StartRunRequest(method_id="mt_123")
+        request = StartRequest(method_id="mt_123")
         assert request.model_dump(exclude_none=True) == {"method_id": "mt_123"}
 
     @pytest.mark.parametrize("multiplicity", [True, False, 3])
     def test_start_run_request_output_multiplicity(self, multiplicity: bool | int) -> None:
         """output_multiplicity accepts bool or int (VariableMultiplicity)."""
-        request = StartRunRequest(pipe_code="answer", output_multiplicity=multiplicity)
+        request = StartRequest(pipe_code="answer", output_multiplicity=multiplicity)
         assert request.output_multiplicity == multiplicity
 
     def test_start_run_request_full_inline_bundle(self) -> None:
         """An ad-hoc inline bundle carries contents + output controls."""
-        request = StartRunRequest(
+        request = StartRequest(
             mthds_contents=["domain answer\npipe answer ..."],
             pipe_code="answer",
             inputs={"question": "why?"},
@@ -86,8 +86,8 @@ class TestRuns:
 
     def test_run_public_runner_tier_without_identity(self) -> None:
         """Identity fields are optional so a runner-tier run (no org) still parses."""
-        run = RunPublic(pipeline_run_id="run_1", status=RunStatus.RUNNING, created_at="2026-06-10T00:00:00Z")
-        assert run.pipeline_run_id == "run_1"
+        run = RunPublic(run_id="run_1", status=RunStatus.RUNNING, created_at="2026-06-10T00:00:00Z")
+        assert run.run_id == "run_1"
         assert run.status == RunStatus.RUNNING
         assert run.org_id is None
         assert run.created_by_user_id is None
@@ -96,7 +96,7 @@ class TestRuns:
     def test_run_public_platform_tier_with_identity(self) -> None:
         """A platform-tier run carries org + creator + method linkage."""
         run = RunPublic(
-            pipeline_run_id="run_2",
+            run_id="run_2",
             org_id="org_x",
             created_by_user_id="user_y",
             method_id="mt_123",
@@ -113,14 +113,14 @@ class TestRuns:
 
     def test_run_read_defaults(self) -> None:
         """RunRead defaults degraded=False and retry_after_seconds=None."""
-        run = RunRead(pipeline_run_id="run_1", status=RunStatus.RUNNING, created_at="2026-06-10T00:00:00Z")
+        run = RunRead(run_id="run_1", status=RunStatus.RUNNING, created_at="2026-06-10T00:00:00Z")
         assert run.degraded is False
         assert run.retry_after_seconds is None
 
     def test_run_read_degraded(self) -> None:
         """A degraded read carries the last-known status + a retry hint."""
         run = RunRead(
-            pipeline_run_id="run_1",
+            run_id="run_1",
             status=RunStatus.RUNNING,
             created_at="2026-06-10T00:00:00Z",
             degraded=True,
@@ -129,17 +129,17 @@ class TestRuns:
         assert run.degraded is True
         assert run.retry_after_seconds == 5
 
-    # ── RunResult (opaque Any payloads) ──────────────────────────
+    # ── RunResults (opaque Any payloads) ─────────────────────────
 
     def test_run_result_main_stuff_list_stays_list(self) -> None:
         """A list output stays a top-level array — main_stuff is Any, not dict (avoid mthds-js bug)."""
-        result = RunResult(pipeline_run_id="run_1", main_stuff=[{"color": "red"}, {"color": "blue"}])
+        result = RunResults(run_id="run_1", main_stuff=[{"color": "red"}, {"color": "blue"}])
         assert result.main_stuff == [{"color": "red"}, {"color": "blue"}]
         assert isinstance(result.main_stuff, list)
 
     def test_run_result_main_stuff_object_and_defaults(self) -> None:
         """A structured output is an object; both artifacts default to None when absent."""
-        result = RunResult(pipeline_run_id="run_1", main_stuff={"answer": "42"})
+        result = RunResults(run_id="run_1", main_stuff={"answer": "42"})
         assert result.main_stuff == {"answer": "42"}
         assert result.graph_spec is None
 
@@ -148,23 +148,21 @@ class TestRuns:
     def test_run_result_state_running(self) -> None:
         """A `running` payload discriminates to RunResultRunning."""
         adapter: TypeAdapter[RunResultState] = TypeAdapter(RunResultState)
-        state = adapter.validate_python({"state": "running", "pipeline_run_id": "run_1", "retry_after_seconds": 3})
+        state = adapter.validate_python({"state": "running", "run_id": "run_1", "retry_after_seconds": 3})
         assert isinstance(state, RunResultRunning)
         assert state.retry_after_seconds == 3
 
     def test_run_result_state_completed(self) -> None:
         """A `completed` payload carries the RunResult artifacts."""
         adapter: TypeAdapter[RunResultState] = TypeAdapter(RunResultState)
-        state = adapter.validate_python(
-            {"state": "completed", "pipeline_run_id": "run_1", "result": {"pipeline_run_id": "run_1", "main_stuff": [1, 2]}}
-        )
+        state = adapter.validate_python({"state": "completed", "run_id": "run_1", "result": {"run_id": "run_1", "main_stuff": [1, 2]}})
         assert isinstance(state, RunResultCompleted)
         assert state.result.main_stuff == [1, 2]
 
     def test_run_result_state_failed(self) -> None:
         """A `failed` payload carries the terminal status + message."""
         adapter: TypeAdapter[RunResultState] = TypeAdapter(RunResultState)
-        state = adapter.validate_python({"state": "failed", "pipeline_run_id": "run_1", "status": "FAILED", "message": "boom"})
+        state = adapter.validate_python({"state": "failed", "run_id": "run_1", "status": "FAILED", "message": "boom"})
         assert isinstance(state, RunResultFailed)
         assert state.status == RunStatus.FAILED
         assert state.message == "boom"
