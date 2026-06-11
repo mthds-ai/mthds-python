@@ -109,7 +109,7 @@ class TestMthdsAPIClientProtocol:
         """Version hits /v1/version and parses the VersionInfo handshake."""
         client = self._client()
         body = {
-            "protocol_version": "0.1.0",
+            "protocol_version": "0.6.0",
             "runner_version": "0.3.0",
             "some_vendor_name": "vendor-runner",
         }
@@ -118,7 +118,7 @@ class TestMthdsAPIClientProtocol:
         info = asyncio.run(client.version())
         assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/version"
         assert isinstance(info, VersionInfo)
-        assert info.protocol_version == "0.1.0"
+        assert info.protocol_version == "0.6.0"
         assert info.runner_version == "0.3.0"
         # Implementation identification passes through as extensions, never named by the SDK.
         assert info.model_extra == {"some_vendor_name": "vendor-runner"}

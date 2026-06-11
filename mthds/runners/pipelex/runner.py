@@ -3,7 +3,6 @@
 # TODO: refacto
 
 import json
-import re
 import shutil
 import subprocess  # noqa: S404
 import tempfile
@@ -356,23 +355,23 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
 
     @override
     async def version(self) -> VersionInfo:
-        """Protocol + runner versions, from `pipelex --version`.
+        """Protocol + runner versions, from the pipelex CLI.
 
         Returns:
-            VersionInfo with the local pipelex version as the runner version.
+            VersionInfo with the protocol version pipelex implements and the
+            local pipelex version as the runner version.
 
         Raises:
-            PipelexRunnerError: If pipelex is unavailable or the output is unparsable.
+            PipelexRunnerError: If pipelex is unavailable, its output is
+                unparsable, or the CLI does not yet expose `protocol_version`.
         """
-        pipelex_path = _ensure_pipelex()
-        result = run_subprocess([pipelex_path, "--version"], timeout=60, capture_output=True)
-        output = result.stdout.decode("utf-8").strip()
-        match = re.search(r"(\d+\.\d+\.\d+\S*)", output)
-        if match is None:
-            msg = f"Could not parse a version from `pipelex --version` output: {output!r}"
-            raise PipelexRunnerError(msg)
-        local_version = match.group(1)
-        return VersionInfo(
-            protocol_version="0.1.0",
-            runner_version=local_version,
+        # TODO(pipelex): pipelex CLI must expose `protocol_version` for us to
+        # report it here (e.g. extend `pipelex --version` to emit both the
+        # runner version and the MTHDS protocol version it implements). The
+        # value lives in pipelex as `MTHDS_PROTOCOL_VERSION` but is not
+        # surfaced through the CLI today.
+        msg = (
+            "PipelexRunner cannot report `protocol_version`: the pipelex CLI does not yet expose it. "
+            "Extend the pipelex CLI to emit the MTHDS protocol version it implements, then parse it here."
         )
+        raise PipelexRunnerError(msg)
