@@ -22,6 +22,8 @@ See [docs/runners.md](./docs/runners.md) for the protocol + runners reference.
 
 ## Quick start
 
+Run a method against any MTHDS-Protocol server with the **API runner**, `MthdsAPIClient`:
+
 ```python
 import asyncio
 
@@ -43,6 +45,8 @@ asyncio.run(main())
 ```
 
 `execute` runs synchronously; `start` returns immediately with a `pipeline_run_id`; `start_and_wait` does the whole async lifecycle in one call. `validate`, `models`, and `version` round out the protocol surface.
+
+Need local execution instead of an API? `PipelexRunner` (`mthds.runners.pipelex.runner`) implements the same `MTHDSProtocol` by shelling out to an installed `pipelex` CLI — no API key.
 
 ## Configuration
 
