@@ -5,7 +5,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 from pydantic import TypeAdapter
 
-from mthds.protocol.models import StartRequest
+from mthds.protocol.models import RunRequest
 from mthds.runners.runs import (
     PollInfo,
     RunPublic,
@@ -48,35 +48,35 @@ class TestRuns:
         adapter = TypeAdapter(RunStatus)
         assert adapter.validate_python("TIMED_OUT") == RunStatus.TIMED_OUT
 
-    # ── StartRequest ──────────────────────────────────────────
+    # ── RunRequest (the /execute and /start body) ─────────────
 
     def test_start_run_request_extension_alone_is_valid(self) -> None:
         """A body with only an extension arg is accepted client-side (the server is the source of truth)."""
-        request = StartRequest.model_validate({"some_vendor_selector": "sel_123"})
+        request = RunRequest.model_validate({"some_vendor_selector": "sel_123"})
         assert request.pipe_code is None
         assert request.mthds_contents is None
         assert request.model_dump(exclude_none=True) == {"some_vendor_selector": "sel_123"}
 
     def test_start_run_request_serializes_only_set_fields(self) -> None:
         """Extension-alone serializes to a minimal body (exclude_none)."""
-        request = StartRequest.model_validate({"some_vendor_selector": "sel_123"})
+        request = RunRequest.model_validate({"some_vendor_selector": "sel_123"})
         assert request.model_dump(exclude_none=True) == {"some_vendor_selector": "sel_123"}
 
     def test_run_request_keeps_arbitrary_extension_args(self) -> None:
         """The request models are extension-open: unknown args are kept and serialized, never silently dropped."""
-        request = StartRequest.model_validate({"pipe_code": "answer", "some_vendor_arg": {"nested": True}})
+        request = RunRequest.model_validate({"pipe_code": "answer", "some_vendor_arg": {"nested": True}})
         dumped = request.model_dump(exclude_none=True)
         assert dumped == {"pipe_code": "answer", "some_vendor_arg": {"nested": True}}
 
     @pytest.mark.parametrize("multiplicity", [True, False, 3])
     def test_start_run_request_output_multiplicity(self, multiplicity: bool | int) -> None:
         """output_multiplicity accepts bool or int (VariableMultiplicity)."""
-        request = StartRequest(pipe_code="answer", output_multiplicity=multiplicity)
+        request = RunRequest(pipe_code="answer", output_multiplicity=multiplicity)
         assert request.output_multiplicity == multiplicity
 
     def test_start_run_request_full_inline_bundle(self) -> None:
         """An ad-hoc inline bundle carries contents + output controls."""
-        request = StartRequest(
+        request = RunRequest(
             mthds_contents=["domain answer\npipe answer ..."],
             pipe_code="answer",
             inputs={"question": "why?"},

@@ -13,7 +13,7 @@ from typing_extensions import override
 from mthds.config.credentials import load_credentials
 from mthds.models.pipe_output import DictPipeOutputAbstract, VariableMultiplicity
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.protocol.models import ModelCategory, ModelDeck, RunRequest, StartRequest, ValidationReport, VersionInfo
+from mthds.protocol.models import ModelCategory, ModelDeck, RunRequest, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.exceptions import (
     ClientAuthenticationError,
@@ -250,8 +250,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API start."
             raise PipelineRequestError(msg)
 
-        extensions = _build_extensions(extra, protocol_fields=StartRequest.model_fields.keys())
-        start_request = StartRequest(
+        extensions = _build_extensions(extra, protocol_fields=RunRequest.model_fields.keys())
+        start_request = RunRequest(
             pipe_code=pipe_code,
             mthds_contents=mthds_contents,
             inputs=inputs,

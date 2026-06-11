@@ -1,7 +1,7 @@
 """Wire models for the MTHDS Protocol — mirrors `mthds-protocol.openapi.yaml` (the standard's normative artifact).
 
     POST /execute  : RunRequest   -> RunResult (200, pipe_output present)
-    POST /start    : StartRequest -> RunResult (202, pipe_output absent)
+    POST /start    : RunRequest   -> RunResult (202, pipe_output absent)
     POST /validate :              -> ValidationReport
     GET  /models   :              -> ModelDeck
     GET  /version  :              -> VersionInfo
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.functional_validators import SkipValidation
 from typing_extensions import Annotated
 
@@ -30,7 +30,6 @@ from mthds._utils.pydantic_utils import empty_list_factory_of
 from mthds.models.pipe_output import VariableMultiplicity
 from mthds.models.pipeline_inputs import PipelineInputs
 from mthds.models.working_memory import WorkingMemoryAbstract
-from mthds.protocol.exceptions import PipelineRequestError
 
 PipeOutputT = TypeVar("PipeOutputT")
 
@@ -66,33 +65,6 @@ class RunRequest(BaseModel):
     output_name: str | None = None
     output_multiplicity: VariableMultiplicity | None = None
     dynamic_output_concept_ref: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def validate_request(cls, values: dict[str, Any]):
-        # The protocol requires at least one of pipe_code / mthds_contents. When the
-        # body carries extension args (keys outside the declared fields), an extension
-        # may be the method selector — the server is the source of truth, so the SDK
-        # does not over-validate.
-        has_extensions = any(key not in cls.model_fields for key in values)
-        if values.get("pipe_code") is None and not values.get("mthds_contents") and not has_extensions:
-            msg = (
-                "pipe_code and mthds_contents cannot both be empty. Either: both are provided, or if there are no mthds_contents, "
-                "then pipe_code must be provided and must reference a pipe already registered in the library. "
-                "If mthds_contents is provided but no pipe_code, the first content must have a main_pipe property."
-            )
-            raise PipelineRequestError(msg)
-        return values
-
-
-class StartRequest(RunRequest):
-    """Body of the protocol's `POST /start` — same basic arguments as `RunRequest`.
-
-    The protocol declares no start-only request fields. Anything an
-    implementation accepts on top (a client-supplied run id, anything else) is
-    an extension arg — like on `RunRequest`, it passes through `extra="allow"`
-    and serializes to the wire as a top-level property.
-    """
 
 
 # ── Run response (`POST /execute` 200, `POST /start` 202) ────────────
