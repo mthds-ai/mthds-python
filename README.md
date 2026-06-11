@@ -39,7 +39,7 @@ mthds package init
 
 ## API Configuration
 
-The default runner is `api` — any server that implements the [MTHDS Protocol](https://mthds.ai). The reference implementation is **Pipelex** (`https://api.pipelex.com`): get an API key at [app.pipelex.com](https://app.pipelex.com).
+The default runner is `api` — any server that implements the [MTHDS Protocol](https://mthds.ai). The reference implementation is **Pipelex** (`https://api.pipelex.com`): get an API key at [app.pipelex.com](https://app.pipelex.com) — or build your own.
 
 ```bash
 mthds config set api-key YOUR_KEY
