@@ -39,8 +39,8 @@ async with MthdsAPIClient() as client:
 
 The abstract `MTHDSProtocol` interface carries the protocol's **basic** arguments only. Implementations may accept more (the protocol's extension policy), and the SDK passes any of them through:
 
-- The concrete `MthdsAPIClient` exposes the common pipelex extensions as typed convenience params: `method_id` (on `execute` and `start`) and `callback_urls` (on `start`).
-- Anything else rides the generic `extra` mapping on both `execute` and `start`: `client.start(pipe_code="answer", extra={"some_vendor_arg": True})` merges `some_vendor_arg` into the request body as a top-level property. Protocol args inside `extra` are rejected client-side with `PipelineRequestError` — pass them as named parameters.
+- Extension args never appear in this SDK — not even as convenience params. They ride the generic `extra` mapping on both `execute` and `start`: `client.start(pipe_code="answer", extra={"some_server_arg": True})` merges `some_server_arg` into the request body as a top-level property. The server you call defines and handles its own extension args; consult that server's API documentation for what it accepts.
+- Protocol args inside `extra` are rejected client-side with `PipelineRequestError` — pass them as named parameters.
 
 ## The run-lifecycle extension (hosted API only)
 
@@ -48,13 +48,15 @@ The abstract `MTHDSProtocol` interface carries the protocol's **basic** argument
 
 ```python
 async with MthdsAPIClient() as client:
-    ack = await client.start(method_id="mt_123", inputs=inputs)        # POST /v1/start → 202 StartAck
+    ack = await client.start(pipe_code="answer", inputs=inputs)         # POST /v1/start → 202 StartAck
+    # server-specific args (defined by the server, not this SDK) ride `extra`:
+    # ack = await client.start(inputs=inputs, extra={...})
     status = await client.get_run_status(ack.pipeline_run_id)                   # GET /v1/runs/{id}/status (self-healing)
     results = await client.wait_for_result(ack.pipeline_run_id)                 # polls GET /v1/runs/{id}/results
     print(results.main_stuff)
 ```
 
-- `start` accepts the protocol arg `pipeline_run_id` (bare-runner only: the hosted API always generates the id server-side and rejects a client-supplied one with 422), plus the **pipelex extension args** `method_id` (a stored method in your org's catalog; combinable with `mthds_contents`: the inline contents run, `method_id` links run history) and `callback_urls` (HMAC-signed completion webhooks). Neither extension is part of the MTHDS Protocol — they are server-specific args the concrete client exposes for convenience.
+- `start` accepts the protocol arg `pipeline_run_id` (bare-runner only: the hosted API always generates the id server-side and rejects a client-supplied one with 422). Anything beyond the protocol's basic args is server-specific and rides `extra` — see the hosted API's own documentation for the extension args it accepts.
 - `wait_for_result` resolves on `COMPLETED`, raises `RunFailedError` on any other terminal status, `RunTimeoutError` when its budget elapses (the run keeps executing — resume by id), and honors the server's `Retry-After`.
 
 ## Runners

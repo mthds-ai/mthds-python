@@ -27,10 +27,10 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
     extension carried by `MthdsAPIClient` only.
 
     This interface carries the protocol's **basic** arguments only. An
-    implementation may accept additional request properties (e.g. pipelex's
-    `method_id` and `callback_urls`); those are **extension args**, passed
-    through the generic `extra` mapping — or, on a concrete client, exposed as
-    typed convenience parameters. They never belong on this interface.
+    implementation may accept additional request properties; those are
+    **extension args**, passed through the generic `extra` mapping and merged
+    into the request body. The server that defines an extension arg is the one
+    that handles it — extension args never appear in this SDK.
     """
 
     @abstractmethod

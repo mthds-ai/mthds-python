@@ -30,9 +30,8 @@ class RunRequest(BaseModel):
 
     The declared fields are the protocol's **basic** arguments. The model is
     deliberately open (`extra="allow"`): an implementation may accept extra
-    request properties (e.g. pipelex's `method_id`), and any extension arg
-    given to the constructor is kept and serialized to the wire instead of
-    being silently dropped.
+    request properties, and any extension arg given to the constructor is kept
+    and serialized to the wire instead of being silently dropped.
 
     Attributes:
         pipe_code (str | None): Code of the pipe to execute
@@ -58,9 +57,9 @@ class RunRequest(BaseModel):
     @classmethod
     def validate_request(cls, values: dict[str, Any]):
         # The protocol requires at least one of pipe_code / mthds_contents. When the
-        # body carries extension args (keys outside the declared fields, e.g. pipelex's
-        # method_id), an extension may be the method selector — the server is the source
-        # of truth, so the SDK does not over-validate.
+        # body carries extension args (keys outside the declared fields), an extension
+        # may be the method selector — the server is the source of truth, so the SDK
+        # does not over-validate.
         has_extensions = any(key not in cls.model_fields for key in values)
         if values.get("pipe_code") is None and not values.get("mthds_contents") and not has_extensions:
             msg = (
@@ -151,9 +150,8 @@ class StartRequest(RunRequest):
       it, the hosted API rejects it with 422 (the server-generated id in
       `StartAck` is always authoritative).
 
-    Extension args (e.g. pipelex's `method_id` and `callback_urls`) are NOT
-    protocol fields — like on `RunRequest`, they pass through `extra="allow"`
-    and serialize to the wire as top-level properties.
+    Extension args are NOT protocol fields — like on `RunRequest`, they pass
+    through `extra="allow"` and serialize to the wire as top-level properties.
     """
 
     pipeline_run_id: str | None = Field(default=None, max_length=128)

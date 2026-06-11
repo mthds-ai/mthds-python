@@ -42,7 +42,7 @@ class TestMthdsAPIClientProtocol:
         assert isinstance(client, MTHDSProtocol)
 
     def test_protocol_interface_carries_basic_args_only(self) -> None:
-        """The abstract interface has no implementation extensions (method_id, callback_urls) — only basic args + the generic extra passthrough."""
+        """The abstract interface has no implementation extensions — only basic args + the generic extra passthrough."""
         execute_params = set(inspect.signature(MTHDSProtocol.execute).parameters)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
         start_params = set(inspect.signature(MTHDSProtocol.start).parameters)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
         basic = {"self", "pipe_code", "mthds_contents", "inputs", "output_name", "output_multiplicity", "dynamic_output_concept_ref", "extra"}

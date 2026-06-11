@@ -59,7 +59,7 @@ class TestMthdsAPIClientLifecycle:
         body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
 
-        asyncio.run(client.start(method_id="mt_1"))
+        asyncio.run(client.start(pipe_code="answer"))
         assert client.api_base_url == _BASE_URL
         assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/start"
 
@@ -85,22 +85,21 @@ class TestMthdsAPIClientLifecycle:
         body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
 
-        ack = asyncio.run(client.start(method_id="mt_1"))
+        ack = asyncio.run(client.start(pipe_code="answer"))
         assert ack.pipeline_run_id == "run_1"
         assert ack.created_at == "2026-06-10T00:00:00Z"
 
-    def test_start_request_shape_with_method_id(self, mocker: MockerFixture) -> None:
-        """The named pipelex extensions (method_id, callback_urls) ride the body; absent fields are pruned (exclude_none)."""
+    def test_start_request_prunes_absent_fields(self, mocker: MockerFixture) -> None:
+        """Absent fields are pruned from the start body (exclude_none)."""
         client = self._client()
         body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
 
-        asyncio.run(client.start(method_id="mt_1", callback_urls=["https://example.com/done"]))
+        asyncio.run(client.start(pipe_code="answer"))
         sent = send_mock.call_args.kwargs["content"].decode("utf-8")
-        assert '"method_id":"mt_1"' in sent
-        assert '"callback_urls":["https://example.com/done"]' in sent
-        assert "pipe_code" not in sent
+        assert '"pipe_code":"answer"' in sent
         assert "pipeline_run_id" not in sent
+        assert "output_name" not in sent
 
     def test_start_extra_passthrough_rides_body(self, mocker: MockerFixture) -> None:
         """Arbitrary extension args given via `extra` reach the wire as top-level body properties."""
@@ -118,10 +117,10 @@ class TestMthdsAPIClientLifecycle:
         """`extra` is for extension args only — a protocol arg inside it raises a clear client-side error."""
         client = self._client()
         with pytest.raises(PipelineRequestError, match="pipe_code"):
-            asyncio.run(client.start(method_id="mt_1", extra={"pipe_code": "smuggled"}))
+            asyncio.run(client.start(mthds_contents=['domain = "answer"'], extra={"pipe_code": "smuggled"}))
 
     def test_execute_extension_args_ride_body(self, mocker: MockerFixture) -> None:
-        """execute() carries the method_id pipelex extension and the generic extra passthrough too."""
+        """execute() carries the generic extra passthrough too — extra-alone is accepted client-side."""
         client = self._client()
         body: dict[str, object] = {
             "pipeline_run_id": "run_1",
@@ -131,9 +130,9 @@ class TestMthdsAPIClientLifecycle:
         }
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
-        asyncio.run(client.execute(method_id="mt_1", extra={"some_vendor_arg": "yes"}))
+        asyncio.run(client.execute(extra={"some_vendor_selector": "sel_1", "some_vendor_arg": "yes"}))
         sent = send_mock.call_args.kwargs["content"].decode("utf-8")
-        assert '"method_id":"mt_1"' in sent
+        assert '"some_vendor_selector":"sel_1"' in sent
         assert '"some_vendor_arg":"yes"' in sent
 
     # ── get_run_status ───────────────────────────────────────────

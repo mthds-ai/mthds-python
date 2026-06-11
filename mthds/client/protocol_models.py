@@ -62,7 +62,7 @@ class VersionInfo(BaseModel):
     """Protocol + implementation versions — `GET /version` (always public).
 
     The handshake clients use for feature detection: `implementation`
-    identifies the runner, and hosted extensions (durable runs, `method_id`)
+    identifies the runner, and hosted extensions (e.g. durable runs)
     light up based on what the server advertises.
     """
 

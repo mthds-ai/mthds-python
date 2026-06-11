@@ -50,17 +50,17 @@ class TestRuns:
 
     # ── StartRequest ──────────────────────────────────────────
 
-    def test_start_run_request_method_id_alone_is_valid(self) -> None:
-        """A body with only the method_id extension is accepted client-side (the platform is the source of truth)."""
-        request = StartRequest.model_validate({"method_id": "mt_123"})
+    def test_start_run_request_extension_alone_is_valid(self) -> None:
+        """A body with only an extension arg is accepted client-side (the server is the source of truth)."""
+        request = StartRequest.model_validate({"some_vendor_selector": "sel_123"})
         assert request.pipe_code is None
         assert request.mthds_contents is None
-        assert request.model_dump(exclude_none=True) == {"method_id": "mt_123"}
+        assert request.model_dump(exclude_none=True) == {"some_vendor_selector": "sel_123"}
 
     def test_start_run_request_serializes_only_set_fields(self) -> None:
         """Extension-alone serializes to a minimal body (exclude_none)."""
-        request = StartRequest.model_validate({"method_id": "mt_123"})
-        assert request.model_dump(exclude_none=True) == {"method_id": "mt_123"}
+        request = StartRequest.model_validate({"some_vendor_selector": "sel_123"})
+        assert request.model_dump(exclude_none=True) == {"some_vendor_selector": "sel_123"}
 
     def test_run_request_keeps_arbitrary_extension_args(self) -> None:
         """The request models are extension-open: unknown args are kept and serialized, never silently dropped."""

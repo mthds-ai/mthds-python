@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 # The SDK composes every endpoint from one origin (MTHDS_API_URL): `{base}/v1/{endpoint}`.
 # The same paths are served by the hosted MTHDS API (api.pipelex.com/v1) and by a bare
 # pipelex-api runner (localhost:8081/v1) — the protocol surface is identical; only the
-# hosted extensions (run polling, method_id) differ, detectable via GET /version.
+# hosted extensions (e.g. run polling) differ, detectable via GET /version.
 _API_PREFIX = "v1"
 _RUNS = "runs"
 
@@ -172,7 +172,6 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         extra: dict[str, Any] | None = None,
-        method_id: str | None = None,
     ) -> DictRunResult:
         """Execute a method synchronously and wait for its completion — `POST /v1/execute`.
 
@@ -184,11 +183,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_multiplicity: Output multiplicity setting
             dynamic_output_concept_ref: Override for the dynamic output concept ref
             extra: Server-specific extension args, merged into the request body
-                as top-level properties. Protocol args must be passed as named
-                parameters, not through `extra` (raises `PipelineRequestError`).
-            method_id: PIPELEX EXTENSION — stored method id in the active org's
-                catalog, combinable with `mthds_contents`. Not part of the
-                MTHDS Protocol; bare runners may reject it.
+                as top-level properties — the server you call defines and handles
+                them; this SDK only passes them through. Protocol args must be
+                passed as named parameters, not through `extra` (raises
+                `PipelineRequestError`).
 
         Returns:
             Complete execution results including run state and output
@@ -197,13 +195,11 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             RunStillRunningError: If the server answers `202 + StartAck` (the protocol's
                 optional async degrade) — the run continues server-side; resume by `run_id`.
         """
-        if not pipe_code and not mthds_contents and not method_id and not extra:
-            msg = "Either pipe_code, mthds_contents or an extension arg (method_id, extra) must be provided to the API execute."
+        if not pipe_code and not mthds_contents and not extra:
+            msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API execute."
             raise PipelineRequestError(msg)
 
         extensions = _build_extensions(extra, protocol_fields=RunRequest.model_fields.keys())
-        if method_id is not None:
-            extensions["method_id"] = method_id
         run_request = RunRequest(
             pipe_code=pipe_code,
             mthds_contents=mthds_contents,
@@ -230,8 +226,6 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         dynamic_output_concept_ref: str | None = None,
         pipeline_run_id: str | None = None,
         extra: dict[str, Any] | None = None,
-        callback_urls: list[str] | None = None,
-        method_id: str | None = None,
     ) -> DictStartAck:
         """Start a method asynchronously — `POST /v1/start` (202 StartAck).
 
@@ -246,27 +240,21 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 hosted API rejects it with 422 (the returned `pipeline_run_id` is
                 always authoritative)
             extra: Server-specific extension args, merged into the request body
-                as top-level properties. Protocol args must be passed as named
-                parameters, not through `extra` (raises `PipelineRequestError`).
-            callback_urls: PIPELEX EXTENSION — completion webhooks (HMAC-signed via
-                X-Completion-Signature). Not part of the MTHDS Protocol.
-            method_id: PIPELEX EXTENSION — stored method id, combinable with
-                `mthds_contents`. Not part of the MTHDS Protocol.
+                as top-level properties — the server you call defines and handles
+                them; this SDK only passes them through. Protocol args must be
+                passed as named parameters, not through `extra` (raises
+                `PipelineRequestError`).
 
         Returns:
             StartAck with the authoritative `pipeline_run_id` and `created_at`
             timestamp. On a hosted deployment the id is durable — poll
             `get_run_status` / `get_run_result`.
         """
-        if not pipe_code and not mthds_contents and not method_id and not extra:
-            msg = "Either pipe_code, mthds_contents or an extension arg (method_id, extra) must be provided to the API start."
+        if not pipe_code and not mthds_contents and not extra:
+            msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API start."
             raise PipelineRequestError(msg)
 
         extensions = _build_extensions(extra, protocol_fields=StartRequest.model_fields.keys())
-        if callback_urls is not None:
-            extensions["callback_urls"] = callback_urls
-        if method_id is not None:
-            extensions["method_id"] = method_id
         start_request = StartRequest(
             pipe_code=pipe_code,
             mthds_contents=mthds_contents,
@@ -356,7 +344,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         run_id = ack_run_id if isinstance(ack_run_id, str) else ""
         msg = (
             f"execute() was accepted asynchronously (202): run {run_id or '<unknown>'} is still "
-            "running server-side. Poll its results (hosted) or use start() with callback_urls."
+            "running server-side. Poll its results (hosted) or use start()."
         )
         raise RunStillRunningError(
             msg,

@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **`method_id` and `callback_urls` demoted from the protocol interface to pipelex extension args.** The abstract `MTHDSProtocol` carries the protocol's basic arguments only (plus `pipeline_run_id` on `start`) and gains a generic `extra` passthrough on both `execute` and `start` — any server-specific arg merges into the request body as a top-level property (protocol args inside `extra` are rejected client-side). The concrete `MthdsAPIClient` keeps `method_id` (now on `execute` too) and `callback_urls` as typed, documented extension params. `RunRequest`/`StartRequest` are extension-open (`extra="allow"`): unknown args serialize to the wire instead of being silently dropped. Server note: `StartRequest.model_json_schema()` no longer advertises the pipelex extensions — `pipelex-api` should document them in its own OpenAPI schema when it bumps to this version.
+- **Extension args removed from the SDK; generic `extra` passthrough added.** The SDK carries the MTHDS Protocol's basic arguments only (plus `pipeline_run_id` on `start`) — server-specific extension args never appear in it, not even as convenience params. Both `execute` and `start` gain a generic `extra` mapping: any server-specific arg merges into the request body as a top-level property and the server that defines it handles it (protocol args inside `extra` are rejected client-side). `RunRequest`/`StartRequest` are extension-open (`extra="allow"`): unknown args serialize to the wire instead of being silently dropped. Server note: implementations document their own extension args in their own OpenAPI schema — `StartRequest.model_json_schema()` only describes the protocol.
 - **Config file unified with the `mthds` CLI.** The client reads and writes `~/.mthds/config` — the same file, dotenv format, and `MTHDS_*` key names the `mthds` CLI (mthds-js) uses. A single `mthds config set api-url <host>` / `mthds config set api-key <key>` configures the Python client, and the `mthds` CLI writes the same file (its key is spelled `base-url`).
 
 ### Removed
@@ -19,7 +19,7 @@
 
 ### Breaking Changes
 
-- **`RunnerProtocol` → `MTHDSProtocol`** — the protocol abstraction now mirrors the MTHDS Protocol standard (`mthds-protocol.openapi.yaml` on mthds.ai) with exactly five methods: `execute` (was `execute_pipeline`), `start` (was `start_pipeline`; gains `pipeline_run_id`, `callback_urls`, and hosted-only `method_id` kwargs), and new `validate`, `models`, `version`.
+- **`RunnerProtocol` → `MTHDSProtocol`** — the protocol abstraction now mirrors the MTHDS Protocol standard (`mthds-protocol.openapi.yaml` on mthds.ai) with exactly five methods: `execute` (was `execute_pipeline`), `start` (was `start_pipeline`; gains `pipeline_run_id` and the generic `extra` extension passthrough), and new `validate`, `models`, `version`.
 - **Single `/v1` base path** — `MthdsAPIClient` now composes every endpoint as `{MTHDS_API_URL}/v1/{endpoint}`; the `runner/v1` and `platform/v1` prefixes are gone. **Minimum server versions:** the hosted MTHDS API after the `/v1` cutover, or a `pipelex-api` image that mounts at `/v1` — a self-hoster upgrading this SDK before the runner image will 404 on every `/v1/*` call (including the `/version` handshake itself).
 - **Wire field rename** — `pipeline_state` → `state` across all request/response models. The run identifier KEEPS the name `pipeline_run_id` everywhere on the wire (D1 as revised 2026-06-10).
 - **Wire model renames** — `PipelineRequest` → `RunRequest` (+ new `StartRequest`), `PipelineResponse` → `RunResponse`, `PipelineExecuteResponse` → `RunResult`, `PipelineStartResponse` → `StartAck`, `DictPipelineExecuteResponse` → `DictRunResult`, `DictPipelineStartResponse` → `DictStartAck`, `PipelineState` → `RunState`, runs `RunResult` → `RunResults`, `StartRunRequest` folded into `StartRequest`.
@@ -31,7 +31,7 @@
 
 - `validate(mthds_contents, allow_signatures)` → `ValidationReport`; `models(category)` → `ModelDeck`; `version()` → `VersionInfo` (the feature-detection handshake) on both `MthdsAPIClient` and `PipelexRunner` (the local CLI runner implements `validate` + `version`; `models`/`start` raise `NotImplementedError`).
 - `RunStillRunningError` — typed error raised by `execute()` if a server ever answers `202 + StartAck` (the protocol's optional async degrade), carrying `run_id` (the run identifier), `retry_after_seconds`, and `location`.
-- `StartRequest` model with `pipeline_run_id` (bare-runner only — the hosted API rejects client-supplied run ids with 422), `callback_urls`, and `method_id` (hosted extension; `method_id`-alone is now accepted client-side).
+- `StartRequest` model with `pipeline_run_id` (bare-runner only — the hosted API rejects client-supplied run ids with 422); extension args pass through openly (an extension-only body is accepted client-side — the server validates).
 
 
 ## [v0.3.0] - 2026-04-29
