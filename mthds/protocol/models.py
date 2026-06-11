@@ -165,19 +165,13 @@ class RunRequest(BaseModel):
 
 
 class StartRequest(RunRequest):
-    """Body of the protocol's `POST /start` — `RunRequest` plus `pipeline_run_id`.
+    """Body of the protocol's `POST /start` — same basic arguments as `RunRequest`.
 
-    Mirrors `StartRequest` in `mthds-protocol.openapi.yaml`:
-
-    - `pipeline_run_id` — client-supplied run identifier; bare runners accept
-      it, the hosted API rejects it with 422 (the server-generated id in
-      `StartAck` is always authoritative).
-
-    Extension args are NOT protocol fields — like on `RunRequest`, they pass
-    through `extra="allow"` and serialize to the wire as top-level properties.
+    The protocol declares no start-only request fields. Anything an
+    implementation accepts on top (a client-supplied run id, anything else) is
+    an extension arg — like on `RunRequest`, it passes through `extra="allow"`
+    and serializes to the wire as a top-level property.
     """
-
-    pipeline_run_id: str | None = Field(default=None, max_length=128)
 
 
 # ── Run responses (`POST /execute` 200, `POST /start` 202) ───────────

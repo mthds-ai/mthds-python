@@ -67,7 +67,7 @@ async with MthdsAPIClient() as client:
     results = await client.wait_for_result(ack.pipeline_run_id)                 # polls GET /v1/runs/{id}/results
 ```
 
-- `start` accepts the protocol arg `pipeline_run_id` (bare-runner only: the hosted API always generates the id server-side and rejects a client-supplied one with 422). Anything beyond the protocol's basic args is server-specific and rides `extra` — see the hosted API's own documentation for the extension args it accepts.
+- `start` carries the protocol's basic args only. Anything beyond them — including a client-supplied run identifier, where a server supports one — is server-specific and rides `extra`; see the server's own documentation for the extension args it accepts. The `pipeline_run_id` returned in `StartAck` is always the authoritative one.
 - `wait_for_result` resolves on `COMPLETED`, raises `RunFailedError` on any other terminal status, `RunTimeoutError` when its budget elapses (the run keeps executing — resume by id), and honors the server's `Retry-After`.
 
 ## Runners

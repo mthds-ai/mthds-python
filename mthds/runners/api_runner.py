@@ -224,7 +224,6 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-        pipeline_run_id: str | None = None,
         extra: dict[str, Any] | None = None,
     ) -> DictStartAck:
         """Start a method asynchronously — `POST /v1/start` (202 StartAck).
@@ -236,9 +235,6 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
             dynamic_output_concept_ref: Override for the dynamic output concept ref
-            pipeline_run_id: Client-supplied run identifier — bare runners only; the
-                hosted API rejects it with 422 (the returned `pipeline_run_id` is
-                always authoritative)
             extra: Server-specific extension args, merged into the request body
                 as top-level properties — the server you call defines and handles
                 them; this SDK only passes them through. Protocol args must be
@@ -262,7 +258,6 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name=output_name,
             output_multiplicity=output_multiplicity,
             dynamic_output_concept_ref=dynamic_output_concept_ref,
-            pipeline_run_id=pipeline_run_id,
             **extensions,
         )
         content = start_request.model_dump_json(exclude_none=True).encode("utf-8")
@@ -464,7 +459,6 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-        pipeline_run_id: str | None = None,
         extra: dict[str, Any] | None = None,
         wait_options: WaitForResultOptions | None = None,
     ) -> RunResults:
@@ -483,7 +477,6 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
             dynamic_output_concept_ref: Override for the dynamic output concept ref
-            pipeline_run_id: Client-supplied run identifier — bare runners only
             extra: Server-specific extension args, merged into the request body
             wait_options: Poll-loop tuning (interval, timeout, on_poll callback)
 
@@ -503,7 +496,6 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name=output_name,
             output_multiplicity=output_multiplicity,
             dynamic_output_concept_ref=dynamic_output_concept_ref,
-            pipeline_run_id=pipeline_run_id,
             extra=extra,
         )
         return await self.wait_for_result(ack.pipeline_run_id, options=wait_options)

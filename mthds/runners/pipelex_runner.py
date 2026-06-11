@@ -247,7 +247,6 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-        pipeline_run_id: str | None = None,
         extra: dict[str, Any] | None = None,
     ) -> DictStartAck:
         """Start a method asynchronously — not supported by the pipelex CLI.
@@ -259,7 +258,6 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name: Unused.
             output_multiplicity: Unused.
             dynamic_output_concept_ref: Unused.
-            pipeline_run_id: Unused.
             extra: Unused.
 
         Raises:
@@ -272,7 +270,6 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name,
             output_multiplicity,
             dynamic_output_concept_ref,
-            pipeline_run_id,
             extra,
         )
         msg = "start is not supported by the pipelex CLI runner. Use execute instead."

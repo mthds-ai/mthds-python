@@ -75,7 +75,6 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
-        pipeline_run_id: str | None = None,
         extra: dict[str, Any] | None = None,
     ) -> StartAck[PipeOutputT]:
         """Start a method asynchronously without waiting for completion.
@@ -90,9 +89,6 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             output_name: Target output slot name
             output_multiplicity: Output multiplicity setting
             dynamic_output_concept_ref: Override for dynamic output concept
-            pipeline_run_id: Client-supplied run identifier — bare runners only.
-                The hosted API always generates the id server-side and rejects a
-                client-supplied one with 422 (never silently ignores it).
             extra: Implementation-defined extension args, merged into the
                 request body as top-level properties. The server is the source
                 of truth for what it accepts.

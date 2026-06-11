@@ -47,7 +47,7 @@ class TestMthdsAPIClientProtocol:
         start_params = set(inspect.signature(MTHDSProtocol.start).parameters)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
         basic = {"self", "pipe_code", "mthds_contents", "inputs", "output_name", "output_multiplicity", "dynamic_output_concept_ref", "extra"}
         assert execute_params == basic
-        assert start_params == basic | {"pipeline_run_id"}
+        assert start_params == basic
 
     # ── validate ─────────────────────────────────────────────────
 
