@@ -33,7 +33,7 @@ async with MthdsAPIClient() as client:
     info = await client.version()          # {protocol_version, implementation, implementation_version, runtime_version}
 ```
 
-`execute` may raise `RunStillRunningError` if a server answers `202 + StartAck` (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `pipeline_run_id`, `retry_after_seconds`, and `location`.
+`execute` may raise `RunStillRunningError` if a server answers `202 + StartAck` (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`.
 
 ## The run-lifecycle extension (hosted API only)
 
