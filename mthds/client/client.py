@@ -455,6 +455,58 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             wait_seconds = min(max(opts.interval_seconds, retry_seconds), opts.timeout_seconds - elapsed)
             await asyncio.sleep(wait_seconds)
 
+    async def start_and_wait(
+        self,
+        pipe_code: str | None = None,
+        mthds_contents: list[str] | None = None,
+        inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
+        output_name: str | None = None,
+        output_multiplicity: VariableMultiplicity | None = None,
+        dynamic_output_concept_ref: str | None = None,
+        pipeline_run_id: str | None = None,
+        extra: dict[str, Any] | None = None,
+        wait_options: WaitForResultOptions | None = None,
+    ) -> RunResults:
+        """Start a run and poll it to completion — the whole async lifecycle in one call.
+
+        Convenience wrapper: `start` (202 StartAck) followed by `wait_for_result`
+        on the returned `pipeline_run_id`. This is the durable way to run long
+        methods on the hosted API (the run survives client disconnects and the
+        gateway's synchronous cap). All `start` args apply, including the generic
+        `extra` extension passthrough.
+
+        Args:
+            pipe_code: The code identifying the pipe to execute
+            mthds_contents: List of MTHDS bundle contents to load
+            inputs: Inputs passed to the method
+            output_name: Name of the output slot to write to
+            output_multiplicity: Output multiplicity setting
+            dynamic_output_concept_ref: Override for the dynamic output concept ref
+            pipeline_run_id: Client-supplied run identifier — bare runners only
+            extra: Server-specific extension args, merged into the request body
+            wait_options: Poll-loop tuning (interval, timeout, on_poll callback)
+
+        Returns:
+            The result artifacts of the completed run.
+
+        Raises:
+            RunFailedError: If the run reaches a terminal status other than COMPLETED.
+            RunTimeoutError: If the poll budget elapses (the run keeps executing —
+                resume later by id via `wait_for_result`).
+            RunLifecycleUnavailableError: If the server has no run store (a bare runner).
+        """
+        ack = await self.start(
+            pipe_code=pipe_code,
+            mthds_contents=mthds_contents,
+            inputs=inputs,
+            output_name=output_name,
+            output_multiplicity=output_multiplicity,
+            dynamic_output_concept_ref=dynamic_output_concept_ref,
+            pipeline_run_id=pipeline_run_id,
+            extra=extra,
+        )
+        return await self.wait_for_result(ack.pipeline_run_id, options=wait_options)
+
 
 # ── Module helpers ──────────────────────────────────────────────────────
 

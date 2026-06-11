@@ -135,6 +135,25 @@ class TestMthdsAPIClientLifecycle:
         assert '"some_vendor_selector":"sel_1"' in sent
         assert '"some_vendor_arg":"yes"' in sent
 
+    def test_start_and_wait_runs_full_lifecycle_in_one_call(self, mocker: MockerFixture) -> None:
+        """start_and_wait chains start (202) → poll (202 running → 200 completed) and returns the results."""
+        client = self._client()
+        ack_body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
+        running = _response(202, headers={"Retry-After": "0"})
+        completed = _response(200, json={"pipeline_run_id": "run_1", "main_stuff": {"answer": "42"}})
+        send_mock = mocker.patch.object(
+            client,
+            "_send",
+            mocker.AsyncMock(side_effect=[_response(202, json=ack_body), running, completed]),
+        )
+
+        results = asyncio.run(client.start_and_wait(pipe_code="answer", extra={"some_vendor_selector": "sel_1"}))
+        assert results.main_stuff == {"answer": "42"}
+        start_call = send_mock.call_args_list[0]
+        assert start_call.args[1] == f"{_BASE_URL}/v1/start"
+        assert '"some_vendor_selector":"sel_1"' in start_call.kwargs["content"].decode("utf-8")
+        assert send_mock.call_args_list[1].args[1] == f"{_BASE_URL}/v1/runs/run_1/results"
+
     # ── get_run_status ───────────────────────────────────────────
 
     def test_get_run_status_populates_degraded_and_retry_after(self, mocker: MockerFixture) -> None:

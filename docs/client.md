@@ -48,12 +48,16 @@ The abstract `MTHDSProtocol` interface carries the protocol's **basic** argument
 
 ```python
 async with MthdsAPIClient() as client:
+    # One call for the whole lifecycle — start, poll, return the results:
+    results = await client.start_and_wait(pipe_code="answer", inputs=inputs)
+    print(results.main_stuff)
+
+    # Or step by step:
     ack = await client.start(pipe_code="answer", inputs=inputs)         # POST /v1/start → 202 StartAck
     # server-specific args (defined by the server, not this SDK) ride `extra`:
     # ack = await client.start(inputs=inputs, extra={...})
     status = await client.get_run_status(ack.pipeline_run_id)                   # GET /v1/runs/{id}/status (self-healing)
     results = await client.wait_for_result(ack.pipeline_run_id)                 # polls GET /v1/runs/{id}/results
-    print(results.main_stuff)
 ```
 
 - `start` accepts the protocol arg `pipeline_run_id` (bare-runner only: the hosted API always generates the id server-side and rejects a client-supplied one with 422). Anything beyond the protocol's basic args is server-specific and rides `extra` — see the hosted API's own documentation for the extension args it accepts.
