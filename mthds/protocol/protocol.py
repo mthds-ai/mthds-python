@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Generic, Protocol
+from typing import TYPE_CHECKING, Any, Final, Generic, Protocol
 
 from typing_extensions import runtime_checkable
 
@@ -13,6 +13,16 @@ if TYPE_CHECKING:
     from mthds.protocol.pipeline_inputs import PipelineInputs
     from mthds.protocol.stuff import StuffType
     from mthds.protocol.working_memory import WorkingMemoryAbstract
+
+
+PROTOCOL_VERSION: Final[str] = "0.6.0"
+"""The MTHDS Protocol version this SDK implements.
+
+Single source of truth. Every runner reports exactly this value as
+`protocol_version` in its `version()` handshake — runners do not get to
+override or interpret it. The protocol version is a property of the
+standard, not of any individual runner.
+"""
 
 
 @runtime_checkable
