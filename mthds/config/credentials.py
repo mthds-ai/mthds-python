@@ -3,6 +3,8 @@
 Reads and writes ``~/.mthds/config`` using a dotenv-style format — the SAME
 file, format, and key names the ``mthds`` CLI (mthds-js) uses, so a single
 ``mthds config set …`` configures both the TypeScript and Python clients.
+Only the canonical ``MTHDS_*`` keys are recognized; there is no legacy
+fallback and no migration.
 (``KEY=VALUE``, ``#`` comments, blank lines allowed).
 
 Resolution order: environment variables > config file > defaults.
@@ -10,7 +12,6 @@ Resolution order: environment variables > config file > defaults.
 
 from __future__ import annotations
 
-import json
 import os
 from enum import unique
 from pathlib import Path
@@ -41,17 +42,8 @@ class CredentialEntry(NamedTuple):
 # ── Paths ───────────────────────────────────────────────────────────
 
 CONFIG_DIR = Path.home() / ".mthds"
-# Canonical file, shared with the mthds CLI (mthds-js writes the same path).
+# Canonical file, shared with the mthds CLI (mthds-js reads/writes the same path).
 CONFIG_PATH = CONFIG_DIR / "config"
-
-# Legacy paths, auto-migrated forward into CONFIG_PATH when it does not yet
-# exist (an existing CONFIG_PATH always wins — the CLI is the source of truth):
-#   - ``credentials``  : the dotenv file earlier Python clients wrote.
-#   - ``config.json``  : the very first JS client format.
-#   - ``.env.local``   : early telemetry flag store.
-_LEGACY_CREDENTIALS_PATH = CONFIG_DIR / "credentials"
-_LEGACY_CONFIG_JSON_PATH = CONFIG_DIR / "config.json"
-_LEGACY_ENV_LOCAL_PATH = CONFIG_DIR / ".env.local"
 
 # ── Credential keys ────────────────────────────────────────────────
 
@@ -62,13 +54,6 @@ _CREDENTIAL_KEYS: dict[str, str] = {
     "api_key": "MTHDS_API_KEY",
     "runner": "MTHDS_RUNNER",
     "telemetry": "DISABLE_TELEMETRY",
-}
-
-# Legacy credential keys, still honored on read (env var or credentials file) and transparently
-# migrated to the canonical ``MTHDS_`` keys. Maps internal key to its old storage key.
-_LEGACY_CREDENTIAL_KEYS: dict[str, str] = {
-    "api_url": "PIPELEX_API_URL",
-    "api_key": "PIPELEX_API_KEY",
 }
 
 # Defaults
@@ -98,32 +83,14 @@ def resolve_key(cli_key: str) -> str | None:
 def _lookup_in_store(internal_key: str, store: Mapping[str, str]) -> str | None:
     """Look up the value for an internal key in a storage mapping (file entries or environ).
 
-    The canonical ``MTHDS_`` key takes precedence; a legacy ``PIPELEX_`` key is honored as a
-    fallback so older credentials files and environments keep working without a manual rewrite.
-    An empty canonical value is treated as absent for the purpose of choosing between the two,
-    so a real (non-empty) legacy value is never shadowed by a stray empty canonical entry.
-
     Args:
         internal_key: The internal credential key (e.g. "api_url").
-        store: A mapping keyed by storage/env names (e.g. parsed credentials file or os.environ).
+        store: A mapping keyed by storage/env names (e.g. parsed config file or os.environ).
 
     Returns:
-        The first non-empty value among the canonical then legacy keys; an empty string if only
-        empty values are present (preserving "explicitly set" semantics); None when neither key
-        is present.
+        The value for the canonical ``MTHDS_`` key, or None when it is absent.
     """
-    canonical_key = _CREDENTIAL_KEYS[internal_key]
-    legacy_key = _LEGACY_CREDENTIAL_KEYS.get(internal_key)
-    candidate_keys = [canonical_key] if legacy_key is None else [canonical_key, legacy_key]
-
-    found_empty = False
-    for store_key in candidate_keys:
-        if store_key in store:
-            value = store[store_key]
-            if value:
-                return value
-            found_empty = True
-    return "" if found_empty else None
+    return store.get(_CREDENTIAL_KEYS[internal_key])
 
 
 # ── Dotenv parser / serializer ─────────────────────────────────────
@@ -157,8 +124,7 @@ def _serialize_dotenv(entries: dict[str, str]) -> str:
 
 
 def _read_credentials_file() -> dict[str, str]:
-    """Read the config file, running migration if needed."""
-    _migrate_if_needed()
+    """Read the config file."""
     if not CONFIG_PATH.is_file():
         return {}
     try:
@@ -174,83 +140,6 @@ def _write_credentials_file(entries: dict[str, str]) -> None:
     CONFIG_PATH.chmod(0o600)
 
 
-# ── Migration ──────────────────────────────────────────────────────
-
-_migration_done = False
-
-
-def _migrate_if_needed() -> None:
-    """Silently migrate legacy files forward into ``~/.mthds/config``.
-
-    No-op when ``config`` already exists — the CLI owns that file, so we never
-    clobber a current config with a stale legacy one. Sources, lowest to
-    highest precedence: ``config.json`` → ``.env.local`` → ``credentials``
-    (the dotenv file earlier Python clients wrote wins, being the most recent
-    Python format).
-    """
-    global _migration_done  # noqa: PLW0603
-    if _migration_done:
-        return
-    _migration_done = True
-
-    if CONFIG_PATH.is_file():
-        return
-
-    migrated: dict[str, str] = {}
-    did_migrate = False
-
-    # Migrate from config.json (oldest JS format)
-    if _LEGACY_CONFIG_JSON_PATH.is_file():
-        try:
-            raw = _LEGACY_CONFIG_JSON_PATH.read_text(encoding="utf-8")
-            config: dict[str, object] = json.loads(raw)
-
-            if isinstance(config.get("runner"), str):
-                migrated["MTHDS_RUNNER"] = str(config["runner"])
-            if isinstance(config.get("apiUrl"), str):
-                migrated["MTHDS_API_URL"] = str(config["apiUrl"])
-            if isinstance(config.get("apiKey"), str):
-                migrated["MTHDS_API_KEY"] = str(config["apiKey"])
-            if isinstance(config.get("telemetry"), bool):
-                migrated["DISABLE_TELEMETRY"] = "0" if config["telemetry"] else "1"
-
-            did_migrate = True
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    # Migrate from .env.local (telemetry flag)
-    if _LEGACY_ENV_LOCAL_PATH.is_file():
-        try:
-            env_entries = _parse_dotenv(_LEGACY_ENV_LOCAL_PATH.read_text(encoding="utf-8"))
-            if "DISABLE_TELEMETRY" in env_entries:
-                migrated["DISABLE_TELEMETRY"] = env_entries["DISABLE_TELEMETRY"]
-            did_migrate = True
-        except OSError:
-            pass
-
-    # Migrate from the old ``credentials`` dotenv file (earlier Python clients).
-    # Highest precedence: it is the most recent Python format and already uses
-    # the canonical MTHDS_/legacy PIPELEX_ keys, so copy every entry verbatim.
-    if _LEGACY_CREDENTIALS_PATH.is_file():
-        try:
-            migrated.update(_parse_dotenv(_LEGACY_CREDENTIALS_PATH.read_text(encoding="utf-8")))
-            did_migrate = True
-        except OSError:
-            pass
-
-    if did_migrate:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(_serialize_dotenv(migrated), encoding="utf-8")
-
-        # Remove legacy files
-        for legacy_path in (_LEGACY_CONFIG_JSON_PATH, _LEGACY_ENV_LOCAL_PATH, _LEGACY_CREDENTIALS_PATH):
-            try:
-                if legacy_path.is_file():
-                    legacy_path.unlink()
-            except OSError:
-                pass
-
-
 # ── Public API ─────────────────────────────────────────────────────
 
 
@@ -264,7 +153,7 @@ def load_credentials() -> dict[str, str]:
     file_entries = _read_credentials_file()
     merged = dict(_DEFAULTS)
 
-    # Apply file values (canonical key wins over legacy alias)
+    # Apply file values
     for internal_key in _CREDENTIAL_KEYS:
         file_val = _lookup_in_store(internal_key, file_entries)
         if file_val is not None:
@@ -319,12 +208,7 @@ def set_credential_value(key: str, value: str) -> None:
         value: The value to set.
     """
     file_entries = _read_credentials_file()
-    file_key = _CREDENTIAL_KEYS[key]
-    file_entries[file_key] = value
-    # Drop any stale legacy alias so the file converges on the canonical key.
-    legacy_key = _LEGACY_CREDENTIAL_KEYS.get(key)
-    if legacy_key is not None:
-        file_entries.pop(legacy_key, None)
+    file_entries[_CREDENTIAL_KEYS[key]] = value
     _write_credentials_file(file_entries)
 
 

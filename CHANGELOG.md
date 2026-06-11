@@ -4,7 +4,11 @@
 
 ### Changed
 
-- **Config file unified with the `mthds` CLI.** The client now reads and writes `~/.mthds/config` — the same file, dotenv format, and `MTHDS_*` key names the `mthds` CLI (mthds-js) uses — instead of `~/.mthds/credentials`. A single `mthds config set base-url <host>` / `mthds config set api-key <key>` now configures both the TypeScript and Python clients. The old `~/.mthds/credentials` file is auto-migrated forward into `config` on first read (only when `config` does not already exist — the CLI's file always wins, so a stale legacy file never clobbers a current one). Legacy `PIPELEX_*` keys remain honored as read aliases.
+- **Config file unified with the `mthds` CLI.** The client reads and writes `~/.mthds/config` — the same file, dotenv format, and `MTHDS_*` key names the `mthds` CLI (mthds-js) uses. A single `mthds config set base-url <host>` / `mthds config set api-key <key>` configures both the TypeScript and Python clients.
+
+### Removed
+
+- **All legacy config support.** Dropped the `~/.mthds/credentials` / `config.json` / `.env.local` auto-migration and the `PIPELEX_API_URL` / `PIPELEX_API_KEY` read aliases. Only the canonical `MTHDS_*` keys in `~/.mthds/config` are recognized — set them with the `mthds` CLI.
 
 ### Added
 

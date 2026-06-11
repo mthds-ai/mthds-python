@@ -18,15 +18,14 @@ class TestCredentialsIntegration:
 
     @pytest.fixture(autouse=True)
     def _isolate_credentials(self, tmp_path: Path, mocker: MockerFixture) -> None:
-        """Redirect credentials I/O to a temporary directory and reset migration flag."""
+        """Redirect config I/O to a temporary directory."""
         config_dir = tmp_path / ".mthds"
         config_dir.mkdir()
         credentials_path = config_dir / "config"
 
         mocker.patch("mthds.config.credentials.CONFIG_DIR", config_dir)
         mocker.patch("mthds.config.credentials.CONFIG_PATH", credentials_path)
-        mocker.patch("mthds.config.credentials._migrate_if_needed")
-        # Hermetic env: a real MTHDS_*/PIPELEX_* var on the dev/CI machine must not leak in.
+        # Hermetic env: a real MTHDS_* var on the dev/CI machine must not leak in.
         mocker.patch.dict("os.environ", clear=True)
 
     def test_write_and_read_credentials(self, tmp_path: Path) -> None:
