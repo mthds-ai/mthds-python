@@ -52,19 +52,19 @@ class TestRuns:
 
     def test_start_run_request_method_id_alone_is_valid(self) -> None:
         """A body with only the method_id extension is accepted client-side (the platform is the source of truth)."""
-        request = StartRequest(method_id="mt_123")  # pyright: ignore[reportCallIssue]
+        request = StartRequest.model_validate({"method_id": "mt_123"})
         assert request.pipe_code is None
         assert request.mthds_contents is None
         assert request.model_dump(exclude_none=True) == {"method_id": "mt_123"}
 
     def test_start_run_request_serializes_only_set_fields(self) -> None:
         """Extension-alone serializes to a minimal body (exclude_none)."""
-        request = StartRequest(method_id="mt_123")  # pyright: ignore[reportCallIssue]
+        request = StartRequest.model_validate({"method_id": "mt_123"})
         assert request.model_dump(exclude_none=True) == {"method_id": "mt_123"}
 
     def test_run_request_keeps_arbitrary_extension_args(self) -> None:
         """The request models are extension-open: unknown args are kept and serialized, never silently dropped."""
-        request = StartRequest(pipe_code="answer", some_vendor_arg={"nested": True})  # pyright: ignore[reportCallIssue]
+        request = StartRequest.model_validate({"pipe_code": "answer", "some_vendor_arg": {"nested": True}})
         dumped = request.model_dump(exclude_none=True)
         assert dumped == {"pipe_code": "answer", "some_vendor_arg": {"nested": True}}
 
