@@ -39,11 +39,11 @@ mthds package init
 
 ## API Configuration
 
-The default runner is `api`. To use it, configure your Pipelex API credentials:
+The default runner is `api` — any server that implements the [MTHDS Protocol](https://mthds.ai). The reference implementation is **Pipelex** (`https://api.pipelex.com`): get an API key at [app.pipelex.com](https://app.pipelex.com).
 
 ```bash
 mthds config set api-key YOUR_KEY
-mthds config set api-url https://your-api-instance.com
+mthds config set api-url https://api.pipelex.com   # or your own MTHDS-Protocol server
 ```
 
 Credentials are stored in `~/.mthds/config` and shared between mthds-python and mthds-js.
