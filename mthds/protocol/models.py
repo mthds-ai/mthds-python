@@ -19,24 +19,18 @@ principle as the request-side `extra`.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import SkipValidation
 from typing_extensions import Annotated
 
 from mthds._compat import StrEnum
-from mthds._serialization import clean_json_content
 from mthds._utils.pydantic_utils import empty_list_factory_of
 from mthds.models.pipe_output import VariableMultiplicity
 from mthds.models.pipeline_inputs import PipelineInputs
 from mthds.models.working_memory import WorkingMemoryAbstract
 from mthds.protocol.exceptions import PipelineRequestError
-
-if TYPE_CHECKING:
-    from typing_extensions import Self
-
-    from mthds.models.stuff import StuffType
 
 PipeOutputT = TypeVar("PipeOutputT")
 
@@ -90,76 +84,6 @@ class RunRequest(BaseModel):
             raise PipelineRequestError(msg)
         return values
 
-    @classmethod
-    def from_working_memory(
-        cls,
-        pipe_code: str | None,
-        mthds_contents: list[str] | None = None,
-        working_memory: WorkingMemoryAbstract[StuffType] | None = None,
-        output_name: str | None = None,
-        output_multiplicity: VariableMultiplicity | None = None,
-        dynamic_output_concept_ref: str | None = None,
-    ) -> RunRequest:
-        """Create a RunRequest from a WorkingMemory object.
-
-        Args:
-            pipe_code: The code identifying the pipe to execute
-            mthds_contents: List of MTHDS bundle contents to load
-            working_memory: The WorkingMemory to convert
-            output_name: Name of the output slot to write to
-            output_multiplicity: Output multiplicity setting
-            dynamic_output_concept_ref: Override for the dynamic output concept ref
-        Returns:
-            RunRequest with the working memory serialized to reduced format
-
-        """
-        pipeline_inputs: dict[str, dict[str, Any]] = {}
-        if working_memory is not None:
-            for stuff_name, stuff in working_memory.root.items():
-                content_dict = stuff.content.model_dump(serialize_as_any=True)
-                clean_content = clean_json_content(content_dict)
-
-                # Create plain dict instead of DictStuff instance for JSON serialization
-                pipeline_inputs[stuff_name] = {
-                    "concept": stuff.concept.code,
-                    "content": clean_content,
-                }
-
-        return cls(
-            pipe_code=pipe_code,
-            mthds_contents=mthds_contents,
-            inputs=cast("PipelineInputs", pipeline_inputs),
-            output_name=output_name,
-            output_multiplicity=output_multiplicity,
-            dynamic_output_concept_ref=dynamic_output_concept_ref,
-        )
-
-    @classmethod
-    def from_body(cls, request_body: dict[str, Any]) -> RunRequest:
-        """Create a RunRequest from raw request body dictionary.
-
-        Args:
-            request_body: Raw dictionary from API request body
-
-        Returns:
-            RunRequest object with dictionary working_memory
-
-        """
-        # Support both singular "mthds_content" (legacy) and plural "mthds_contents"
-        mthds_contents = request_body.get("mthds_contents")
-        if mthds_contents is None:
-            mthds_content = request_body.get("mthds_content")
-            if mthds_content is not None:
-                mthds_contents = [mthds_content]
-        return cls(
-            pipe_code=request_body.get("pipe_code"),
-            mthds_contents=mthds_contents,
-            inputs=request_body.get("inputs", {}),
-            output_name=request_body.get("output_name"),
-            output_multiplicity=request_body.get("output_multiplicity"),
-            dynamic_output_concept_ref=request_body.get("dynamic_output_concept_ref"),
-        )
-
 
 class StartRequest(RunRequest):
     """Body of the protocol's `POST /start` — same basic arguments as `RunRequest`.
@@ -190,19 +114,6 @@ class RunResult(BaseModel, Generic[PipeOutputT]):
 
     pipeline_run_id: str
     pipe_output: PipeOutputT | None = None
-
-    @classmethod
-    def from_api_response(cls, response: dict[str, Any]) -> Self:
-        """Create a run result from an API response dictionary.
-
-        Args:
-            response: Dictionary containing the API response data
-
-        Returns:
-            Run result instance created from the response data
-
-        """
-        return cls.model_validate(response)
 
 
 # ── Discovery + validation (`POST /validate`, `GET /models`, `GET /version`) ──

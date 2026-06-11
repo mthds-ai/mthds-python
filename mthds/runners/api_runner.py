@@ -213,7 +213,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         response = await self._send("POST", self._url("execute"), content=content, request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS)
         self._raise_if_execute_degraded(response)
         response.raise_for_status()
-        return DictRunResult.from_api_response(response.json())
+        return DictRunResult.model_validate(response.json())
 
     @override
     async def start(
@@ -263,7 +263,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         content = start_request.model_dump_json(exclude_none=True).encode("utf-8")
         response = await self._send("POST", self._url("start"), content=content, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
-        return DictRunResult.from_api_response(response.json())
+        return DictRunResult.model_validate(response.json())
 
     @override
     async def validate(
