@@ -1,6 +1,13 @@
-# MTHDS Python client
+# MTHDS protocol & runners
 
 The `mthds` package is the Python client of any MTHDS runner: the hosted MTHDS API (`api.pipelex.com`) or a self-hosted `pipelex-api` instance. One abstraction, `MTHDSProtocol`, mirrors the five routes of the [MTHDS Protocol](https://mthds.ai) standard; `MthdsAPIClient` implements it over HTTP and adds the hosted run-lifecycle extension.
+
+## Package layout
+
+The protocol contract and its implementations live in separate packages:
+
+- `mthds/protocol/` — the MTHDS Protocol itself, nothing else: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the wire models mirroring `mthds-protocol.openapi.yaml`), `exceptions.py` (`PipelineRequestError`).
+- `mthds/runners/` — every runner implementation: `api_runner.py` (`MthdsAPIClient` — the API runner, one file with its helpers), `pipelex_runner.py` (the local CLI runner), `registry.py` (`create_runner`), plus the runner-side support modules (`results.py` for the concrete Dict responses, `runs.py` for the hosted run-lifecycle models, `exceptions.py` for runner errors).
 
 ## Configuration
 
@@ -18,7 +25,7 @@ The client composes every endpoint as `{MTHDS_API_URL}/v1/{endpoint}`. The same 
 `MTHDSProtocol` has exactly five methods — `execute`, `start`, `validate`, `models`, `version`:
 
 ```python
-from mthds.client.client import MthdsAPIClient
+from mthds.runners.api_runner import MthdsAPIClient
 
 async with MthdsAPIClient() as client:
     # Synchronous execution — the full output comes back in the response

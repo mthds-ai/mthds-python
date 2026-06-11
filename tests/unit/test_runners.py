@@ -3,7 +3,7 @@
 import pytest
 from pytest_mock import MockerFixture
 
-from mthds.client.client import MthdsAPIClient
+from mthds.runners.api_runner import MthdsAPIClient
 from mthds.runners.pipelex_runner import PipelexRunner
 from mthds.runners.registry import create_runner
 from mthds.runners.types import RunnerType
@@ -16,7 +16,7 @@ class TestRunners:
     def _mock_credentials(self, mocker: MockerFixture) -> None:
         """Keep construction hermetic — the API runner IS the client, which resolves credentials eagerly."""
         mocker.patch(
-            "mthds.client.client.load_credentials",
+            "mthds.runners.api_runner.load_credentials",
             return_value={"api_key": "test-key", "api_url": "http://localhost:8081", "runner": "api", "telemetry": "0"},
         )
 

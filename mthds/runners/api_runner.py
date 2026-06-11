@@ -10,18 +10,20 @@ from urllib.parse import quote
 import httpx
 from typing_extensions import override
 
-from mthds.client.exceptions import (
+from mthds.config.credentials import load_credentials
+from mthds.models.pipe_output import DictPipeOutputAbstract, VariableMultiplicity
+from mthds.protocol.exceptions import PipelineRequestError
+from mthds.protocol.models import ModelCategory, ModelDeck, RunRequest, StartRequest, ValidationReport, VersionInfo
+from mthds.protocol.protocol import MTHDSProtocol
+from mthds.runners.exceptions import (
     ClientAuthenticationError,
-    PipelineRequestError,
     RunFailedError,
     RunLifecycleUnavailableError,
     RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.client.pipeline import DictRunResult, DictStartAck, RunRequest, StartRequest
-from mthds.client.protocol import MTHDSProtocol
-from mthds.client.protocol_models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
-from mthds.client.runs import (
+from mthds.runners.results import DictRunResult, DictStartAck
+from mthds.runners.runs import (
     PollInfo,
     RunRead,
     RunResultCompleted,
@@ -32,8 +34,6 @@ from mthds.client.runs import (
     RunStatus,
     WaitForResultOptions,
 )
-from mthds.config.credentials import load_credentials
-from mthds.models.pipe_output import DictPipeOutputAbstract, VariableMultiplicity
 from mthds.runners.types import RunnerType
 
 if TYPE_CHECKING:

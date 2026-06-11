@@ -1,15 +1,15 @@
-"""Tests for mthds.client.exceptions — the API client + run-lifecycle error hierarchy."""
+"""Tests for the protocol + runner error hierarchy (`mthds.protocol.exceptions`, `mthds.runners.exceptions`)."""
 
 import pytest
 
-from mthds.client.exceptions import (
+from mthds.protocol.exceptions import PipelineRequestError
+from mthds.runners.exceptions import (
     ClientAuthenticationError,
-    PipelineRequestError,
     RunFailedError,
     RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.client.runs import RunStatus
+from mthds.runners.runs import RunStatus
 
 
 class TestClientExceptions:

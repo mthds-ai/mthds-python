@@ -1,11 +1,8 @@
-from mthds.client.runs import RunStatus
+from mthds.protocol.exceptions import PipelineRequestError
+from mthds.runners.runs import RunStatus
 
 
 class ClientAuthenticationError(Exception):
-    pass
-
-
-class PipelineRequestError(Exception):
     pass
 
 

@@ -1,12 +1,12 @@
-"""Tests for mthds.client.runs — run-lifecycle models for the hosted polling surface."""
+"""Tests for mthds.runners.runs — run-lifecycle models for the hosted polling surface."""
 
 from dataclasses import FrozenInstanceError
 
 import pytest
 from pydantic import TypeAdapter
 
-from mthds.client.pipeline import StartRequest
-from mthds.client.runs import (
+from mthds.protocol.models import StartRequest
+from mthds.runners.runs import (
     PollInfo,
     RunPublic,
     RunRead,

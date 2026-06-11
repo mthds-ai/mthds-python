@@ -6,15 +6,15 @@ import httpx
 import pytest
 from pytest_mock import MockerFixture
 
-from mthds.client.client import MthdsAPIClient
-from mthds.client.exceptions import (
-    PipelineRequestError,
+from mthds.protocol.exceptions import PipelineRequestError
+from mthds.runners.api_runner import MthdsAPIClient
+from mthds.runners.exceptions import (
     RunFailedError,
     RunLifecycleUnavailableError,
     RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.client.runs import (
+from mthds.runners.runs import (
     PollInfo,
     RunResultCompleted,
     RunResultFailed,
@@ -44,7 +44,7 @@ class TestMthdsAPIClientLifecycle:
     def _mock_credentials(self, mocker: MockerFixture) -> None:
         """Keep construction hermetic — never touch the real credentials file/env."""
         mocker.patch(
-            "mthds.client.client.load_credentials",
+            "mthds.runners.api_runner.load_credentials",
             return_value={"api_key": "", "api_url": "", "runner": "api", "telemetry": "0"},
         )
 
@@ -270,7 +270,7 @@ class TestMthdsAPIClientLifecycle:
                 ]
             ),
         )
-        mocker.patch("mthds.client.client.asyncio.sleep", mocker.AsyncMock())
+        mocker.patch("mthds.runners.api_runner.asyncio.sleep", mocker.AsyncMock())
         polls: list[PollInfo] = []
 
         returned = asyncio.run(client.wait_for_result("run_1", WaitForResultOptions(interval_seconds=0.0, on_poll=polls.append)))

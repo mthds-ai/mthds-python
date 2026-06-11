@@ -1,7 +1,26 @@
+"""Wire models for the MTHDS Protocol — mirrors `mthds-protocol.openapi.yaml` (the standard's normative artifact).
+
+    POST /execute  : RunRequest   -> RunResult (200)
+    POST /start    : StartRequest -> StartAck (202)
+    POST /validate :              -> ValidationReport
+    GET  /models   :              -> ModelDeck
+    GET  /version  :              -> VersionInfo
+
+Request models declare the protocol's BASIC arguments only and are
+extension-open (`extra="allow"`): an implementation may accept extra request
+properties, and any extension arg given to a constructor is kept and
+serialized to the wire instead of being silently dropped.
+
+Response models declare the protocol's BASE fields only and are extension-open
+too: an implementation may return more, and those server-specific fields are
+preserved as accessible attributes — the response side of the same passthrough
+principle as the request-side `extra`.
+"""
+
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import SkipValidation
@@ -9,10 +28,11 @@ from typing_extensions import Annotated
 
 from mthds._compat import StrEnum
 from mthds._serialization import clean_json_content
-from mthds.client.exceptions import PipelineRequestError
-from mthds.models.pipe_output import DictPipeOutputAbstract, PipeOutputAbstract, VariableMultiplicity
+from mthds._utils.pydantic_utils import empty_list_factory_of
+from mthds.models.pipe_output import VariableMultiplicity
 from mthds.models.pipeline_inputs import PipelineInputs
-from mthds.models.working_memory import DictStuffAbstract, DictWorkingMemoryAbstract, WorkingMemoryAbstract
+from mthds.models.working_memory import WorkingMemoryAbstract
+from mthds.protocol.exceptions import PipelineRequestError
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -22,6 +42,9 @@ if TYPE_CHECKING:
 MAIN_STUFF_NAME = "main_stuff"
 
 PipeOutputT = TypeVar("PipeOutputT")
+
+
+# ── Requests (`POST /execute`, `POST /start`) ────────────────────────
 
 
 class RunRequest(BaseModel):
@@ -157,6 +180,9 @@ class StartRequest(RunRequest):
     pipeline_run_id: str | None = Field(default=None, max_length=128)
 
 
+# ── Run responses (`POST /execute` 200, `POST /start` 202) ───────────
+
+
 class RunState(StrEnum):
     """Run lifecycle state — mirrors the protocol's `RunState` enum."""
 
@@ -207,70 +233,60 @@ class StartAck(RunResponse, ABC, Generic[PipeOutputT]):
     pipe_output: PipeOutputT | None = None
 
 
-class DictStartAck(StartAck[DictPipeOutputAbstract]):
-    """Concrete start ack with Dict-serialized output."""
+# ── Discovery + validation (`POST /validate`, `GET /models`, `GET /version`) ──
 
 
-class DictRunResult(RunResult[DictPipeOutputAbstract]):
-    """Concrete execution result with Dict-serialized output."""
+class ModelCategory(StrEnum):
+    """Model categories accepted by the protocol's `GET /models?type=` filter."""
 
-    _dict_stuff_class: ClassVar[type[DictStuffAbstract]] = DictStuffAbstract
-    _dict_working_memory_class: ClassVar[type[DictWorkingMemoryAbstract]] = DictWorkingMemoryAbstract
-    _dict_pipe_output_class: ClassVar[type[DictPipeOutputAbstract]] = DictPipeOutputAbstract
+    LLM = "llm"
+    EXTRACT = "extract"
+    IMG_GEN = "img_gen"
+    SEARCH = "search"
 
-    @classmethod
-    def _serialize_working_memory(cls, working_memory: WorkingMemoryAbstract[StuffType]) -> DictWorkingMemoryAbstract:
-        """Convert WorkingMemory to dict with DictStuff objects (content as dict).
 
-        Keeps the WorkingMemory structure but converts each Stuff.content to dict.
+class ModelInfo(BaseModel):
+    """One entry of the model deck (`ModelDeck.models[]`) — base fields + extensions."""
 
-        Args:
-            working_memory: The WorkingMemory to serialize
+    model_config = ConfigDict(extra="allow")
 
-        Returns:
-            Dict with root containing DictStuff objects (serialized) and aliases
-        """
-        dict_stuffs_root: dict[str, DictStuffAbstract] = {}
+    name: str
+    type: ModelCategory | None = None
 
-        # Convert each Stuff -> DictStuff by dumping only the content
-        for stuff_name, stuff in working_memory.root.items():
-            dict_stuff = cls._dict_stuff_class(
-                concept=stuff.concept.concept_ref,
-                content=stuff.content.model_dump(serialize_as_any=True),
-            )
-            dict_stuffs_root[stuff_name] = dict_stuff
 
-        return cls._dict_working_memory_class(root=dict_stuffs_root, aliases=working_memory.aliases)
+class ModelDeck(BaseModel):
+    """The model deck a runner can route to — `GET /models`.
 
-    @classmethod
-    def from_pipe_output(
-        cls,
-        pipe_output: PipeOutputAbstract[WorkingMemoryAbstract[StuffType]],
-        pipeline_run_id: str = "",
-        created_at: str = "",
-        state: RunState = RunState.COMPLETED,
-        finished_at: str | None = None,
-    ) -> DictRunResult:
-        """Create a DictRunResult from a PipeOutput object.
+    The protocol's base is the `models` list; implementations may add their own
+    routing metadata (aliases, fallback chains, anything else) as extensions.
+    """
 
-        Args:
-            pipe_output: The PipeOutput to convert
-            pipeline_run_id: Unique identifier for the run
-            created_at: Timestamp when the run was created
-            state: Current state of the run
-            finished_at: Timestamp when the run finished
-        Returns:
-            DictRunResult with the pipe output serialized to reduced format
+    model_config = ConfigDict(extra="allow")
 
-        """
-        return cls(
-            pipeline_run_id=pipeline_run_id,
-            created_at=created_at,
-            state=state,
-            finished_at=finished_at,
-            pipe_output=cls._dict_pipe_output_class(
-                working_memory=cls._serialize_working_memory(pipe_output.working_memory),
-                pipeline_run_id=pipe_output.pipeline_run_id,
-            ),
-            main_stuff_name=pipe_output.working_memory.aliases.get(MAIN_STUFF_NAME, MAIN_STUFF_NAME),
-        )
+    models: list[ModelInfo] = Field(default_factory=empty_list_factory_of(ModelInfo))
+
+
+class ValidationReport(BaseModel):
+    """Verdict of `POST /validate` for a VALID bundle — the 200 status IS the verdict.
+
+    Failures never reach this model — they are RFC 7807 problems (HTTP 422).
+    The protocol declares no body fields; implementations may include their own
+    artifacts (parsed structures, graphs, anything else), preserved here as
+    extension attributes.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+
+class VersionInfo(BaseModel):
+    """Protocol + runner versions — `GET /version` (always public).
+
+    The handshake clients use for feature detection. The protocol defines two
+    fields; implementations may add their own identification (a name, an
+    underlying runtime version, anything else) as extensions.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    protocol_version: str
+    runner_version: str | None = None
