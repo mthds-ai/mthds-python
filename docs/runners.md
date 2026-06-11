@@ -1,0 +1,84 @@
+# MTHDS protocol & runners
+
+The `mthds` package is the Python client of any MTHDS runner: the hosted MTHDS API (`api.pipelex.com`) or a self-hosted `pipelex-api` instance. One abstraction, `MTHDSProtocol`, mirrors the five routes of the [MTHDS Protocol](https://mthds.ai) standard; `MthdsAPIClient` implements it over HTTP and adds the hosted run-lifecycle extension.
+
+## Package layout
+
+The protocol contract and its implementations live in separate packages:
+
+- `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResultExecute`, `RunResultStart`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
+- `mthds/runners/` — every runner implementation, one subpackage per runner:
+    - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute` — the runners' concrete JSON materialization of the protocol's domain shapes), `runs.py` (the hosted run-lifecycle / polling models), `exceptions.py` (API auth + polling-lifecycle errors).
+    - `pipelex/runner.py` — `PipelexRunner`, the local runner that shells out to the `pipelex` CLI.
+    - `types.py` — `RunnerType`.
+
+## Configuration
+
+One URL, one key:
+
+| Setting | Env var / config key | Default |
+| --- | --- | --- |
+| API base URL (host only, no path) | `MTHDS_API_URL` | `https://api.pipelex.com` |
+| API key | `MTHDS_API_KEY` | — |
+
+The client composes every endpoint as `{MTHDS_API_URL}/v1/{endpoint}`. The same paths work against the hosted API and a bare runner (`http://localhost:8081`); hosted-only extensions are detectable via the `version()` handshake. Credentials live in `~/.mthds/config` (the same file the `mthds` CLI reads/writes) — keys `MTHDS_API_URL` / `MTHDS_API_KEY`.
+
+## The protocol surface (works on any runner)
+
+`MTHDSProtocol` has exactly five methods — `execute`, `start`, `validate`, `models`, `version`:
+
+```python
+from mthds.runners.api.client import MthdsAPIClient
+
+async with MthdsAPIClient() as client:
+    # Synchronous execution — the full output comes back in the response
+    result = await client.execute(mthds_contents=[bundle_text], inputs={"topic": {"concept": "Text", "content": "owls"}})
+    print(result.pipeline_run_id)                    # the protocol's two base fields...
+    print(result.pipe_output)
+    # anything else the server returned (run state, timestamps, output naming)
+    # is an implementation extension — preserved in result.model_extra
+
+    # Validation (dry-run included); raises on an invalid bundle (HTTP 422 problem)
+    report = await client.validate([bundle_text])
+
+    # Discovery
+    deck = await client.models()           # optionally client.models(ModelCategory.LLM)
+    info = await client.version()          # {protocol_version, runner_version} + server-specific extensions (info.model_extra)
+```
+
+`execute` may raise `RunStillRunningError` if a server answers 202 (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`. `execute` answers with `RunResultExecute` (`pipeline_run_id` + `pipe_output`, both present — a completed run has output); `start` answers with `RunResultStart` (`pipeline_run_id` only). Both are extension-open on the response side.
+
+### Basic args vs extension args
+
+The abstract `MTHDSProtocol` interface carries the protocol's **basic** arguments only. Implementations may accept more (the protocol's extension policy), and the SDK passes any of them through:
+
+- Extension args never appear in this SDK — not even as convenience params. They ride the generic `extra` mapping on both `execute` and `start`: `client.start(pipe_code="answer", extra={"some_server_arg": True})` merges `some_server_arg` into the request body as a top-level property. The server you call defines and handles its own extension args; consult that server's API documentation for what it accepts.
+- Protocol args inside `extra` are rejected client-side with `PipelineRequestError` — pass them as named parameters.
+
+## The run-lifecycle extension (hosted API only)
+
+`start` + polling is how long runs survive the hosted gateway's ~30s synchronous cap. **Polling is not part of the MTHDS Protocol** — it is a hosted extension; a bare runner 404s these routes and the client raises `RunLifecycleUnavailableError`.
+
+```python
+async with MthdsAPIClient() as client:
+    # One call for the whole lifecycle — start, poll, return the results:
+    results = await client.start_and_wait(pipe_code="answer", inputs=inputs)
+    print(results.main_stuff)
+
+    # Or step by step:
+    started = await client.start(pipe_code="answer", inputs=inputs)     # POST /v1/start → 202 RunResultStart (id only)
+    # server-specific args (defined by the server, not this SDK) ride `extra`:
+    # started = await client.start(inputs=inputs, extra={...})
+    status = await client.get_run_status(started.pipeline_run_id)               # GET /v1/runs/{id}/status (self-healing)
+    results = await client.wait_for_result(started.pipeline_run_id)             # polls GET /v1/runs/{id}/results
+```
+
+- `start` carries the protocol's basic args only. Anything beyond them — including a client-supplied run identifier, where a server supports one — is server-specific and rides `extra`; see the server's own documentation for the extension args it accepts. The `pipeline_run_id` returned by `start` is always the authoritative one.
+- `wait_for_result` resolves on `COMPLETED`, raises `RunFailedError` on any other terminal status, `RunTimeoutError` when its budget elapses (the run keeps executing — resume by id), and honors the server's `Retry-After`.
+
+## Runners
+
+Construct a runner directly — both implement `MTHDSProtocol`:
+
+- `MthdsAPIClient` (`mthds.runners.api.client`) — the API runner; also serves the hosted run-lifecycle extension.
+- `PipelexRunner` (`mthds.runners.pipelex.runner`) — shells out to a locally installed `pipelex` CLI (`execute` via `pipelex run`, `validate` via `pipelex validate`, `version` via `pipelex --version`; `start`/`models` raise `NotImplementedError`).

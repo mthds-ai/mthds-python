@@ -3,7 +3,7 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
-from mthds.models.concept import ConceptType
+from mthds.protocol.concept import ConceptType
 
 StuffContentType = TypeVar("StuffContentType", bound="StuffContentAbstract")
 StuffType = TypeVar("StuffType", bound="StuffAbstract[Any, Any]")
@@ -20,9 +20,3 @@ class StuffAbstract(BaseModel, ABC, Generic[ConceptType, StuffContentType]):
 
 class StuffContentAbstract(BaseModel, ABC):
     pass
-
-
-class DictStuffAbstract(BaseModel, ABC):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    concept: str
-    content: Any
