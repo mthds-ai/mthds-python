@@ -12,13 +12,13 @@ from typing import Any, cast
 
 from typing_extensions import override
 
-from mthds.protocol.models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
+from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationReport, VersionInfo
 from mthds.protocol.pipe_output import VariableMultiplicity
 from mthds.protocol.pipeline_inputs import PipelineInputs
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.protocol.stuff import StuffType
 from mthds.protocol.working_memory import WorkingMemoryAbstract
-from mthds.runners.api.models import MAIN_STUFF_NAME, DictPipeOutputAbstract, DictRunResult, DictWorkingMemoryAbstract
+from mthds.runners.api.models import MAIN_STUFF_NAME, DictPipeOutputAbstract, DictRunResultExecute, DictWorkingMemoryAbstract
 from mthds.runners.types import RunnerType
 
 
@@ -79,8 +79,8 @@ def run_subprocess(cmd: list[str], *, timeout: int = 600, capture_output: bool =
         raise PipelexRunnerError(msg) from exc
 
 
-def _run_result_from_working_memory_dump(raw_memory: dict[str, Any]) -> DictRunResult:
-    """Map the CLI's working-memory dump onto the SDK's DictRunResult shape.
+def _run_result_from_working_memory_dump(raw_memory: dict[str, Any]) -> DictRunResultExecute:
+    """Map the CLI's working-memory dump onto the SDK's DictRunResultExecute shape.
 
     `pipelex run ... --working-memory-path` writes the runtime's full working
     memory (`{root: {name: {stuff_code, stuff_name, concept: {...}, content}},
@@ -92,7 +92,7 @@ def _run_result_from_working_memory_dump(raw_memory: dict[str, Any]) -> DictRunR
         raw_memory: The parsed working-memory JSON written by the CLI.
 
     Returns:
-        DictRunResult for the completed local run (no run id — local runs are
+        DictRunResultExecute for the completed local run (no run id — local runs are
         not tracked).
     """
     dict_root: dict[str, dict[str, Any]] = {}
@@ -116,7 +116,7 @@ def _run_result_from_working_memory_dump(raw_memory: dict[str, Any]) -> DictRunR
     working_memory = DictWorkingMemoryAbstract.model_validate({"root": dict_root, "aliases": aliases})
     # `main_stuff_name` is a pipelex extension field — validated construction
     # keeps it in `model_extra` without naming it a typed parameter.
-    return DictRunResult.model_validate(
+    return DictRunResultExecute.model_validate(
         {
             "pipeline_run_id": "",
             "pipe_output": DictPipeOutputAbstract(working_memory=working_memory, pipeline_run_id=""),
@@ -181,7 +181,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         extra: dict[str, Any] | None = None,
-    ) -> DictRunResult:
+    ) -> DictRunResultExecute:
         """Execute a method via the pipelex CLI subprocess.
 
         Writes mthds_contents and inputs to temp files, runs `pipelex run`,
@@ -252,7 +252,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         extra: dict[str, Any] | None = None,
-    ) -> DictRunResult:
+    ) -> RunResultStart:
         """Start a method asynchronously — not supported by the pipelex CLI.
 
         Args:

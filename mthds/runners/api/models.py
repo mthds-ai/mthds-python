@@ -2,7 +2,7 @@
 
 These are the JSON forms the runners deal in: each `Stuff` reduced to
 `{concept: <ref>, content}`, working memory as a flat root + aliases, the
-pipe-output as that working memory + a run id, and `DictRunResult` as the
+pipe-output as that working memory + a run id, and `DictRunResultExecute` as the
 protocol's `RunResult` carrying a `DictPipeOutput`. The abstract (non-dict)
 domain shapes these mirror live in `mthds.protocol.*`.
 """
@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
-from mthds.protocol.models import RunResult
+from mthds.protocol.models import RunResultExecute
 
 if TYPE_CHECKING:
     from mthds.protocol.pipe_output import PipeOutputAbstract
@@ -43,8 +43,8 @@ class DictPipeOutputAbstract(BaseModel, ABC):
     pipeline_run_id: str
 
 
-class DictRunResult(RunResult[DictPipeOutputAbstract]):
-    """Concrete run result with Dict-serialized output.
+class DictRunResultExecute(RunResultExecute[DictPipeOutputAbstract]):
+    """Concrete execute result with Dict-serialized output.
 
     `main_stuff_name` (when set by a runner) is an implementation extension
     field riding the protocol's extension-open response — not a protocol field.
@@ -83,14 +83,14 @@ class DictRunResult(RunResult[DictPipeOutputAbstract]):
         cls,
         pipe_output: PipeOutputAbstract[WorkingMemoryAbstract[StuffType]],
         pipeline_run_id: str = "",
-    ) -> DictRunResult:
-        """Create a DictRunResult from a PipeOutput object.
+    ) -> DictRunResultExecute:
+        """Create a DictRunResultExecute from a PipeOutput object.
 
         Args:
             pipe_output: The PipeOutput to convert
             pipeline_run_id: Unique identifier for the run
         Returns:
-            DictRunResult with the pipe output serialized to reduced format
+            DictRunResultExecute with the pipe output serialized to reduced format
 
         """
         # `main_stuff_name` is an extension field — validated construction keeps

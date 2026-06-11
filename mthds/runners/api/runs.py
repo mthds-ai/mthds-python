@@ -11,7 +11,7 @@ bare runner 404s these routes, which the client translates into
 `RunLifecycleUnavailableError`.
 
 Wire contract mirrors `pipelex-platform`:
-    POST /v1/start                  -> RunResult ack    (start, 202)
+    POST /v1/start                  -> RunResultStart   (start, 202)
     GET  /v1/runs/{pipeline_run_id}/status   -> RunRead          (status, self-healing)
     GET  /v1/runs/{pipeline_run_id}/results  -> 202 / 200 / 409  (results)
 """

@@ -79,17 +79,17 @@ class TestMthdsAPIClientLifecycle:
 
     # ── start ────────────────────────────────────────────────────
 
-    def test_start_returns_start_ack(self, mocker: MockerFixture) -> None:
-        """A 202 from POST /v1/start parses into a RunResult ack with the authoritative run_id."""
+    def test_start_returns_run_result_start(self, mocker: MockerFixture) -> None:
+        """A 202 from POST /v1/start parses into a RunResultStart with the authoritative run_id."""
         client = self._client()
         body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
 
-        ack = asyncio.run(client.start(pipe_code="answer"))
-        assert ack.pipeline_run_id == "run_1"
-        assert ack.pipe_output is None
-        assert ack.model_extra is not None
-        assert ack.model_extra["created_at"] == "2026-06-10T00:00:00Z"  # server extension field, preserved
+        started = asyncio.run(client.start(pipe_code="answer"))
+        assert started.pipeline_run_id == "run_1"
+        # RunResultStart carries only pipeline_run_id; everything else rides model_extra.
+        assert started.model_extra is not None
+        assert started.model_extra["created_at"] == "2026-06-10T00:00:00Z"
 
     def test_start_request_prunes_absent_fields(self, mocker: MockerFixture) -> None:
         """Absent fields are pruned from the start body (exclude_none)."""
@@ -141,7 +141,10 @@ class TestMthdsAPIClientLifecycle:
     def test_execute_body_keeps_null_basic_args(self, mocker: MockerFixture) -> None:
         """execute() does NOT prune absent fields — null basic args stay in the body (no exclude_none, unlike start)."""
         client = self._client()
-        body = {"pipeline_run_id": "run_1", "pipe_output": None}
+        body: dict[str, object] = {
+            "pipeline_run_id": "run_1",
+            "pipe_output": {"working_memory": {"root": {}, "aliases": {}}, "pipeline_run_id": "run_1"},
+        }
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
         asyncio.run(client.execute(pipe_code="answer"))

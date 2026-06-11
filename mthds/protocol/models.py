@@ -1,7 +1,7 @@
 """Wire models for the MTHDS Protocol — mirrors `mthds-protocol.openapi.yaml` (the standard's normative artifact).
 
-    POST /execute  : -> RunResult (200, pipe_output present)
-    POST /start    : -> RunResult (202, pipe_output absent)
+    POST /execute  : -> RunResultExecute (200: pipeline_run_id + pipe_output)
+    POST /start    : -> RunResultStart   (202: pipeline_run_id only)
     POST /validate :              -> ValidationReport
     GET  /models   :              -> ModelDeck
     GET  /version  :              -> VersionInfo
@@ -28,25 +28,39 @@ from mthds._utils.pydantic_utils import empty_list_factory_of
 PipeOutputT = TypeVar("PipeOutputT")
 
 
-# ── Run response (`POST /execute` 200, `POST /start` 202) ────────────
+# ── Run responses (`POST /execute` 200, `POST /start` 202) ───────────
 
 
-class RunResult(BaseModel, Generic[PipeOutputT]):
-    """The protocol's single run response — `POST /execute` 200 (`pipe_output`
-    present), `POST /start` 202 and the optional `/execute` 202 degrade
-    (`pipe_output` absent).
+class RunResultExecute(BaseModel, Generic[PipeOutputT]):
+    """`POST /execute` 200 — the completed run.
 
-    Exactly two base fields: the authoritative server-generated
-    `pipeline_run_id` and the method's `pipe_output`. Anything more an
-    implementation returns (a run state, timestamps, output naming, anything
-    else) is an extension field — preserved as accessible attributes
-    (`extra="allow"`), never named by this SDK.
+    Two base fields: the authoritative server-generated `pipeline_run_id` and
+    the method's `pipe_output` (always present — a completed run has output).
+    Extension-open (`extra="allow"`): anything more an implementation returns
+    (a run state, timestamps, output naming) rides `model_extra`, never named
+    by this SDK.
     """
 
     model_config = ConfigDict(extra="allow")
 
     pipeline_run_id: str
-    pipe_output: PipeOutputT | None = None
+    pipe_output: PipeOutputT
+
+
+class RunResultStart(BaseModel):
+    """`POST /start` 202 (and the optional `/execute` 202 degrade) — the started
+    run's authoritative `pipeline_run_id`, nothing else.
+
+    A started run has no output yet; how it is delivered later (polling,
+    callbacks, anything else) is implementation-defined and outside the
+    protocol. Extension-open (`extra="allow"`): an implementation may add its
+    own fields (a workflow id, a created-at timestamp), preserved via
+    `model_extra`.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    pipeline_run_id: str
 
 
 # ── Discovery + validation (`POST /validate`, `GET /models`, `GET /version`) ──

@@ -13,7 +13,7 @@ from typing_extensions import override
 
 from mthds.config.credentials import load_credentials
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.protocol.models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
+from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.exceptions import (
     ClientAuthenticationError,
@@ -22,7 +22,7 @@ from mthds.runners.api.exceptions import (
     RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResult
+from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
 from mthds.runners.api.runs import (
     PollInfo,
     RunRead,
@@ -171,7 +171,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         extra: dict[str, Any] | None = None,
-    ) -> DictRunResult:
+    ) -> DictRunResultExecute:
         """Execute a method synchronously and wait for its completion — `POST /v1/execute`.
 
         Args:
@@ -211,7 +211,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         response = await self._send("POST", self._url("execute"), content=content, request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS)
         self._raise_if_execute_degraded(response)
         response.raise_for_status()
-        return DictRunResult.model_validate(response.json())
+        return DictRunResultExecute.model_validate(response.json())
 
     @override
     async def start(
@@ -223,8 +223,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         extra: dict[str, Any] | None = None,
-    ) -> DictRunResult:
-        """Start a method asynchronously — `POST /v1/start` (202, `pipe_output` absent).
+    ) -> RunResultStart:
+        """Start a method asynchronously — `POST /v1/start` (202: `pipeline_run_id` only).
 
         Args:
             pipe_code: The code identifying the pipe to execute
@@ -240,9 +240,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 `PipelineRequestError`).
 
         Returns:
-            RunResult with the authoritative server-generated `pipeline_run_id`
-            (`pipe_output` absent). On a hosted deployment the id is durable —
-            poll `get_run_status` / `get_run_result`.
+            RunResultStart — the authoritative server-generated `pipeline_run_id`
+            (no output yet). On a hosted deployment the id is durable — poll
+            `get_run_status` / `get_run_result`.
         """
         if not pipe_code and not mthds_contents and not extra:
             msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API start."
@@ -261,7 +261,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         content = to_json(body)
         response = await self._send("POST", self._url("start"), content=content, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
-        return DictRunResult.model_validate(response.json())
+        return RunResultStart.model_validate(response.json())
 
     @override
     async def validate(
@@ -334,8 +334,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 body = cast("dict[str, Any]", raw)
         except ValueError:
             body = {}
-        ack_run_id = body.get("pipeline_run_id")
-        run_id = ack_run_id if isinstance(ack_run_id, str) else ""
+        started_run_id = body.get("pipeline_run_id")
+        run_id = started_run_id if isinstance(started_run_id, str) else ""
         msg = (
             f"execute() was accepted asynchronously (202): run {run_id or '<unknown>'} is still "
             "running server-side. Poll its results (hosted) or use start()."
@@ -462,7 +462,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     ) -> RunResults:
         """Start a run and poll it to completion — the whole async lifecycle in one call.
 
-        Convenience wrapper: `start` (202 ack) followed by `wait_for_result`
+        Convenience wrapper: `start` (the 202 start result) followed by `wait_for_result`
         on the returned `pipeline_run_id`. This is the durable way to run long
         methods on the hosted API (the run survives client disconnects and the
         gateway's synchronous cap). All `start` args apply, including the generic
@@ -487,7 +487,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 resume later by id via `wait_for_result`).
             RunLifecycleUnavailableError: If the server has no run store (a bare runner).
         """
-        ack = await self.start(
+        started = await self.start(
             pipe_code=pipe_code,
             mthds_contents=mthds_contents,
             inputs=inputs,
@@ -496,7 +496,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             dynamic_output_concept_ref=dynamic_output_concept_ref,
             extra=extra,
         )
-        return await self.wait_for_result(ack.pipeline_run_id, options=wait_options)
+        return await self.wait_for_result(started.pipeline_run_id, options=wait_options)
 
 
 # ── Module helpers ──────────────────────────────────────────────────────

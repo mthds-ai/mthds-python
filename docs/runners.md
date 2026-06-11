@@ -6,9 +6,9 @@ The `mthds` package is the Python client of any MTHDS runner: the hosted MTHDS A
 
 The protocol contract and its implementations live in separate packages:
 
-- `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResult`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
+- `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResultExecute`, `RunResultStart`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
 - `mthds/runners/` — every runner implementation, one subpackage per runner:
-    - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResult` — the runners' concrete JSON materialization of the protocol's domain shapes), `runs.py` (the hosted run-lifecycle / polling models), `exceptions.py` (API auth + polling-lifecycle errors).
+    - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute` — the runners' concrete JSON materialization of the protocol's domain shapes), `runs.py` (the hosted run-lifecycle / polling models), `exceptions.py` (API auth + polling-lifecycle errors).
     - `pipelex/runner.py` — `PipelexRunner`, the local runner that shells out to the `pipelex` CLI.
     - `types.py` — `RunnerType`.
 
@@ -46,7 +46,7 @@ async with MthdsAPIClient() as client:
     info = await client.version()          # {protocol_version, runner_version} + server-specific extensions (info.model_extra)
 ```
 
-`execute` may raise `RunStillRunningError` if a server answers 202 (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`. Both `execute` and `start` answer with the protocol's single `RunResult`: `pipeline_run_id` (mandatory, server-generated, authoritative) + `pipe_output` (present on a completed `execute`, absent on `start`), extension-open on the response side.
+`execute` may raise `RunStillRunningError` if a server answers 202 (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`. `execute` answers with `RunResultExecute` (`pipeline_run_id` + `pipe_output`, both present — a completed run has output); `start` answers with `RunResultStart` (`pipeline_run_id` only). Both are extension-open on the response side.
 
 ### Basic args vs extension args
 
@@ -66,11 +66,11 @@ async with MthdsAPIClient() as client:
     print(results.main_stuff)
 
     # Or step by step:
-    ack = await client.start(pipe_code="answer", inputs=inputs)         # POST /v1/start → 202 (pipe_output absent)
+    started = await client.start(pipe_code="answer", inputs=inputs)     # POST /v1/start → 202 RunResultStart (id only)
     # server-specific args (defined by the server, not this SDK) ride `extra`:
-    # ack = await client.start(inputs=inputs, extra={...})
-    status = await client.get_run_status(ack.pipeline_run_id)                   # GET /v1/runs/{id}/status (self-healing)
-    results = await client.wait_for_result(ack.pipeline_run_id)                 # polls GET /v1/runs/{id}/results
+    # started = await client.start(inputs=inputs, extra={...})
+    status = await client.get_run_status(started.pipeline_run_id)               # GET /v1/runs/{id}/status (self-healing)
+    results = await client.wait_for_result(started.pipeline_run_id)             # polls GET /v1/runs/{id}/results
 ```
 
 - `start` carries the protocol's basic args only. Anything beyond them — including a client-supplied run identifier, where a server supports one — is server-specific and rides `extra`; see the server's own documentation for the extension args it accepts. The `pipeline_run_id` returned by `start` is always the authoritative one.

@@ -8,7 +8,7 @@ from typing_extensions import runtime_checkable
 from mthds.protocol.models import PipeOutputT
 
 if TYPE_CHECKING:
-    from mthds.protocol.models import ModelCategory, ModelDeck, RunResult, ValidationReport, VersionInfo
+    from mthds.protocol.models import ModelCategory, ModelDeck, RunResultExecute, RunResultStart, ValidationReport, VersionInfo
     from mthds.protocol.pipe_output import VariableMultiplicity
     from mthds.protocol.pipeline_inputs import PipelineInputs
     from mthds.protocol.stuff import StuffType
@@ -42,7 +42,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         extra: dict[str, Any] | None = None,
-    ) -> RunResult[PipeOutputT]:
+    ) -> RunResultExecute[PipeOutputT]:
         """Execute a method synchronously and wait for its completion.
 
         Args:
@@ -57,7 +57,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
                 of truth for what it accepts.
 
         Returns:
-            Complete execution results including run state and output
+            RunResultExecute — the completed run: `pipeline_run_id` + `pipe_output`.
 
         Raises:
             RunStillRunningError: If the server answers 202 (the protocol's
@@ -76,7 +76,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         extra: dict[str, Any] | None = None,
-    ) -> RunResult[PipeOutputT]:
+    ) -> RunResultStart:
         """Start a method asynchronously without waiting for completion.
 
         How completion is later delivered (webhooks, polling, anything else) is
@@ -94,8 +94,8 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
                 of truth for what it accepts.
 
         Returns:
-            RunResult with the authoritative server-generated `pipeline_run_id`
-            (`pipe_output` absent)
+            RunResultStart — the authoritative server-generated `pipeline_run_id`
+            (no output yet)
 
         Raises:
             ClientAuthenticationError: If an API token is missing for API execution.
