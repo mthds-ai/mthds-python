@@ -3,9 +3,9 @@
 import shutil
 
 from mthds.config.credentials import load_credentials
-from mthds.models.pipe_output import DictPipeOutputAbstract
 from mthds.protocol.protocol import MTHDSProtocol
-from mthds.runners.api_runner import MthdsAPIClient
+from mthds.runners.api.client import MthdsAPIClient
+from mthds.runners.api.models import DictPipeOutputAbstract
 from mthds.runners.exceptions import ClientAuthenticationError
 from mthds.runners.pipelex_runner import PipelexRunner, PipelexRunnerError
 from mthds.runners.types import RunnerType

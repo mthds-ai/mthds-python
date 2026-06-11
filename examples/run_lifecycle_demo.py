@@ -22,8 +22,8 @@ import asyncio
 import time
 from pathlib import Path
 
-from mthds.models.pipeline_inputs import PipelineInputs
-from mthds.runners.api_runner import MthdsAPIClient
+from mthds.protocol.pipeline_inputs import PipelineInputs
+from mthds.runners.api.client import MthdsAPIClient
 from mthds.runners.runs import RunResultCompleted, RunResults, WaitForResultOptions
 
 BUNDLE_PATH = Path(__file__).parent / "invoice_reimbursement.mthds"

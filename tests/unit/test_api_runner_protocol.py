@@ -9,7 +9,7 @@ from pytest_mock import MockerFixture
 
 from mthds.protocol.models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
-from mthds.runners.api_runner import MthdsAPIClient
+from mthds.runners.api.client import MthdsAPIClient
 
 _BASE_URL = "http://localhost:8081"
 
@@ -29,7 +29,7 @@ class TestMthdsAPIClientProtocol:
     def _mock_credentials(self, mocker: MockerFixture) -> None:
         """Keep construction hermetic — never touch the real credentials file/env."""
         mocker.patch(
-            "mthds.runners.api_runner.load_credentials",
+            "mthds.runners.api.client.load_credentials",
             return_value={"api_key": "", "api_url": "", "runner": "api", "telemetry": "0"},
         )
 

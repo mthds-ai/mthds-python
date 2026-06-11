@@ -10,13 +10,13 @@ from typing import Any, cast
 
 from typing_extensions import override
 
-from mthds.models.pipe_output import DictPipeOutputAbstract, VariableMultiplicity
-from mthds.models.pipeline_inputs import PipelineInputs
-from mthds.models.stuff import StuffType
-from mthds.models.working_memory import DictWorkingMemoryAbstract, WorkingMemoryAbstract
 from mthds.protocol.models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
+from mthds.protocol.pipe_output import VariableMultiplicity
+from mthds.protocol.pipeline_inputs import PipelineInputs
 from mthds.protocol.protocol import MTHDSProtocol
-from mthds.runners.results import MAIN_STUFF_NAME, DictRunResult
+from mthds.protocol.stuff import StuffType
+from mthds.protocol.working_memory import WorkingMemoryAbstract
+from mthds.runners.api.models import MAIN_STUFF_NAME, DictPipeOutputAbstract, DictRunResult, DictWorkingMemoryAbstract
 from mthds.runners.types import RunnerType
 
 

@@ -12,10 +12,10 @@ from pydantic_core import to_json
 from typing_extensions import override
 
 from mthds.config.credentials import load_credentials
-from mthds.models.pipe_output import DictPipeOutputAbstract, VariableMultiplicity
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
+from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResult
 from mthds.runners.exceptions import (
     ClientAuthenticationError,
     RunFailedError,
@@ -23,7 +23,6 @@ from mthds.runners.exceptions import (
     RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.runners.results import DictRunResult
 from mthds.runners.runs import (
     PollInfo,
     RunRead,
@@ -40,9 +39,10 @@ from mthds.runners.types import RunnerType
 if TYPE_CHECKING:
     from typing_extensions import Self
 
-    from mthds.models.pipeline_inputs import PipelineInputs
-    from mthds.models.stuff import StuffType
-    from mthds.models.working_memory import WorkingMemoryAbstract
+    from mthds.protocol.pipe_output import VariableMultiplicity
+    from mthds.protocol.pipeline_inputs import PipelineInputs
+    from mthds.protocol.stuff import StuffType
+    from mthds.protocol.working_memory import WorkingMemoryAbstract
 
 # The SDK composes every endpoint from one origin (MTHDS_API_URL): `{base}/v1/{endpoint}`.
 # The same paths are served by the hosted MTHDS API (api.pipelex.com/v1) and by a bare

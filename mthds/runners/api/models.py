@@ -1,23 +1,46 @@
-"""Concrete run response with Dict-serialized output — the SDK's default
-materialization of the protocol's `RunResult`, shared by every runner
-implementation.
+"""Dict-serialized wire models — the SDK's concrete JSON materialization of the protocol's domain shapes.
+
+These are the JSON forms the runners deal in: each `Stuff` reduced to
+`{concept: <ref>, content}`, working memory as a flat root + aliases, the
+pipe-output as that working memory + a run id, and `DictRunResult` as the
+protocol's `RunResult` carrying a `DictPipeOutput`. The abstract (non-dict)
+domain shapes these mirror live in `mthds.protocol.*`.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from abc import ABC
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from mthds.models.pipe_output import DictPipeOutputAbstract
-from mthds.models.working_memory import DictStuffAbstract, DictWorkingMemoryAbstract
+from pydantic import BaseModel, ConfigDict
+
 from mthds.protocol.models import RunResult
 
 if TYPE_CHECKING:
-    from mthds.models.pipe_output import PipeOutputAbstract
-    from mthds.models.stuff import StuffType
-    from mthds.models.working_memory import WorkingMemoryAbstract
+    from mthds.protocol.pipe_output import PipeOutputAbstract
+    from mthds.protocol.stuff import StuffType
+    from mthds.protocol.working_memory import WorkingMemoryAbstract
 
 
 MAIN_STUFF_NAME = "main_stuff"
+
+
+class DictStuffAbstract(BaseModel, ABC):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    concept: str
+    content: Any
+
+
+class DictWorkingMemoryAbstract(BaseModel, ABC):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    root: dict[str, DictStuffAbstract]
+    aliases: dict[str, str]
+
+
+class DictPipeOutputAbstract(BaseModel, ABC):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    working_memory: DictWorkingMemoryAbstract
+    pipeline_run_id: str
 
 
 class DictRunResult(RunResult[DictPipeOutputAbstract]):

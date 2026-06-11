@@ -8,11 +8,11 @@ from typing_extensions import runtime_checkable
 from mthds.protocol.models import PipeOutputT
 
 if TYPE_CHECKING:
-    from mthds.models.pipe_output import VariableMultiplicity
-    from mthds.models.pipeline_inputs import PipelineInputs
-    from mthds.models.stuff import StuffType
-    from mthds.models.working_memory import WorkingMemoryAbstract
     from mthds.protocol.models import ModelCategory, ModelDeck, RunResult, ValidationReport, VersionInfo
+    from mthds.protocol.pipe_output import VariableMultiplicity
+    from mthds.protocol.pipeline_inputs import PipelineInputs
+    from mthds.protocol.stuff import StuffType
+    from mthds.protocol.working_memory import WorkingMemoryAbstract
 
 
 @runtime_checkable

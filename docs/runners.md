@@ -6,8 +6,8 @@ The `mthds` package is the Python client of any MTHDS runner: the hosted MTHDS A
 
 The protocol contract and its implementations live in separate packages:
 
-- `mthds/protocol/` — the MTHDS Protocol itself, nothing else: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the wire models mirroring `mthds-protocol.openapi.yaml`), `exceptions.py` (`PipelineRequestError`).
-- `mthds/runners/` — every runner implementation: `api_runner.py` (`MthdsAPIClient` — the API runner, one file with its helpers), `pipelex_runner.py` (the local CLI runner), `registry.py` (`create_runner`), plus the runner-side support modules (`results.py` for the concrete Dict responses, `runs.py` for the hosted run-lifecycle models, `exceptions.py` for runner errors).
+- `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResult`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
+- `mthds/runners/` — every runner implementation: `api/client.py` (`MthdsAPIClient` — the API runner, one file with its helpers) and `api/models.py` (the Dict-serialized wire models — `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResult` — the runners' concrete JSON materialization of the protocol's domain shapes); `pipelex_runner.py` (the local CLI runner); `registry.py` (`create_runner`); plus `runs.py` (hosted run-lifecycle models) and `exceptions.py` (runner errors).
 
 ## Configuration
 
@@ -25,7 +25,7 @@ The client composes every endpoint as `{MTHDS_API_URL}/v1/{endpoint}`. The same 
 `MTHDSProtocol` has exactly five methods — `execute`, `start`, `validate`, `models`, `version`:
 
 ```python
-from mthds.runners.api_runner import MthdsAPIClient
+from mthds.runners.api.client import MthdsAPIClient
 
 async with MthdsAPIClient() as client:
     # Synchronous execution — the full output comes back in the response

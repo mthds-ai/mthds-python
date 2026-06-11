@@ -3,7 +3,7 @@ from typing import Generic
 
 from pydantic import BaseModel, ConfigDict
 
-from mthds.models.working_memory import DictWorkingMemoryAbstract, WorkingMemoryType
+from mthds.protocol.working_memory import WorkingMemoryType
 
 VariableMultiplicity = bool | int
 
@@ -11,10 +11,4 @@ VariableMultiplicity = bool | int
 class PipeOutputAbstract(BaseModel, ABC, Generic[WorkingMemoryType]):
     model_config = ConfigDict(extra="forbid", strict=True)
     working_memory: WorkingMemoryType
-    pipeline_run_id: str
-
-
-class DictPipeOutputAbstract(BaseModel, ABC):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    working_memory: DictWorkingMemoryAbstract
     pipeline_run_id: str
