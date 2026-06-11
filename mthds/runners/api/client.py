@@ -438,7 +438,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
             try:
                 state = await asyncio.wait_for(self.get_run_result(run_id), timeout=remaining)
-            except TimeoutError as exc:
+            except asyncio.TimeoutError as exc:  # noqa: UP041 — on Python 3.10 asyncio.TimeoutError is its own class, distinct from builtin TimeoutError.
                 msg = (
                     f"Run {run_id} did not reach a terminal state within {opts.timeout_seconds}s; "
                     "it is still executing server-side and can be resumed by id."
