@@ -5,7 +5,7 @@ functions on top of the MTHDS Protocol, not protocol routes themselves):
 
 1. ``version``          — the public protocol handshake.
 2. Start & wait         — ``start`` immediately followed by ``wait_for_result``.
-3. Start only           — ``start`` returns the ``StartAck`` (grab the
+3. Start only           — ``start`` returns the 202 ack (grab the
                           ``pipeline_run_id``; the run keeps executing).
 4. Poll & get result    — ``wait_for_result`` by that ``pipeline_run_id``
                           (honors the server's ``Retry-After`` between polls).
@@ -71,14 +71,14 @@ async def main() -> None:
     # --- Scenario A: start & wait in one flow -------------------------------
     started_at = time.monotonic()
     ack_a = await client.start(mthds_contents=[bundle], inputs=INPUTS)
-    print(f"2. start & wait: started pipeline_run_id={ack_a.pipeline_run_id} (state={ack_a.state})")
+    print(f"2. start & wait: started pipeline_run_id={ack_a.pipeline_run_id}")
     results_a = await client.wait_for_result(ack_a.pipeline_run_id, WAIT)
     print(f"   completed in {time.monotonic() - started_at:.1f}s")
     summarize(results_a)
 
     # --- Scenario B: start only, then poll by id ----------------------------
     ack_b = await client.start(mthds_contents=[bundle], inputs=INPUTS)
-    print(f"3. start only: pipeline_run_id={ack_b.pipeline_run_id} (state={ack_b.state})")
+    print(f"3. start only: pipeline_run_id={ack_b.pipeline_run_id}")
 
     status = await client.get_run_status(ack_b.pipeline_run_id)
     print(f"   get_run_status: status={status.status} retry_after={status.retry_after_seconds}")

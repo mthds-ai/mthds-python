@@ -30,7 +30,10 @@ from mthds.runners.api_runner import MthdsAPIClient
 async with MthdsAPIClient() as client:
     # Synchronous execution — the full output comes back in the response
     result = await client.execute(mthds_contents=[bundle_text], inputs={"topic": {"concept": "Text", "content": "owls"}})
-    print(result.pipeline_run_id, result.state, result.main_stuff_name)
+    print(result.pipeline_run_id)                    # the protocol's two base fields...
+    print(result.pipe_output)
+    # anything else the server returned (run state, timestamps, output naming)
+    # is an implementation extension — preserved in result.model_extra
 
     # Validation (dry-run included); raises on an invalid bundle (HTTP 422 problem)
     report = await client.validate([bundle_text])
@@ -40,7 +43,7 @@ async with MthdsAPIClient() as client:
     info = await client.version()          # {protocol_version, runner_version} + server-specific extensions (info.model_extra)
 ```
 
-`execute` may raise `RunStillRunningError` if a server answers `202 + StartAck` (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`.
+`execute` may raise `RunStillRunningError` if a server answers 202 (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`. Both `execute` and `start` answer with the protocol's single `RunResult`: `pipeline_run_id` (mandatory, server-generated, authoritative) + `pipe_output` (present on a completed `execute`, absent on `start`), extension-open on the response side.
 
 ### Basic args vs extension args
 
@@ -60,14 +63,14 @@ async with MthdsAPIClient() as client:
     print(results.main_stuff)
 
     # Or step by step:
-    ack = await client.start(pipe_code="answer", inputs=inputs)         # POST /v1/start → 202 StartAck
+    ack = await client.start(pipe_code="answer", inputs=inputs)         # POST /v1/start → 202 (pipe_output absent)
     # server-specific args (defined by the server, not this SDK) ride `extra`:
     # ack = await client.start(inputs=inputs, extra={...})
     status = await client.get_run_status(ack.pipeline_run_id)                   # GET /v1/runs/{id}/status (self-healing)
     results = await client.wait_for_result(ack.pipeline_run_id)                 # polls GET /v1/runs/{id}/results
 ```
 
-- `start` carries the protocol's basic args only. Anything beyond them — including a client-supplied run identifier, where a server supports one — is server-specific and rides `extra`; see the server's own documentation for the extension args it accepts. The `pipeline_run_id` returned in `StartAck` is always the authoritative one.
+- `start` carries the protocol's basic args only. Anything beyond them — including a client-supplied run identifier, where a server supports one — is server-specific and rides `extra`; see the server's own documentation for the extension args it accepts. The `pipeline_run_id` returned by `start` is always the authoritative one.
 - `wait_for_result` resolves on `COMPLETED`, raises `RunFailedError` on any other terminal status, `RunTimeoutError` when its budget elapses (the run keeps executing — resume by id), and honors the server's `Retry-After`.
 
 ## Runners

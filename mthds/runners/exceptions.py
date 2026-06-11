@@ -35,7 +35,7 @@ class RunTimeoutError(PipelineRequestError):
 
 
 class RunStillRunningError(PipelineRequestError):
-    """Raised when `execute()` receives `202 + StartAck` instead of a final result.
+    """Raised when `execute()` receives a 202 instead of a final result.
 
     The MTHDS Protocol permits an implementation to degrade a synchronous
     `/execute` into an accepted-async response (202 with a `Location` header)

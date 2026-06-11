@@ -11,7 +11,7 @@ bare runner 404s these routes, which the client translates into
 `RunLifecycleUnavailableError`.
 
 Wire contract mirrors `pipelex-platform`:
-    POST /v1/start                  -> StartAck         (start, 202)
+    POST /v1/start                  -> RunResult ack    (start, 202)
     GET  /v1/runs/{pipeline_run_id}/status   -> RunRead          (status, self-healing)
     GET  /v1/runs/{pipeline_run_id}/results  -> 202 / 200 / 409  (results)
 """
@@ -35,9 +35,8 @@ if TYPE_CHECKING:
 class RunStatus(StrEnum):
     """Hosted run lifecycle status. Mirrors `pipelex_shared.schemas.run.RunStatus`.
 
-    A superset of the protocol's `RunState` (the hosted store tracks extra
-    states like `PENDING`). `STARTED` is deprecated server-side but kept here
-    for historical rows.
+    Run states are a hosted-implementation concept — the protocol defines none.
+    `STARTED` is deprecated server-side but kept here for historical rows.
     """
 
     PENDING = "PENDING"

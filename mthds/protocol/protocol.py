@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from mthds.models.pipeline_inputs import PipelineInputs
     from mthds.models.stuff import StuffType
     from mthds.models.working_memory import WorkingMemoryAbstract
-    from mthds.protocol.models import ModelCategory, ModelDeck, RunResult, StartAck, ValidationReport, VersionInfo
+    from mthds.protocol.models import ModelCategory, ModelDeck, RunResult, ValidationReport, VersionInfo
 
 
 @runtime_checkable
@@ -60,8 +60,8 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             Complete execution results including run state and output
 
         Raises:
-            RunStillRunningError: If the server answers `202 + StartAck` (the
-                protocol's optional async degrade) instead of a final result.
+            RunStillRunningError: If the server answers 202 (the protocol's
+                optional async degrade) instead of a final result.
             ClientAuthenticationError: If an API token is missing for API execution.
         """
         ...
@@ -76,7 +76,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         extra: dict[str, Any] | None = None,
-    ) -> StartAck[PipeOutputT]:
+    ) -> RunResult[PipeOutputT]:
         """Start a method asynchronously without waiting for completion.
 
         How completion is later delivered (webhooks, polling, anything else) is
@@ -94,7 +94,8 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
                 of truth for what it accepts.
 
         Returns:
-            StartAck with the authoritative `pipeline_run_id` and `created_at` timestamp
+            RunResult with the authoritative server-generated `pipeline_run_id`
+            (`pipe_output` absent)
 
         Raises:
             ClientAuthenticationError: If an API token is missing for API execution.

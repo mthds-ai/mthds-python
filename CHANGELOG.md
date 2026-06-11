@@ -11,12 +11,13 @@
 
 ### Removed
 
+- **`StartAck`, `RunResponse`, `RunState`, and the run-metadata response fields are gone — one `RunResult`, two base fields.** The protocol's single run response is `RunResult{pipeline_run_id, pipe_output}` (`pipeline_run_id` mandatory and authoritative; `pipe_output` present on a completed `execute`, absent on `start`), extension-open. `state`, `created_at`, `finished_at`, and `main_stuff_name` are implementation extension fields — they ride `model_extra`, never named by the SDK. `start` now returns the same `DictRunResult` as `execute`; `DictStartAck` is deleted; run states are a hosted/implementation concept (`RunStatus` in the run-lifecycle extension models is unchanged).
 - **Request-side `pipeline_run_id` dropped from the protocol surface.** It is not a protocol argument: `MTHDSProtocol.start`, `MthdsAPIClient.start`/`start_and_wait`, and `StartRequest` no longer name it. A server that accepts a client-supplied run identifier defines it as an extension arg — pass it through `extra` like any other. The `pipeline_run_id` in responses (`StartAck`, run-lifecycle reads) is unchanged and always authoritative.
 - **All legacy config support.** Dropped the `~/.mthds/credentials` / `config.json` / `.env.local` auto-migration and the `PIPELEX_API_URL` / `PIPELEX_API_KEY` read aliases. Only the canonical `MTHDS_*` keys in `~/.mthds/config` are recognized — set them with the `mthds` CLI.
 
 ### Added
 
-- `start_and_wait(...)` — the whole async lifecycle in one call: `start` (202 StartAck) followed by `wait_for_result` on the returned run id. Accepts all `start` args (including the generic `extra` passthrough) plus `wait_options` for poll tuning.
+- `start_and_wait(...)` — the whole async lifecycle in one call: `start` (202 ack) followed by `wait_for_result` on the returned run id. Accepts all `start` args (including the generic `extra` passthrough) plus `wait_options` for poll tuning.
 - `examples/run_lifecycle_demo.py` + `examples/invoice_reimbursement.mthds` — an end-to-end demo of the run lifecycle against the hosted API (version, start & wait, start-only, poll-by-id, single-shot get), verified live.
 
 ## [v0.4.0] - 2026-06-10

@@ -80,14 +80,16 @@ class TestMthdsAPIClientLifecycle:
     # ── start ────────────────────────────────────────────────────
 
     def test_start_returns_start_ack(self, mocker: MockerFixture) -> None:
-        """A 202 from POST /v1/start parses into a StartAck with the authoritative run_id."""
+        """A 202 from POST /v1/start parses into a RunResult ack with the authoritative run_id."""
         client = self._client()
         body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
 
         ack = asyncio.run(client.start(pipe_code="answer"))
         assert ack.pipeline_run_id == "run_1"
-        assert ack.created_at == "2026-06-10T00:00:00Z"
+        assert ack.pipe_output is None
+        assert ack.model_extra is not None
+        assert ack.model_extra["created_at"] == "2026-06-10T00:00:00Z"  # server extension field, preserved
 
     def test_start_request_prunes_absent_fields(self, mocker: MockerFixture) -> None:
         """Absent fields are pruned from the start body (exclude_none)."""
@@ -242,7 +244,7 @@ class TestMthdsAPIClientLifecycle:
     # ── execute 202 degrade (protocol MAY; eng-review 3B) ────────
 
     def test_execute_202_raises_typed_still_running(self, mocker: MockerFixture) -> None:
-        """A 202 + StartAck on execute raises RunStillRunningError carrying run_id + hints."""
+        """A 202 on execute raises RunStillRunningError carrying run_id + hints."""
         client = self._client()
         body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         headers = {"Retry-After": "10", "Location": "/v1/runs/run_1/results"}

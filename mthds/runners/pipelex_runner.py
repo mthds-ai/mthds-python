@@ -14,9 +14,9 @@ from mthds.models.pipe_output import DictPipeOutputAbstract, VariableMultiplicit
 from mthds.models.pipeline_inputs import PipelineInputs
 from mthds.models.stuff import StuffType
 from mthds.models.working_memory import DictWorkingMemoryAbstract, WorkingMemoryAbstract
-from mthds.protocol.models import MAIN_STUFF_NAME, ModelCategory, ModelDeck, RunState, ValidationReport, VersionInfo
+from mthds.protocol.models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
-from mthds.runners.results import DictRunResult, DictStartAck
+from mthds.runners.results import MAIN_STUFF_NAME, DictRunResult
 from mthds.runners.types import RunnerType
 
 
@@ -112,12 +112,14 @@ def _run_result_from_working_memory_dump(raw_memory: dict[str, Any]) -> DictRunR
     aliases_obj = raw_memory.get("aliases", {})
     aliases: dict[str, str] = cast("dict[str, str]", aliases_obj) if isinstance(aliases_obj, dict) else {}
     working_memory = DictWorkingMemoryAbstract.model_validate({"root": dict_root, "aliases": aliases})
-    return DictRunResult(
-        pipeline_run_id="",
-        created_at="",
-        state=RunState.COMPLETED,
-        pipe_output=DictPipeOutputAbstract(working_memory=working_memory, pipeline_run_id=""),
-        main_stuff_name=aliases.get(MAIN_STUFF_NAME, MAIN_STUFF_NAME),
+    # `main_stuff_name` is a pipelex extension field — validated construction
+    # keeps it in `model_extra` without naming it a typed parameter.
+    return DictRunResult.model_validate(
+        {
+            "pipeline_run_id": "",
+            "pipe_output": DictPipeOutputAbstract(working_memory=working_memory, pipeline_run_id=""),
+            "main_stuff_name": aliases.get(MAIN_STUFF_NAME, MAIN_STUFF_NAME),
+        }
     )
 
 
@@ -248,7 +250,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         extra: dict[str, Any] | None = None,
-    ) -> DictStartAck:
+    ) -> DictRunResult:
         """Start a method asynchronously — not supported by the pipelex CLI.
 
         Args:

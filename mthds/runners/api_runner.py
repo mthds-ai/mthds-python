@@ -22,7 +22,7 @@ from mthds.runners.exceptions import (
     RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.runners.results import DictRunResult, DictStartAck
+from mthds.runners.results import DictRunResult
 from mthds.runners.runs import (
     PollInfo,
     RunRead,
@@ -192,8 +192,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             Complete execution results including run state and output
 
         Raises:
-            RunStillRunningError: If the server answers `202 + StartAck` (the protocol's
-                optional async degrade) — the run continues server-side; resume by `run_id`.
+            RunStillRunningError: If the server answers 202 (the protocol's optional
+                async degrade) — the run continues server-side; resume by `run_id`.
         """
         if not pipe_code and not mthds_contents and not extra:
             msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API execute."
@@ -225,8 +225,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         extra: dict[str, Any] | None = None,
-    ) -> DictStartAck:
-        """Start a method asynchronously — `POST /v1/start` (202 StartAck).
+    ) -> DictRunResult:
+        """Start a method asynchronously — `POST /v1/start` (202, `pipe_output` absent).
 
         Args:
             pipe_code: The code identifying the pipe to execute
@@ -242,9 +242,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 `PipelineRequestError`).
 
         Returns:
-            StartAck with the authoritative `pipeline_run_id` and `created_at`
-            timestamp. On a hosted deployment the id is durable — poll
-            `get_run_status` / `get_run_result`.
+            RunResult with the authoritative server-generated `pipeline_run_id`
+            (`pipe_output` absent). On a hosted deployment the id is durable —
+            poll `get_run_status` / `get_run_result`.
         """
         if not pipe_code and not mthds_contents and not extra:
             msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API start."
@@ -263,7 +263,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         content = start_request.model_dump_json(exclude_none=True).encode("utf-8")
         response = await self._send("POST", self._url("start"), content=content, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
-        return DictStartAck.from_api_response(response.json())
+        return DictRunResult.from_api_response(response.json())
 
     @override
     async def validate(
@@ -321,7 +321,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         return VersionInfo.model_validate(response.json())
 
     def _raise_if_execute_degraded(self, response: httpx.Response) -> None:
-        """Map the protocol's optional `202 + StartAck` execute degrade to a typed error.
+        """Map the protocol's optional 202 execute degrade to a typed error.
 
         Hosted does not emit 202 today, but the protocol permits it; raising a typed
         error (with the `run_id` + `Location` + `Retry-After` hints) beats a generic
@@ -464,7 +464,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     ) -> RunResults:
         """Start a run and poll it to completion — the whole async lifecycle in one call.
 
-        Convenience wrapper: `start` (202 StartAck) followed by `wait_for_result`
+        Convenience wrapper: `start` (202 ack) followed by `wait_for_result`
         on the returned `pipeline_run_id`. This is the durable way to run long
         methods on the hosted API (the run survives client disconnects and the
         gateway's synchronous cap). All `start` args apply, including the generic

@@ -1,7 +1,7 @@
 """Wire models for the MTHDS Protocol — mirrors `mthds-protocol.openapi.yaml` (the standard's normative artifact).
 
-    POST /execute  : RunRequest   -> RunResult (200)
-    POST /start    : StartRequest -> StartAck (202)
+    POST /execute  : RunRequest   -> RunResult (200, pipe_output present)
+    POST /start    : StartRequest -> RunResult (202, pipe_output absent)
     POST /validate :              -> ValidationReport
     GET  /models   :              -> ModelDeck
     GET  /version  :              -> VersionInfo
@@ -19,7 +19,6 @@ principle as the request-side `extra`.
 
 from __future__ import annotations
 
-from abc import ABC
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -38,8 +37,6 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
     from mthds.models.stuff import StuffType
-
-MAIN_STUFF_NAME = "main_stuff"
 
 PipeOutputT = TypeVar("PipeOutputT")
 
@@ -174,57 +171,38 @@ class StartRequest(RunRequest):
     """
 
 
-# ── Run responses (`POST /execute` 200, `POST /start` 202) ───────────
+# ── Run response (`POST /execute` 200, `POST /start` 202) ────────────
 
 
-class RunState(StrEnum):
-    """Run lifecycle state — mirrors the protocol's `RunState` enum."""
+class RunResult(BaseModel, Generic[PipeOutputT]):
+    """The protocol's single run response — `POST /execute` 200 (`pipe_output`
+    present), `POST /start` 202 and the optional `/execute` 202 degrade
+    (`pipe_output` absent).
 
-    STARTED = "STARTED"
-    RUNNING = "RUNNING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-    CANCELLED = "CANCELLED"
-    ERROR = "ERROR"
+    Exactly two base fields: the authoritative server-generated
+    `pipeline_run_id` and the method's `pipe_output`. Anything more an
+    implementation returns (a run state, timestamps, output naming, anything
+    else) is an extension field — preserved as accessible attributes
+    (`extra="allow"`), never named by this SDK.
+    """
 
-
-class RunResponse(BaseModel):
-    """Common shape of the protocol's run responses (`StartAck` ⊂ `RunResult`)."""
+    model_config = ConfigDict(extra="allow")
 
     pipeline_run_id: str
-    created_at: str
-    state: RunState
-    finished_at: str | None = None
-    main_stuff_name: str | None = None
+    pipe_output: PipeOutputT | None = None
 
     @classmethod
     def from_api_response(cls, response: dict[str, Any]) -> Self:
-        """Create a run response from an API response dictionary.
+        """Create a run result from an API response dictionary.
 
         Args:
             response: Dictionary containing the API response data
 
         Returns:
-            Run response instance created from the response data
+            Run result instance created from the response data
 
         """
         return cls.model_validate(response)
-
-
-class RunResult(RunResponse, ABC, Generic[PipeOutputT]):
-    """Abstract result of a completed execution (`POST /execute` 200, callback
-    payloads) — includes `pipe_output`.
-    """
-
-    pipe_output: PipeOutputT
-
-
-class StartAck(RunResponse, ABC, Generic[PipeOutputT]):
-    """Abstract ack of a started execution (`POST /start` 202); `pipe_output`
-    is absent on the wire and optional here for implementation extensions.
-    """
-
-    pipe_output: PipeOutputT | None = None
 
 
 # ── Discovery + validation (`POST /validate`, `GET /models`, `GET /version`) ──
