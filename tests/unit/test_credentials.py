@@ -1,4 +1,4 @@
-"""Tests for mthds.config.credentials — load, get, set, and resolve_key."""
+"""Tests for mthds.config.credentials — load, get, set, resolve_key."""
 
 from pathlib import Path
 
@@ -19,15 +19,16 @@ class TestCredentials:
 
     @pytest.fixture(autouse=True)
     def _isolate_credentials(self, tmp_path: Path, mocker: MockerFixture) -> None:
-        """Redirect credentials I/O to a temporary directory and reset migration flag."""
+        """Redirect config I/O to a temporary directory."""
         config_dir = tmp_path / ".mthds"
         config_dir.mkdir()
-        credentials_path = config_dir / "credentials"
+        credentials_path = config_dir / "config"
 
         mocker.patch("mthds.config.credentials.CONFIG_DIR", config_dir)
-        mocker.patch("mthds.config.credentials.CREDENTIALS_PATH", credentials_path)
-        # Prevent legacy-migration side effects
-        mocker.patch("mthds.config.credentials._migrate_if_needed")
+        mocker.patch("mthds.config.credentials.CONFIG_PATH", credentials_path)
+        # Hermetic env: a real MTHDS_* var on the dev/CI machine must not leak in.
+        # Tests that need env vars layer their own mocker.patch.dict on top of this clean slate.
+        mocker.patch.dict("os.environ", clear=True)
 
     # ── resolve_key ──────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ class TestCredentials:
         """An unknown CLI flag returns None."""
         assert resolve_key("nonexistent-key") is None
 
-    # ── _parse_dotenv (exercised through load/get/set) ───────────
+    # ── load_credentials: defaults / file / env ──────────────────
 
     def test_load_credentials_returns_defaults_when_no_file(self) -> None:
         """With no credentials file, defaults are returned."""
@@ -60,8 +61,8 @@ class TestCredentials:
 
     def test_load_credentials_reads_file(self, tmp_path: Path) -> None:
         """Values written to the credentials file override defaults."""
-        creds_path = tmp_path / ".mthds" / "credentials"
-        creds_path.write_text("MTHDS_RUNNER=pipelex\nPIPELEX_API_KEY=my-secret\n", encoding="utf-8")
+        creds_path = tmp_path / ".mthds" / "config"
+        creds_path.write_text("MTHDS_RUNNER=pipelex\nMTHDS_API_KEY=my-secret\n", encoding="utf-8")
 
         creds = load_credentials()
         assert creds["runner"] == "pipelex"
@@ -71,7 +72,7 @@ class TestCredentials:
 
     def test_load_credentials_env_overrides_file(self, tmp_path: Path, mocker: MockerFixture) -> None:
         """Environment variables take precedence over file values."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text("MTHDS_RUNNER=pipelex\n", encoding="utf-8")
 
         mocker.patch.dict("os.environ", {"MTHDS_RUNNER": "api"})
@@ -81,7 +82,7 @@ class TestCredentials:
 
     def test_load_credentials_env_overrides_defaults(self, mocker: MockerFixture) -> None:
         """Environment variables take precedence over defaults (no file)."""
-        mocker.patch.dict("os.environ", {"PIPELEX_API_KEY": "env-key-value"})
+        mocker.patch.dict("os.environ", {"MTHDS_API_KEY": "env-key-value"})
 
         creds = load_credentials()
         assert creds["api_key"] == "env-key-value"
@@ -98,8 +99,8 @@ class TestCredentials:
 
     def test_get_credential_value_file_source(self, tmp_path: Path) -> None:
         """When value comes from file, source is FILE."""
-        creds_path = tmp_path / ".mthds" / "credentials"
-        creds_path.write_text("PIPELEX_API_KEY=file-key\n", encoding="utf-8")
+        creds_path = tmp_path / ".mthds" / "config"
+        creds_path.write_text("MTHDS_API_KEY=file-key\n", encoding="utf-8")
 
         entry = get_credential_value("api_key")
         assert entry.value == "file-key"
@@ -108,7 +109,7 @@ class TestCredentials:
 
     def test_get_credential_value_env_source(self, mocker: MockerFixture) -> None:
         """When value comes from env, source is ENV and it wins over file."""
-        mocker.patch.dict("os.environ", {"PIPELEX_API_URL": "https://custom.url"})
+        mocker.patch.dict("os.environ", {"MTHDS_API_URL": "https://custom.url"})
 
         entry = get_credential_value("api_url")
         assert entry.value == "https://custom.url"
@@ -121,19 +122,29 @@ class TestCredentials:
         """Setting a value creates the credentials file with the entry."""
         set_credential_value("runner", "pipelex")
 
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         content = creds_path.read_text(encoding="utf-8")
         assert "MTHDS_RUNNER=pipelex" in content
 
+    def test_set_credential_value_uses_new_key(self, tmp_path: Path) -> None:
+        """Setting api_url / api_key writes the new MTHDS_ storage keys."""
+        set_credential_value("api_url", "https://alt.api.com")
+        set_credential_value("api_key", "fresh-key")
+
+        creds_path = tmp_path / ".mthds" / "config"
+        content = creds_path.read_text(encoding="utf-8")
+        assert "MTHDS_API_URL=https://alt.api.com" in content
+        assert "MTHDS_API_KEY=fresh-key" in content
+
     def test_set_credential_value_preserves_other_keys(self, tmp_path: Path) -> None:
         """Setting one key does not remove other keys from the file."""
-        creds_path = tmp_path / ".mthds" / "credentials"
-        creds_path.write_text("PIPELEX_API_KEY=existing\n", encoding="utf-8")
+        creds_path = tmp_path / ".mthds" / "config"
+        creds_path.write_text("MTHDS_API_KEY=existing\n", encoding="utf-8")
 
         set_credential_value("runner", "pipelex")
 
         content = creds_path.read_text(encoding="utf-8")
-        assert "PIPELEX_API_KEY=existing" in content
+        assert "MTHDS_API_KEY=existing" in content
         assert "MTHDS_RUNNER=pipelex" in content
 
     def test_set_then_get_round_trip(self) -> None:
@@ -148,7 +159,7 @@ class TestCredentials:
 
     def test_load_credentials_ignores_comments_and_blanks(self, tmp_path: Path) -> None:
         """Comments and blank lines in the credentials file are ignored."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text(
             "# This is a comment\n\nMTHDS_RUNNER=pipelex\n\n# Another comment\n",
             encoding="utf-8",

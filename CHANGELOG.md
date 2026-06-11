@@ -1,5 +1,29 @@
 # Changelog
 
+## [v0.4.0] - 2026-06-11
+
+The MTHDS Protocol release: `mthds-python` is reorganized around the [MTHDS Protocol](https://mthds.ai) standard — one `/v1` HTTP surface, a slim `mthds.protocol` package, and per-runner implementations under `mthds.runners`.
+
+### Breaking Changes
+
+- **`RunnerProtocol` → `MTHDSProtocol`.** The runner abstraction now mirrors the protocol's five routes: `execute` (was `execute_pipeline`), `start` (was `start_pipeline`), plus the new `validate`, `models`, `version`. `execute`/`start` carry the protocol's basic args only — `pipe_code`, `mthds_contents`, `inputs`, `output_name`, `output_multiplicity`, `dynamic_output_concept_ref` — plus a generic `extra` mapping for server-specific extension args (protocol args inside `extra` are rejected client-side).
+- **Package restructure — `mthds.client` is gone.** The protocol lives in `mthds.protocol`: `protocol.py` (`MTHDSProtocol`), `models.py` (the wire models), `exceptions.py` (`PipelineRequestError`), and the domain shapes `concept` / `stuff` / `working_memory` / `pipe_output` / `pipeline_inputs`. Implementations live in `mthds.runners`: `api.client` (`MthdsAPIClient`), `api.models` (Dict wire models + `DictRunResult`), `api.runs` (hosted polling), `api.exceptions`, and `pipelex.runner` (`PipelexRunner`). The `mthds.models` package, the `create_runner` factory (`registry.py`), and `ApiRunner` are removed — construct the runner you need directly. Layering is strict: `mthds.protocol` depends on nothing under `mthds.runners`.
+- **Single `/v1` base path.** `MthdsAPIClient` composes every endpoint as `{MTHDS_API_URL}/v1/{endpoint}`; the old `runner/v1` / `platform/v1` prefixes are gone. Requires the hosted MTHDS API after the `/v1` cutover, or a `pipelex-api` image that mounts at `/v1`.
+- **No request model.** There is no `RunRequest` class; the runner assembles the request body from the basic args + the `extra` passthrough and serializes it with `pydantic_core.to_json` (which handles pydantic `inputs`). A server that wants a typed request model (e.g. pipelex-api) defines its own.
+- **Two run responses, one per route.** `execute` answers with `RunResultExecute{pipeline_run_id, pipe_output}` (both required — a completed run always has output); `start` answers with `RunResultStart{pipeline_run_id}` (just the authoritative id; the output is delivered later, out of band). Both are extension-open (`extra="allow"`): run states, timestamps, output naming, workflow ids ride `model_extra`, never named by the SDK. There is no `StartAck` / `RunState`, and the request side carries no `pipeline_run_id` (a client-supplied run id is an extension arg via `extra`).
+- **Discovery/validation response models slimmed, extension-open.** `VersionInfo` = `{protocol_version, runner_version?}` (runner_version optional); `ValidationReport` declares no body fields (the 200 IS the verdict); `ModelDeck` = `models[{name, type}]`. Everything else a server returns rides `model_extra` — the response-side mirror of the request-side `extra`.
+- **Config unified to `~/.mthds/config`.** The client reads/writes the same dotenv file and `MTHDS_*` keys as the `mthds` CLI (mthds-js). Legacy support is dropped: `~/.mthds/credentials`, `config.json`, `.env.local`, and the `PIPELEX_API_URL` / `PIPELEX_API_KEY` read aliases.
+
+### Added
+
+- `validate(mthds_contents, allow_signatures)` → `ValidationReport`; `models(category)` → `ModelDeck`; `version()` → `VersionInfo` — on both `MthdsAPIClient` and `PipelexRunner` (the local CLI runner implements `validate` + `version`; `models` / `start` raise `NotImplementedError`).
+- The hosted run-lifecycle extension on `MthdsAPIClient`: `start` (202), `get_run_status`, `get_run_result`, `wait_for_result`, and `start_and_wait(...)` — the whole async lifecycle in one call. Bare runners (no run store) raise `RunLifecycleUnavailableError`.
+- Typed errors `RunStillRunningError` (a `202` degrade on `execute`) and `RunLifecycleUnavailableError`.
+
+### Docs
+
+- Library-first README — `mthds-python` has no CLI (the `mthds` CLI ships as the npm package); `CLI.md` removed. Protocol + runners reference in `docs/runners.md`.
+
 ## [v0.3.0] - 2026-04-29
 
 ### Breaking Changes
