@@ -1,15 +1,14 @@
 """Wire models for the MTHDS Protocol — mirrors `mthds-protocol.openapi.yaml` (the standard's normative artifact).
 
-    POST /execute  : RunRequest   -> RunResult (200, pipe_output present)
-    POST /start    : RunRequest   -> RunResult (202, pipe_output absent)
+    POST /execute  : -> RunResult (200, pipe_output present)
+    POST /start    : -> RunResult (202, pipe_output absent)
     POST /validate :              -> ValidationReport
     GET  /models   :              -> ModelDeck
     GET  /version  :              -> VersionInfo
 
-Request models declare the protocol's BASIC arguments only and are
-extension-open (`extra="allow"`): an implementation may accept extra request
-properties, and any extension arg given to a constructor is kept and
-serialized to the wire instead of being silently dropped.
+The protocol has no request *model*: the SDK runners take the request's basic
+arguments as named parameters and serialize the wire body directly, merging
+any server-specific extension args as top-level properties.
 
 Response models declare the protocol's BASE fields only and are extension-open
 too: an implementation may return more, and those server-specific fields are
@@ -19,52 +18,14 @@ principle as the request-side `extra`.
 
 from __future__ import annotations
 
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic.functional_validators import SkipValidation
-from typing_extensions import Annotated
 
 from mthds._compat import StrEnum
 from mthds._utils.pydantic_utils import empty_list_factory_of
-from mthds.models.pipe_output import VariableMultiplicity
-from mthds.models.pipeline_inputs import PipelineInputs
-from mthds.models.working_memory import WorkingMemoryAbstract
 
 PipeOutputT = TypeVar("PipeOutputT")
-
-
-# ── Requests (`POST /execute`, `POST /start`) ────────────────────────
-
-
-class RunRequest(BaseModel):
-    """Body of the protocol's `POST /execute` — mirrors `RunRequest` in
-    `mthds-protocol.openapi.yaml`.
-
-    The declared fields are the protocol's **basic** arguments. The model is
-    deliberately open (`extra="allow"`): an implementation may accept extra
-    request properties, and any extension arg given to the constructor is kept
-    and serialized to the wire instead of being silently dropped.
-
-    Attributes:
-        pipe_code (str | None): Code of the pipe to execute
-        mthds_contents (list[str] | None): List of MTHDS bundle contents to load
-        inputs (PipelineInputs | WorkingMemory | None): Inputs in PipelineInputs format - Pydantic validation is skipped
-            to preserve the flexible format (dicts, strings, StuffContent objects, etc.)
-        output_name (str | None): Name of the output slot to write to
-        output_multiplicity (VariableMultiplicity | None): Output multiplicity setting
-        dynamic_output_concept_ref (str | None): Override for the dynamic output concept ref
-
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    pipe_code: str | None = None
-    mthds_contents: list[str] | None = None
-    inputs: Annotated[PipelineInputs | WorkingMemoryAbstract[Any] | None, SkipValidation] = None
-    output_name: str | None = None
-    output_multiplicity: VariableMultiplicity | None = None
-    dynamic_output_concept_ref: str | None = None
 
 
 # ── Run response (`POST /execute` 200, `POST /start` 202) ────────────

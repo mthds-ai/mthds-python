@@ -8,12 +8,13 @@ from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
 
 import httpx
+from pydantic_core import to_json
 from typing_extensions import override
 
 from mthds.config.credentials import load_credentials
 from mthds.models.pipe_output import DictPipeOutputAbstract, VariableMultiplicity
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.protocol.models import ModelCategory, ModelDeck, RunRequest, ValidationReport, VersionInfo
+from mthds.protocol.models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.exceptions import (
     ClientAuthenticationError,
@@ -37,8 +38,6 @@ from mthds.runners.runs import (
 from mthds.runners.types import RunnerType
 
 if TYPE_CHECKING:
-    from collections.abc import KeysView
-
     from typing_extensions import Self
 
     from mthds.models.pipeline_inputs import PipelineInputs
@@ -199,17 +198,16 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API execute."
             raise PipelineRequestError(msg)
 
-        extensions = _build_extensions(extra, protocol_fields=RunRequest.model_fields.keys())
-        run_request = RunRequest(
+        body = _build_run_body(
             pipe_code=pipe_code,
             mthds_contents=mthds_contents,
             inputs=inputs,
             output_name=output_name,
             output_multiplicity=output_multiplicity,
             dynamic_output_concept_ref=dynamic_output_concept_ref,
-            **extensions,
+            extra=extra,
         )
-        content = run_request.model_dump_json().encode("utf-8")
+        content = to_json(body)
         response = await self._send("POST", self._url("execute"), content=content, request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS)
         self._raise_if_execute_degraded(response)
         response.raise_for_status()
@@ -250,17 +248,17 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API start."
             raise PipelineRequestError(msg)
 
-        extensions = _build_extensions(extra, protocol_fields=RunRequest.model_fields.keys())
-        start_request = RunRequest(
+        body = _build_run_body(
             pipe_code=pipe_code,
             mthds_contents=mthds_contents,
             inputs=inputs,
             output_name=output_name,
             output_multiplicity=output_multiplicity,
             dynamic_output_concept_ref=dynamic_output_concept_ref,
-            **extensions,
+            extra=extra,
+            exclude_none=True,
         )
-        content = start_request.model_dump_json(exclude_none=True).encode("utf-8")
+        content = to_json(body)
         response = await self._send("POST", self._url("start"), content=content, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
         return DictRunResult.model_validate(response.json())
@@ -506,7 +504,53 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 _KNOWN_RUN_STATUS_NAMES: frozenset[str] = frozenset(RunStatus.__members__)
 
 
-def _build_extensions(extra: dict[str, Any] | None, protocol_fields: KeysView[str]) -> dict[str, Any]:
+# The protocol's basic request args — the named parameters of execute()/start().
+# Anything else a caller passes is an extension arg: it rides `extra` and merges
+# into the body as a top-level property. A protocol arg smuggled through `extra`
+# is rejected (it must be passed as a named parameter).
+_PROTOCOL_REQUEST_ARGS: frozenset[str] = frozenset(
+    {"pipe_code", "mthds_contents", "inputs", "output_name", "output_multiplicity", "dynamic_output_concept_ref"}
+)
+
+
+def _build_run_body(
+    *,
+    pipe_code: str | None,
+    mthds_contents: list[str] | None,
+    inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None,
+    output_name: str | None,
+    output_multiplicity: VariableMultiplicity | None,
+    dynamic_output_concept_ref: str | None,
+    extra: dict[str, Any] | None,
+    exclude_none: bool = False,
+) -> dict[str, Any]:
+    """Assemble the `/execute` | `/start` request body — the protocol has no request model.
+
+    The body is a plain mapping of the protocol's basic args plus any
+    server-specific extension args (merged as top-level properties). `inputs`
+    may carry pydantic objects (StuffContent, working memory), so the caller
+    serializes the returned mapping with `pydantic_core.to_json`, which handles
+    them. With `exclude_none`, absent fields are pruned from the wire body.
+
+    Raises:
+        PipelineRequestError: If `extra` carries a protocol arg.
+    """
+    extensions = _build_extensions(extra)
+    body: dict[str, Any] = {
+        "pipe_code": pipe_code,
+        "mthds_contents": mthds_contents,
+        "inputs": inputs,
+        "output_name": output_name,
+        "output_multiplicity": output_multiplicity,
+        "dynamic_output_concept_ref": dynamic_output_concept_ref,
+        **extensions,
+    }
+    if exclude_none:
+        body = {key: value for key, value in body.items() if value is not None}
+    return body
+
+
+def _build_extensions(extra: dict[str, Any] | None) -> dict[str, Any]:
     """Validate and copy the generic `extra` passthrough.
 
     Extension args ride the request body as top-level properties; the protocol's
@@ -514,16 +558,15 @@ def _build_extensions(extra: dict[str, Any] | None, protocol_fields: KeysView[st
 
     Args:
         extra: Server-specific extension args from the caller, or None.
-        protocol_fields: The protocol-arg names of the target request model.
 
     Returns:
-        A mutable copy of `extra` safe to merge named extensions into.
+        A mutable copy of `extra` safe to merge into the body.
 
     Raises:
         PipelineRequestError: If `extra` carries a protocol arg.
     """
     extensions: dict[str, Any] = dict(extra or {})
-    protocol_overlap = extensions.keys() & protocol_fields
+    protocol_overlap = extensions.keys() & _PROTOCOL_REQUEST_ARGS
     if protocol_overlap:
         msg = f"extra carries protocol args {sorted(protocol_overlap)} — pass them as named parameters instead."
         raise PipelineRequestError(msg)

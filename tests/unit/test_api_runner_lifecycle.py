@@ -115,6 +115,40 @@ class TestMthdsAPIClientLifecycle:
         assert '"priority":3' in sent
         assert '"pipe_code":"answer"' in sent
 
+    def test_start_body_carries_inline_bundle_and_inputs(self, mocker: MockerFixture) -> None:
+        """An inline bundle, inputs, and output controls all reach the wire body (to_json serialization)."""
+        client = self._client()
+        body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
+
+        asyncio.run(
+            client.start(
+                mthds_contents=["domain answer"],
+                pipe_code="answer",
+                inputs={"question": "why?"},
+                output_name="result",
+                output_multiplicity=3,
+                dynamic_output_concept_ref="answer.Answer",
+            )
+        )
+        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
+        assert '"mthds_contents":["domain answer"]' in sent
+        assert '"inputs":{"question":"why?"}' in sent
+        assert '"output_name":"result"' in sent
+        assert '"output_multiplicity":3' in sent
+        assert '"dynamic_output_concept_ref":"answer.Answer"' in sent
+
+    def test_execute_body_keeps_null_basic_args(self, mocker: MockerFixture) -> None:
+        """execute() does NOT prune absent fields — null basic args stay in the body (no exclude_none, unlike start)."""
+        client = self._client()
+        body = {"pipeline_run_id": "run_1", "pipe_output": None}
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
+
+        asyncio.run(client.execute(pipe_code="answer"))
+        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
+        assert '"pipe_code":"answer"' in sent
+        assert '"output_name":null' in sent
+
     def test_start_extra_rejects_protocol_args(self) -> None:
         """`extra` is for extension args only — a protocol arg inside it raises a clear client-side error."""
         client = self._client()
