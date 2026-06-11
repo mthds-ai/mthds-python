@@ -82,7 +82,3 @@ Construct a runner directly — both implement `MTHDSProtocol`:
 
 - `MthdsAPIClient` (`mthds.runners.api.client`) — the API runner; also serves the hosted run-lifecycle extension.
 - `PipelexRunner` (`mthds.runners.pipelex.runner`) — shells out to a locally installed `pipelex` CLI (`execute` via `pipelex run`, `validate` via `pipelex validate`, `version` via `pipelex --version`; `start`/`models` raise `NotImplementedError`).
-
-## Runnable example
-
-`examples/run_lifecycle_demo.py` exercises the whole lifecycle against the hosted API — `version`, start & wait, start-only, poll-by-id, and a single-shot get — over the `examples/invoice_reimbursement.mthds` batch method. Configure your key (`mthds config set api-key …`) and run `python examples/run_lifecycle_demo.py`.

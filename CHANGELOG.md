@@ -21,7 +21,6 @@
 ### Added
 
 - `start_and_wait(...)` — the whole async lifecycle in one call: `start` (202 ack) followed by `wait_for_result` on the returned run id. Accepts all `start` args (including the generic `extra` passthrough) plus `wait_options` for poll tuning.
-- `examples/run_lifecycle_demo.py` + `examples/invoice_reimbursement.mthds` — an end-to-end demo of the run lifecycle against the hosted API (version, start & wait, start-only, poll-by-id, single-shot get), verified live.
 
 ## [v0.4.0] - 2026-06-10
 

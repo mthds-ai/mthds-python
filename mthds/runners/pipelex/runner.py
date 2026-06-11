@@ -1,5 +1,7 @@
 """Pipelex runner — implements MTHDSProtocol by delegating to the pipelex CLI."""
 
+# TODO: refacto
+
 import json
 import re
 import shutil
