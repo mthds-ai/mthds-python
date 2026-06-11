@@ -1,5 +1,5 @@
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.runners.runs import RunStatus
+from mthds.runners.api.runs import RunStatus
 
 
 class ClientAuthenticationError(Exception):

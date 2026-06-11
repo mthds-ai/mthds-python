@@ -1,9 +1,9 @@
-"""Tests for mthds.runners.runs — run-lifecycle models for the hosted polling surface."""
+"""Tests for mthds.runners.api.runs — run-lifecycle models for the hosted polling surface."""
 
 import pytest
 from pydantic import TypeAdapter
 
-from mthds.runners.runs import (
+from mthds.runners.api.runs import (
     RunStatus,
 )
 

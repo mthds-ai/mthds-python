@@ -7,7 +7,10 @@ The `mthds` package is the Python client of any MTHDS runner: the hosted MTHDS A
 The protocol contract and its implementations live in separate packages:
 
 - `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResult`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
-- `mthds/runners/` — every runner implementation: `api/client.py` (`MthdsAPIClient` — the API runner, one file with its helpers) and `api/models.py` (the Dict-serialized wire models — `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResult` — the runners' concrete JSON materialization of the protocol's domain shapes); `pipelex_runner.py` (the local CLI runner); `registry.py` (`create_runner`); plus `runs.py` (hosted run-lifecycle models) and `exceptions.py` (runner errors).
+- `mthds/runners/` — every runner implementation, one subpackage per runner:
+    - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResult` — the runners' concrete JSON materialization of the protocol's domain shapes), `runs.py` (the hosted run-lifecycle / polling models), `exceptions.py` (API auth + polling-lifecycle errors).
+    - `pipelex/runner.py` — `PipelexRunner`, the local runner that shells out to the `pipelex` CLI.
+    - `types.py` — `RunnerType`.
 
 ## Configuration
 
@@ -75,10 +78,10 @@ async with MthdsAPIClient() as client:
 
 ## Runners
 
-`create_runner` returns an `MTHDSProtocol` implementation:
+Construct a runner directly — both implement `MTHDSProtocol`:
 
-- `RunnerType.API` → the `MthdsAPIClient` itself.
-- `RunnerType.PIPELEX` → `PipelexRunner`, which shells out to a locally installed `pipelex` CLI (`execute` via `pipelex run`, `validate` via `pipelex validate`, `version` via `pipelex --version`; `start`/`models` raise `NotImplementedError`). Falls back to the API client when `pipelex` is not on PATH.
+- `MthdsAPIClient` (`mthds.runners.api.client`) — the API runner; also serves the hosted run-lifecycle extension.
+- `PipelexRunner` (`mthds.runners.pipelex.runner`) — shells out to a locally installed `pipelex` CLI (`execute` via `pipelex run`, `validate` via `pipelex validate`, `version` via `pipelex --version`; `start`/`models` raise `NotImplementedError`).
 
 ## Runnable example
 

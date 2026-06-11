@@ -8,13 +8,13 @@ from pytest_mock import MockerFixture
 
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.runners.api.client import MthdsAPIClient
-from mthds.runners.exceptions import (
+from mthds.runners.api.exceptions import (
     RunFailedError,
     RunLifecycleUnavailableError,
     RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.runners.runs import (
+from mthds.runners.api.runs import (
     PollInfo,
     RunResultCompleted,
     RunResultFailed,

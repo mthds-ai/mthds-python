@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from pytest_mock import MockerFixture
 
-from mthds.runners.pipelex_runner import PipelexRunner, PipelexRunnerError
+from mthds.runners.pipelex.runner import PipelexRunner, PipelexRunnerError
 
 
 class TestPipelexRunner:
@@ -16,8 +16,8 @@ class TestPipelexRunner:
         treats empty input as a validation failure, so the local runner must
         match). The CLI is never invoked.
         """
-        mocker.patch("mthds.runners.pipelex_runner._ensure_pipelex", return_value="pipelex")
-        run_subprocess = mocker.patch("mthds.runners.pipelex_runner.run_subprocess")
+        mocker.patch("mthds.runners.pipelex.runner._ensure_pipelex", return_value="pipelex")
+        run_subprocess = mocker.patch("mthds.runners.pipelex.runner.run_subprocess")
 
         with pytest.raises(PipelexRunnerError, match="at least one bundle"):
             asyncio.run(PipelexRunner().validate(mthds_contents=[]))

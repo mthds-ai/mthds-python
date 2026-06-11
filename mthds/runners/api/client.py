@@ -15,15 +15,15 @@ from mthds.config.credentials import load_credentials
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
-from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResult
-from mthds.runners.exceptions import (
+from mthds.runners.api.exceptions import (
     ClientAuthenticationError,
     RunFailedError,
     RunLifecycleUnavailableError,
     RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.runners.runs import (
+from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResult
+from mthds.runners.api.runs import (
     PollInfo,
     RunRead,
     RunResultCompleted,
