@@ -142,7 +142,8 @@ class StartRequest(RunRequest):
       `X-Completion-Signature`. http/https only; private/loopback/metadata
       hosts are rejected server-side.
     - `method_id` — HOSTED EXTENSION: a stored method in the active org's
-      catalog, mutually exclusive with `mthds_contents`. The platform is the
+      catalog, combinable with `mthds_contents` (inline contents run;
+      `method_id` links run history). The platform is the
       source of truth for which combinations it accepts; the SDK does not
       over-validate.
     """

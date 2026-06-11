@@ -84,7 +84,9 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
                 client-supplied one with 422 (never silently ignores it).
             callback_urls: Completion webhooks (HMAC-signed by the runner).
             method_id: HOSTED EXTENSION — id of a stored method in the active
-                org's catalog, mutually exclusive with `mthds_contents`. Bare
+                org's catalog, combinable with `mthds_contents` — the hosted
+                API runs the inline contents and records `method_id` as the
+                run-history linkage. Bare
                 runners do not implement it.
 
         Returns:

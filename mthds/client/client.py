@@ -225,7 +225,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 hosted API rejects it with 422 (the returned `pipeline_run_id` is
                 always authoritative)
             callback_urls: Completion webhooks (HMAC-signed via X-Completion-Signature)
-            method_id: HOSTED EXTENSION — stored method id, mutually exclusive with
+            method_id: HOSTED EXTENSION — stored method id, combinable with
                 `mthds_contents`
 
         Returns:

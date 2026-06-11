@@ -47,7 +47,7 @@ async with MthdsAPIClient() as client:
     print(results.main_stuff)
 ```
 
-- `start` accepts `method_id` (a stored method in your org's catalog — hosted extension, mutually exclusive with `mthds_contents`), `callback_urls` (HMAC-signed completion webhooks, protocol feature), and `pipeline_run_id` (bare-runner only: the hosted API always generates the id server-side and rejects a client-supplied one with 422).
+- `start` accepts `method_id` (a stored method in your org's catalog — hosted extension; combinable with `mthds_contents`: the inline contents run, `method_id` links run history), `callback_urls` (HMAC-signed completion webhooks, protocol feature), and `pipeline_run_id` (bare-runner only: the hosted API always generates the id server-side and rejects a client-supplied one with 422).
 - `wait_for_result` resolves on `COMPLETED`, raises `RunFailedError` on any other terminal status, `RunTimeoutError` when its budget elapses (the run keeps executing — resume by id), and honors the server's `Retry-After`.
 
 ## Runners
