@@ -46,9 +46,9 @@ mthds config set api-key YOUR_KEY
 mthds config set api-url https://your-api-instance.com
 ```
 
-Credentials are stored in `~/.mthds/credentials` and shared between mthds-python and mthds-js.
+Credentials are stored in `~/.mthds/config` and shared between mthds-python and mthds-js.
 
-You can also use environment variables, which take precedence over the credentials file:
+You can also use environment variables, which take precedence over the config file:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -56,8 +56,6 @@ You can also use environment variables, which take precedence over the credentia
 | `MTHDS_API_URL` | API base URL | `https://api.pipelex.com` |
 | `MTHDS_RUNNER` | Default runner (`api` or `pipelex`) | `api` |
 
-The legacy `PIPELEX_API_KEY` / `PIPELEX_API_URL` names are still read and migrated automatically, but the `MTHDS_` names are canonical.
-
-See `mthds config list` to view all current settings and their sources.
+Configuration lives in `~/.mthds/config` (the same file the `mthds` CLI reads/writes). See `mthds config list` to view all current settings and their sources.
 
 For the full CLI reference, see [CLI.md](./CLI.md).

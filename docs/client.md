@@ -6,12 +6,12 @@ The `mthds` package is the Python client of any MTHDS runner: the hosted MTHDS A
 
 One URL, one key:
 
-| Setting | Env var / credentials key | Default |
+| Setting | Env var / config key | Default |
 | --- | --- | --- |
 | API base URL (host only, no path) | `MTHDS_API_URL` | `https://api.pipelex.com` |
 | API key | `MTHDS_API_KEY` | — |
 
-The client composes every endpoint as `{MTHDS_API_URL}/v1/{endpoint}`. The same paths work against the hosted API and a bare runner (`http://localhost:8081`); hosted-only extensions are detectable via the `version()` handshake. Credentials live in `~/.mthds/credentials` (legacy `PIPELEX_API_URL`/`PIPELEX_API_KEY` keys are still honored on read and migrated).
+The client composes every endpoint as `{MTHDS_API_URL}/v1/{endpoint}`. The same paths work against the hosted API and a bare runner (`http://localhost:8081`); hosted-only extensions are detectable via the `version()` handshake. Credentials live in `~/.mthds/config` (the same file the `mthds` CLI reads/writes) — keys `MTHDS_API_URL` / `MTHDS_API_KEY`.
 
 ## The protocol surface (works on any runner)
 
@@ -56,23 +56,3 @@ async with MthdsAPIClient() as client:
 
 - `RunnerType.API` → the `MthdsAPIClient` itself.
 - `RunnerType.PIPELEX` → `PipelexRunner`, which shells out to a locally installed `pipelex` CLI (`execute` via `pipelex run`, `validate` via `pipelex validate`, `version` via `pipelex --version`; `start`/`models` raise `NotImplementedError`). Falls back to the API client when `pipelex` is not on PATH.
-
-## Migration from v0.3.x
-
-| Old | New |
-| --- | --- |
-| `RunnerProtocol` | `MTHDSProtocol` |
-| `execute_pipeline(...)` | `execute(...)` |
-| `start_pipeline(...)` / `start_run(StartRunRequest)` | `start(...)` (one method; kwargs incl. `method_id`, `run_id`, `callback_urls`) |
-| `get_run(run_id)` | `get_run_status(run_id)` |
-| `get_result(run_id)` | `get_run_result(run_id)` |
-| `PipelineRequest` / `StartRunRequest` | `RunRequest` / `StartRequest` |
-| `PipelineExecuteResponse` / `DictPipelineExecuteResponse` | `RunResult` / `DictRunResult` |
-| `PipelineStartResponse` / `DictPipelineStartResponse` | `StartAck` / `DictStartAck` |
-| `PipelineState` | `RunState` |
-| `RunResult` (runs artifacts) | `RunResults` |
-| `ApiRunner` | deleted — use `MthdsAPIClient` |
-| Wire field `pipeline_state` | `state` (`pipeline_run_id` is unchanged) |
-| Paths `{base}/runner/v1/*` + `{base}/platform/v1/*` | `{base}/v1/*` |
-
-Server requirements: the hosted MTHDS API after the `/v1` cutover, or a `pipelex-api` image that mounts its API at `/v1`. Upgrading the SDK against an older server 404s on every call, including the `/version` handshake.
