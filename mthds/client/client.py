@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import re
 import time
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
 
 import httpx
@@ -32,10 +34,16 @@ from mthds.client.runs import (
 )
 from mthds.config.credentials import load_credentials
 from mthds.models.pipe_output import DictPipeOutputAbstract, VariableMultiplicity
-from mthds.models.pipeline_inputs import PipelineInputs
-from mthds.models.stuff import StuffType
-from mthds.models.working_memory import WorkingMemoryAbstract
 from mthds.runners.types import RunnerType
+
+if TYPE_CHECKING:
+    from collections.abc import KeysView
+
+    from typing_extensions import Self
+
+    from mthds.models.pipeline_inputs import PipelineInputs
+    from mthds.models.stuff import StuffType
+    from mthds.models.working_memory import WorkingMemoryAbstract
 
 # The SDK composes every endpoint from one origin (MTHDS_API_URL): `{base}/v1/{endpoint}`.
 # The same paths are served by the hosted MTHDS API (api.pipelex.com/v1) and by a bare
@@ -90,7 +98,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 
-    def start_client(self) -> "MthdsAPIClient":
+    def start_client(self) -> MthdsAPIClient:
         """Initialize the HTTP client for API calls."""
         self.client = httpx.AsyncClient(headers={"Authorization": f"Bearer {self.api_token}"})
         return self
@@ -101,7 +109,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             await self.client.aclose()
             self.client = None
 
-    async def __aenter__(self) -> "MthdsAPIClient":
+    async def __aenter__(self) -> Self:
         self.start_client()
         return self
 
@@ -163,6 +171,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
+        extra: dict[str, Any] | None = None,
+        method_id: str | None = None,
     ) -> DictRunResult:
         """Execute a method synchronously and wait for its completion — `POST /v1/execute`.
 
@@ -173,6 +183,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
             dynamic_output_concept_ref: Override for the dynamic output concept ref
+            extra: Server-specific extension args, merged into the request body
+                as top-level properties. Protocol args must be passed as named
+                parameters, not through `extra` (raises `PipelineRequestError`).
+            method_id: PIPELEX EXTENSION — stored method id in the active org's
+                catalog, combinable with `mthds_contents`. Not part of the
+                MTHDS Protocol; bare runners may reject it.
 
         Returns:
             Complete execution results including run state and output
@@ -181,10 +197,13 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             RunStillRunningError: If the server answers `202 + StartAck` (the protocol's
                 optional async degrade) — the run continues server-side; resume by `run_id`.
         """
-        if not pipe_code and not mthds_contents:
-            msg = "Either pipe_code or mthds_contents must be provided to the API execute."
+        if not pipe_code and not mthds_contents and not method_id and not extra:
+            msg = "Either pipe_code, mthds_contents or an extension arg (method_id, extra) must be provided to the API execute."
             raise PipelineRequestError(msg)
 
+        extensions = _build_extensions(extra, protocol_fields=RunRequest.model_fields.keys())
+        if method_id is not None:
+            extensions["method_id"] = method_id
         run_request = RunRequest(
             pipe_code=pipe_code,
             mthds_contents=mthds_contents,
@@ -192,6 +211,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name=output_name,
             output_multiplicity=output_multiplicity,
             dynamic_output_concept_ref=dynamic_output_concept_ref,
+            **extensions,
         )
         content = run_request.model_dump_json().encode("utf-8")
         response = await self._send("POST", self._url("execute"), content=content, request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS)
@@ -209,6 +229,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         pipeline_run_id: str | None = None,
+        extra: dict[str, Any] | None = None,
         callback_urls: list[str] | None = None,
         method_id: str | None = None,
     ) -> DictStartAck:
@@ -224,19 +245,28 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             pipeline_run_id: Client-supplied run identifier — bare runners only; the
                 hosted API rejects it with 422 (the returned `pipeline_run_id` is
                 always authoritative)
-            callback_urls: Completion webhooks (HMAC-signed via X-Completion-Signature)
-            method_id: HOSTED EXTENSION — stored method id, combinable with
-                `mthds_contents`
+            extra: Server-specific extension args, merged into the request body
+                as top-level properties. Protocol args must be passed as named
+                parameters, not through `extra` (raises `PipelineRequestError`).
+            callback_urls: PIPELEX EXTENSION — completion webhooks (HMAC-signed via
+                X-Completion-Signature). Not part of the MTHDS Protocol.
+            method_id: PIPELEX EXTENSION — stored method id, combinable with
+                `mthds_contents`. Not part of the MTHDS Protocol.
 
         Returns:
             StartAck with the authoritative `pipeline_run_id` and `created_at`
             timestamp. On a hosted deployment the id is durable — poll
             `get_run_status` / `get_run_result`.
         """
-        if not pipe_code and not mthds_contents and not method_id:
-            msg = "Either pipe_code, mthds_contents or method_id must be provided to the API start."
+        if not pipe_code and not mthds_contents and not method_id and not extra:
+            msg = "Either pipe_code, mthds_contents or an extension arg (method_id, extra) must be provided to the API start."
             raise PipelineRequestError(msg)
 
+        extensions = _build_extensions(extra, protocol_fields=StartRequest.model_fields.keys())
+        if callback_urls is not None:
+            extensions["callback_urls"] = callback_urls
+        if method_id is not None:
+            extensions["method_id"] = method_id
         start_request = StartRequest(
             pipe_code=pipe_code,
             mthds_contents=mthds_contents,
@@ -245,8 +275,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_multiplicity=output_multiplicity,
             dynamic_output_concept_ref=dynamic_output_concept_ref,
             pipeline_run_id=pipeline_run_id,
-            callback_urls=callback_urls,
-            method_id=method_id,
+            **extensions,
         )
         content = start_request.model_dump_json(exclude_none=True).encode("utf-8")
         response = await self._send("POST", self._url("start"), content=content, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
@@ -442,6 +471,30 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 # ── Module helpers ──────────────────────────────────────────────────────
 
 _KNOWN_RUN_STATUS_NAMES: frozenset[str] = frozenset(RunStatus.__members__)
+
+
+def _build_extensions(extra: dict[str, Any] | None, protocol_fields: KeysView[str]) -> dict[str, Any]:
+    """Validate and copy the generic `extra` passthrough.
+
+    Extension args ride the request body as top-level properties; the protocol's
+    own args must be passed as named parameters, never smuggled through `extra`.
+
+    Args:
+        extra: Server-specific extension args from the caller, or None.
+        protocol_fields: The protocol-arg names of the target request model.
+
+    Returns:
+        A mutable copy of `extra` safe to merge named extensions into.
+
+    Raises:
+        PipelineRequestError: If `extra` carries a protocol arg.
+    """
+    extensions: dict[str, Any] = dict(extra or {})
+    protocol_overlap = extensions.keys() & protocol_fields
+    if protocol_overlap:
+        msg = f"extra carries protocol args {sorted(protocol_overlap)} — pass them as named parameters instead."
+        raise PipelineRequestError(msg)
+    return extensions
 
 
 def _is_missing_route_404(response: httpx.Response) -> bool:

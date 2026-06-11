@@ -7,7 +7,13 @@ import pytest
 from pytest_mock import MockerFixture
 
 from mthds.client.client import MthdsAPIClient
-from mthds.client.exceptions import RunFailedError, RunLifecycleUnavailableError, RunStillRunningError, RunTimeoutError
+from mthds.client.exceptions import (
+    PipelineRequestError,
+    RunFailedError,
+    RunLifecycleUnavailableError,
+    RunStillRunningError,
+    RunTimeoutError,
+)
 from mthds.client.runs import (
     PollInfo,
     RunResultCompleted,
@@ -84,7 +90,7 @@ class TestMthdsAPIClientLifecycle:
         assert ack.created_at == "2026-06-10T00:00:00Z"
 
     def test_start_request_shape_with_method_id(self, mocker: MockerFixture) -> None:
-        """method_id rides the StartRequest body; absent fields are pruned (exclude_none)."""
+        """The named pipelex extensions (method_id, callback_urls) ride the body; absent fields are pruned (exclude_none)."""
         client = self._client()
         body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
@@ -95,6 +101,40 @@ class TestMthdsAPIClientLifecycle:
         assert '"callback_urls":["https://example.com/done"]' in sent
         assert "pipe_code" not in sent
         assert "pipeline_run_id" not in sent
+
+    def test_start_extra_passthrough_rides_body(self, mocker: MockerFixture) -> None:
+        """Arbitrary extension args given via `extra` reach the wire as top-level body properties."""
+        client = self._client()
+        body = {"pipeline_run_id": "run_1", "state": "RUNNING", "created_at": "2026-06-10T00:00:00Z"}
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(202, json=body)))
+
+        asyncio.run(client.start(pipe_code="answer", extra={"some_vendor_arg": {"nested": True}, "priority": 3}))
+        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
+        assert '"some_vendor_arg":{"nested":true}' in sent
+        assert '"priority":3' in sent
+        assert '"pipe_code":"answer"' in sent
+
+    def test_start_extra_rejects_protocol_args(self) -> None:
+        """`extra` is for extension args only — a protocol arg inside it raises a clear client-side error."""
+        client = self._client()
+        with pytest.raises(PipelineRequestError, match="pipe_code"):
+            asyncio.run(client.start(method_id="mt_1", extra={"pipe_code": "smuggled"}))
+
+    def test_execute_extension_args_ride_body(self, mocker: MockerFixture) -> None:
+        """execute() carries the method_id pipelex extension and the generic extra passthrough too."""
+        client = self._client()
+        body: dict[str, object] = {
+            "pipeline_run_id": "run_1",
+            "state": "COMPLETED",
+            "created_at": "2026-06-10T00:00:00Z",
+            "pipe_output": {"working_memory": {"root": {}, "aliases": {}}, "pipeline_run_id": "run_1"},
+        }
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
+
+        asyncio.run(client.execute(method_id="mt_1", extra={"some_vendor_arg": "yes"}))
+        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
+        assert '"method_id":"mt_1"' in sent
+        assert '"some_vendor_arg":"yes"' in sent
 
     # ── get_run_status ───────────────────────────────────────────
 

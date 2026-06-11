@@ -35,6 +35,13 @@ async with MthdsAPIClient() as client:
 
 `execute` may raise `RunStillRunningError` if a server answers `202 + StartAck` (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`.
 
+### Basic args vs extension args
+
+The abstract `MTHDSProtocol` interface carries the protocol's **basic** arguments only. Implementations may accept more (the protocol's extension policy), and the SDK passes any of them through:
+
+- The concrete `MthdsAPIClient` exposes the common pipelex extensions as typed convenience params: `method_id` (on `execute` and `start`) and `callback_urls` (on `start`).
+- Anything else rides the generic `extra` mapping on both `execute` and `start`: `client.start(pipe_code="answer", extra={"some_vendor_arg": True})` merges `some_vendor_arg` into the request body as a top-level property. Protocol args inside `extra` are rejected client-side with `PipelineRequestError` — pass them as named parameters.
+
 ## The run-lifecycle extension (hosted API only)
 
 `start` + polling is how long runs survive the hosted gateway's ~30s synchronous cap. **Polling is not part of the MTHDS Protocol** — it is a hosted extension; a bare runner 404s these routes and the client raises `RunLifecycleUnavailableError`.
@@ -47,7 +54,7 @@ async with MthdsAPIClient() as client:
     print(results.main_stuff)
 ```
 
-- `start` accepts `method_id` (a stored method in your org's catalog — hosted extension; combinable with `mthds_contents`: the inline contents run, `method_id` links run history), `callback_urls` (HMAC-signed completion webhooks, protocol feature), and `pipeline_run_id` (bare-runner only: the hosted API always generates the id server-side and rejects a client-supplied one with 422).
+- `start` accepts the protocol arg `pipeline_run_id` (bare-runner only: the hosted API always generates the id server-side and rejects a client-supplied one with 422), plus the **pipelex extension args** `method_id` (a stored method in your org's catalog; combinable with `mthds_contents`: the inline contents run, `method_id` links run history) and `callback_urls` (HMAC-signed completion webhooks). Neither extension is part of the MTHDS Protocol — they are server-specific args the concrete client exposes for convenience.
 - `wait_for_result` resolves on `COMPLETED`, raises `RunFailedError` on any other terminal status, `RunTimeoutError` when its budget elapses (the run keeps executing — resume by id), and honors the server's `Retry-After`.
 
 ## Runners

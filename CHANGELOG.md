@@ -4,6 +4,7 @@
 
 ### Changed
 
+- **`method_id` and `callback_urls` demoted from the protocol interface to pipelex extension args.** The abstract `MTHDSProtocol` carries the protocol's basic arguments only (plus `pipeline_run_id` on `start`) and gains a generic `extra` passthrough on both `execute` and `start` — any server-specific arg merges into the request body as a top-level property (protocol args inside `extra` are rejected client-side). The concrete `MthdsAPIClient` keeps `method_id` (now on `execute` too) and `callback_urls` as typed, documented extension params. `RunRequest`/`StartRequest` are extension-open (`extra="allow"`): unknown args serialize to the wire instead of being silently dropped. Server note: `StartRequest.model_json_schema()` no longer advertises the pipelex extensions — `pipelex-api` should document them in its own OpenAPI schema when it bumps to this version.
 - **Config file unified with the `mthds` CLI.** The client reads and writes `~/.mthds/config` — the same file, dotenv format, and `MTHDS_*` key names the `mthds` CLI (mthds-js) uses. A single `mthds config set api-url <host>` / `mthds config set api-key <key>` configures the Python client, and the `mthds` CLI writes the same file (its key is spelled `base-url`).
 
 ### Removed

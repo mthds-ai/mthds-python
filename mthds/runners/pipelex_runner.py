@@ -176,6 +176,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> DictRunResult:
         """Execute a method via the pipelex CLI subprocess.
 
@@ -189,14 +190,19 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             output_name: Unused by pipelex CLI.
             output_multiplicity: Unused by pipelex CLI.
             dynamic_output_concept_ref: Unused by pipelex CLI.
+            extra: Rejected — the CLI runner defines no extension args.
 
         Returns:
             Complete execution results including pipeline state and output.
 
         Raises:
-            PipelexRunnerError: If pipelex execution fails.
+            PipelexRunnerError: If pipelex execution fails, or if extension
+                args are passed (the CLI runner accepts none).
         """
         _ = (output_name, output_multiplicity, dynamic_output_concept_ref)
+        if extra:
+            msg = f"The pipelex CLI runner defines no extension args; got {sorted(extra)}."
+            raise PipelexRunnerError(msg)
         pipelex_path = _ensure_pipelex()
 
         tmp_dir = Path(tempfile.mkdtemp(prefix="mthds-"))
@@ -242,8 +248,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         pipeline_run_id: str | None = None,
-        callback_urls: list[str] | None = None,
-        method_id: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> DictStartAck:
         """Start a method asynchronously — not supported by the pipelex CLI.
 
@@ -255,8 +260,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             output_multiplicity: Unused.
             dynamic_output_concept_ref: Unused.
             pipeline_run_id: Unused.
-            callback_urls: Unused.
-            method_id: Unused.
+            extra: Unused.
 
         Raises:
             NotImplementedError: Always, since the pipelex CLI is synchronous.
@@ -269,8 +273,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             output_multiplicity,
             dynamic_output_concept_ref,
             pipeline_run_id,
-            callback_urls,
-            method_id,
+            extra,
         )
         msg = "start is not supported by the pipelex CLI runner. Use execute instead."
         raise NotImplementedError(msg)

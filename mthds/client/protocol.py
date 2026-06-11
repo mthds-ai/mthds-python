@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Generic, Protocol
+from typing import TYPE_CHECKING, Any, Generic, Protocol
 
 from typing_extensions import runtime_checkable
 
@@ -25,6 +25,12 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
     runner: it executes and validates methods, and reports its model deck and
     version. Run polling is NOT part of the protocol — it is a hosted-API
     extension carried by `MthdsAPIClient` only.
+
+    This interface carries the protocol's **basic** arguments only. An
+    implementation may accept additional request properties (e.g. pipelex's
+    `method_id` and `callback_urls`); those are **extension args**, passed
+    through the generic `extra` mapping — or, on a concrete client, exposed as
+    typed convenience parameters. They never belong on this interface.
     """
 
     @abstractmethod
@@ -36,6 +42,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> RunResult[PipeOutputT]:
         """Execute a method synchronously and wait for its completion.
 
@@ -46,6 +53,9 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             output_name: Target output slot name
             output_multiplicity: Output multiplicity setting
             dynamic_output_concept_ref: Override for dynamic output concept
+            extra: Implementation-defined extension args, merged into the
+                request body as top-level properties. The server is the source
+                of truth for what it accepts.
 
         Returns:
             Complete execution results including run state and output
@@ -67,10 +77,12 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         output_multiplicity: VariableMultiplicity | None = None,
         dynamic_output_concept_ref: str | None = None,
         pipeline_run_id: str | None = None,
-        callback_urls: list[str] | None = None,
-        method_id: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> StartAck[PipeOutputT]:
         """Start a method asynchronously without waiting for completion.
+
+        How completion is later delivered (webhooks, polling, anything else) is
+        implementation-defined and outside the protocol.
 
         Args:
             pipe_code: The code identifying the pipe to execute
@@ -82,12 +94,9 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             pipeline_run_id: Client-supplied run identifier — bare runners only.
                 The hosted API always generates the id server-side and rejects a
                 client-supplied one with 422 (never silently ignores it).
-            callback_urls: Completion webhooks (HMAC-signed by the runner).
-            method_id: HOSTED EXTENSION — id of a stored method in the active
-                org's catalog, combinable with `mthds_contents` — the hosted
-                API runs the inline contents and records `method_id` as the
-                run-history linkage. Bare
-                runners do not implement it.
+            extra: Implementation-defined extension args, merged into the
+                request body as top-level properties. The server is the source
+                of truth for what it accepts.
 
         Returns:
             StartAck with the authoritative `pipeline_run_id` and `created_at` timestamp

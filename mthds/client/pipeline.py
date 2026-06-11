@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.functional_validators import SkipValidation
 from typing_extensions import Annotated
 
@@ -28,6 +28,12 @@ class RunRequest(BaseModel):
     """Body of the protocol's `POST /execute` — mirrors `RunRequest` in
     `mthds-protocol.openapi.yaml`.
 
+    The declared fields are the protocol's **basic** arguments. The model is
+    deliberately open (`extra="allow"`): an implementation may accept extra
+    request properties (e.g. pipelex's `method_id`), and any extension arg
+    given to the constructor is kept and serialized to the wire instead of
+    being silently dropped.
+
     Attributes:
         pipe_code (str | None): Code of the pipe to execute
         mthds_contents (list[str] | None): List of MTHDS bundle contents to load
@@ -39,6 +45,8 @@ class RunRequest(BaseModel):
 
     """
 
+    model_config = ConfigDict(extra="allow")
+
     pipe_code: str | None = None
     mthds_contents: list[str] | None = None
     inputs: Annotated[PipelineInputs | WorkingMemoryAbstract[Any] | None, SkipValidation] = None
@@ -49,7 +57,12 @@ class RunRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def validate_request(cls, values: dict[str, Any]):
-        if values.get("pipe_code") is None and not values.get("mthds_contents") and not values.get("method_id"):
+        # The protocol requires at least one of pipe_code / mthds_contents. When the
+        # body carries extension args (keys outside the declared fields, e.g. pipelex's
+        # method_id), an extension may be the method selector — the server is the source
+        # of truth, so the SDK does not over-validate.
+        has_extensions = any(key not in cls.model_fields for key in values)
+        if values.get("pipe_code") is None and not values.get("mthds_contents") and not has_extensions:
             msg = (
                 "pipe_code and mthds_contents cannot both be empty. Either: both are provided, or if there are no mthds_contents, "
                 "then pipe_code must be provided and must reference a pipe already registered in the library. "
@@ -130,27 +143,20 @@ class RunRequest(BaseModel):
 
 
 class StartRequest(RunRequest):
-    """Body of the protocol's `POST /start` — `RunRequest` plus the async extras.
+    """Body of the protocol's `POST /start` — `RunRequest` plus `pipeline_run_id`.
 
-    Mirrors `StartRequest` in `mthds-protocol.openapi.yaml`, with the hosted
-    `method_id` extension:
+    Mirrors `StartRequest` in `mthds-protocol.openapi.yaml`:
 
     - `pipeline_run_id` — client-supplied run identifier; bare runners accept
       it, the hosted API rejects it with 422 (the server-generated id in
       `StartAck` is always authoritative).
-    - `callback_urls` — completion webhooks, HMAC-signed by the runner via
-      `X-Completion-Signature`. http/https only; private/loopback/metadata
-      hosts are rejected server-side.
-    - `method_id` — HOSTED EXTENSION: a stored method in the active org's
-      catalog, combinable with `mthds_contents` (inline contents run;
-      `method_id` links run history). The platform is the
-      source of truth for which combinations it accepts; the SDK does not
-      over-validate.
+
+    Extension args (e.g. pipelex's `method_id` and `callback_urls`) are NOT
+    protocol fields — like on `RunRequest`, they pass through `extra="allow"`
+    and serialize to the wire as top-level properties.
     """
 
     pipeline_run_id: str | None = Field(default=None, max_length=128)
-    callback_urls: list[str] | None = None
-    method_id: str | None = Field(default=None, min_length=1)
 
 
 class RunState(StrEnum):
