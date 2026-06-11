@@ -206,6 +206,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             output_multiplicity=output_multiplicity,
             dynamic_output_concept_ref=dynamic_output_concept_ref,
             extra=extra,
+            exclude_none=True,
         )
         content = to_json(body)
         response = await self._send("POST", self._url("execute"), content=content, request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS)
@@ -426,7 +427,24 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         attempt = 0
 
         while True:
-            state = await self.get_run_result(run_id)
+            elapsed = time.monotonic() - started_at
+            remaining = opts.timeout_seconds - elapsed
+            if remaining <= 0:
+                msg = (
+                    f"Run {run_id} did not reach a terminal state within {opts.timeout_seconds}s; "
+                    "it is still executing server-side and can be resumed by id."
+                )
+                raise RunTimeoutError(msg, run_id=run_id, timeout_seconds=opts.timeout_seconds)
+
+            try:
+                state = await asyncio.wait_for(self.get_run_result(run_id), timeout=remaining)
+            except TimeoutError as exc:
+                msg = (
+                    f"Run {run_id} did not reach a terminal state within {opts.timeout_seconds}s; "
+                    "it is still executing server-side and can be resumed by id."
+                )
+                raise RunTimeoutError(msg, run_id=run_id, timeout_seconds=opts.timeout_seconds) from exc
+
             if isinstance(state, RunResultCompleted):
                 return state.result
             if isinstance(state, RunResultFailed):

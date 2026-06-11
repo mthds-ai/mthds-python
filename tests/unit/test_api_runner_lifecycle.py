@@ -138,8 +138,10 @@ class TestMthdsAPIClientLifecycle:
         assert '"output_multiplicity":3' in sent
         assert '"dynamic_output_concept_ref":"answer.Answer"' in sent
 
-    def test_execute_body_keeps_null_basic_args(self, mocker: MockerFixture) -> None:
-        """execute() does NOT prune absent fields — null basic args stay in the body (no exclude_none, unlike start)."""
+    def test_execute_request_prunes_absent_fields(self, mocker: MockerFixture) -> None:
+        """execute() prunes absent fields (exclude_none) — parity with start();
+        strict server request models often distinguish absent from explicit null.
+        """
         client = self._client()
         body: dict[str, object] = {
             "pipeline_run_id": "run_1",
@@ -150,7 +152,9 @@ class TestMthdsAPIClientLifecycle:
         asyncio.run(client.execute(pipe_code="answer"))
         sent = send_mock.call_args.kwargs["content"].decode("utf-8")
         assert '"pipe_code":"answer"' in sent
-        assert '"output_name":null' in sent
+        assert "output_name" not in sent
+        assert "mthds_contents" not in sent
+        assert "inputs" not in sent
 
     def test_start_extra_rejects_protocol_args(self) -> None:
         """`extra` is for extension args only — a protocol arg inside it raises a clear client-side error."""
@@ -356,3 +360,28 @@ class TestMthdsAPIClientLifecycle:
 
         with pytest.raises(asyncio.CancelledError):
             asyncio.run(client.wait_for_result("run_1"))
+
+    def test_wait_for_result_caps_single_poll_by_remaining_budget(self, mocker: MockerFixture) -> None:
+        """A single hanging poll must not exceed the caller's timeout budget — the
+        per-poll wait is bounded by the remaining budget (greptile P2 on PR #26).
+        Without this, a 30s per-request timeout could blow past a 0.05s caller
+        budget.
+        """
+        client = self._client()
+
+        async def never_returns(_run_id: str) -> object:
+            await asyncio.sleep(60)
+            return None
+
+        mocker.patch.object(client, "get_run_result", side_effect=never_returns)
+
+        async def run_with_wallclock() -> float:
+            started = asyncio.get_event_loop().time()
+            try:
+                await client.wait_for_result("run_1", WaitForResultOptions(timeout_seconds=0.05))
+            except RunTimeoutError:
+                return asyncio.get_event_loop().time() - started
+            return float("inf")
+
+        elapsed = asyncio.run(run_with_wallclock())
+        assert elapsed < 1.0, f"wait_for_result blocked {elapsed:.3f}s past the 0.05s budget"

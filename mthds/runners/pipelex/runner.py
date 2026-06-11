@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, cast
 
+from pydantic_core import to_json
 from typing_extensions import override
 
 from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationReport, VersionInfo
@@ -203,9 +204,23 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             PipelexRunnerError: If pipelex execution fails, or if extension
                 args are passed (the CLI runner accepts none).
         """
-        _ = (output_name, output_multiplicity, dynamic_output_concept_ref)
         if extra:
             msg = f"The pipelex CLI runner defines no extension args; got {sorted(extra)}."
+            raise PipelexRunnerError(msg)
+        rejected_output_args = [
+            name
+            for name, value in (
+                ("output_name", output_name),
+                ("output_multiplicity", output_multiplicity),
+                ("dynamic_output_concept_ref", dynamic_output_concept_ref),
+            )
+            if value is not None
+        ]
+        if rejected_output_args:
+            msg = f"The pipelex CLI runner does not support output args; got {rejected_output_args}. Use the API runner instead."
+            raise PipelexRunnerError(msg)
+        if not pipe_code and not mthds_contents:
+            msg = "Either pipe_code or mthds_contents must be provided to the pipelex CLI runner."
             raise PipelexRunnerError(msg)
         pipelex_path = _ensure_pipelex()
 
@@ -227,7 +242,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             serialized_inputs = _serialize_inputs(inputs)
             if serialized_inputs is not None:
                 inputs_path = tmp_dir / "inputs.json"
-                inputs_path.write_text(json.dumps(serialized_inputs), encoding="utf-8")
+                inputs_path.write_bytes(to_json(serialized_inputs))
                 cmd.extend(["-i", str(inputs_path)])
 
             working_memory_path = tmp_dir / "working_memory.json"

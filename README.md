@@ -1,6 +1,6 @@
 # mthds
 
-The Python implementation of the [MTHDS Protocol](https://mthds.ai) — a typed client for any MTHDS runner, plus the base structures methods are defined in.
+The Python implementation of the [MTHDS Protocol](https://mthds.ai) — a typed client for any MTHDS runner, plus the base structures that methods are defined in.
 
 Learn more at [mthds.ai](https://mthds.ai) and browse the Hub at [mthds.sh](https://mthds.sh).
 

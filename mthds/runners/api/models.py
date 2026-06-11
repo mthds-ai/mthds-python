@@ -95,9 +95,10 @@ class DictRunResultExecute(RunResultExecute[DictPipeOutputAbstract]):
         """
         # `main_stuff_name` is an extension field — validated construction keeps
         # it in `model_extra` without naming it a typed parameter.
+        resolved_run_id = pipeline_run_id or pipe_output.pipeline_run_id
         return cls.model_validate(
             {
-                "pipeline_run_id": pipeline_run_id,
+                "pipeline_run_id": resolved_run_id,
                 "pipe_output": cls._dict_pipe_output_class(
                     working_memory=cls._serialize_working_memory(pipe_output.working_memory),
                     pipeline_run_id=pipe_output.pipeline_run_id,
