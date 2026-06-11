@@ -4,13 +4,16 @@ Mirrors `mthds-protocol.openapi.yaml` (the standard's normative artifact):
     POST /validate -> ValidationReport
     GET  /models   -> ModelDeck
     GET  /version  -> VersionInfo
+
+All response models declare the protocol's BASE fields only and are
+extension-open (`extra="allow"`): an implementation may return more, and those
+server-specific fields are preserved as accessible attributes — the response
+side of the same passthrough principle as the request-side `extra`.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from mthds._compat import StrEnum
 from mthds._utils.pydantic_utils import empty_list_factory_of
@@ -26,7 +29,9 @@ class ModelCategory(StrEnum):
 
 
 class ModelInfo(BaseModel):
-    """One entry of the model deck (`ModelDeck.models[]`)."""
+    """One entry of the model deck (`ModelDeck.models[]`) — base fields + extensions."""
+
+    model_config = ConfigDict(extra="allow")
 
     name: str
     type: ModelCategory | None = None
@@ -35,38 +40,36 @@ class ModelInfo(BaseModel):
 class ModelDeck(BaseModel):
     """The model deck a runner can route to — `GET /models`.
 
-    Mirrors the protocol's `ModelDeck`: presets (`models`), `aliases`, and
-    routing `waterfalls`. Tolerant of unknown fields so implementations can
-    enrich the deck (default `extra="ignore"`).
+    The protocol's base is the `models` list; implementations may add their own
+    routing metadata (aliases, fallback chains, anything else) as extensions.
     """
 
+    model_config = ConfigDict(extra="allow")
+
     models: list[ModelInfo] = Field(default_factory=empty_list_factory_of(ModelInfo))
-    aliases: dict[str, str] = Field(default_factory=dict)
-    waterfalls: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class ValidationReport(BaseModel):
-    """Structural artifacts returned by `POST /validate` when the bundle is valid.
+    """Verdict of `POST /validate` for a VALID bundle — the 200 status IS the verdict.
 
     Failures never reach this model — they are RFC 7807 problems (HTTP 422).
-    All artifacts are optional: the protocol marks none of them required, and
-    implementations fill what they can produce.
+    The protocol declares no body fields; implementations may include their own
+    artifacts (parsed structures, graphs, anything else), preserved here as
+    extension attributes.
     """
 
-    blueprint: Any = None
-    graph_spec: Any = None
-    pipe_structures: Any = None
+    model_config = ConfigDict(extra="allow")
 
 
 class VersionInfo(BaseModel):
-    """Protocol + implementation versions — `GET /version` (always public).
+    """Protocol + runner versions — `GET /version` (always public).
 
-    The handshake clients use for feature detection: `implementation`
-    identifies the runner, and hosted extensions (e.g. durable runs)
-    light up based on what the server advertises.
+    The handshake clients use for feature detection. The protocol defines two
+    fields; implementations may add their own identification (a name, an
+    underlying runtime version, anything else) as extensions.
     """
 
+    model_config = ConfigDict(extra="allow")
+
     protocol_version: str
-    implementation: str
-    implementation_version: str
-    runtime_version: str | None = None
+    runner_version: str | None = None

@@ -54,7 +54,7 @@ class TestMthdsAPIClientProtocol:
     def test_validate_posts_contents_and_parses_report(self, mocker: MockerFixture) -> None:
         """Validate posts to /v1/validate with mthds_contents + allow_signatures and parses the report."""
         client = self._client()
-        body: dict[str, object] = {"blueprint": {"domain": "answer"}, "graph_spec": {"nodes": []}, "pipe_structures": {}}
+        body: dict[str, object] = {"blueprint": {"domain": "answer"}, "graph_spec": {"nodes": []}, "pipe_structures": {}}  # implementation artifacts
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
         report = asyncio.run(client.validate(['domain = "answer"'], allow_signatures=True))
@@ -62,7 +62,9 @@ class TestMthdsAPIClientProtocol:
         sent = send_mock.call_args.kwargs["content"].decode("utf-8")
         assert '"allow_signatures": true' in sent
         assert isinstance(report, ValidationReport)
-        assert report.blueprint == {"domain": "answer"}
+        # The protocol declares no body fields — implementation artifacts pass through as extensions.
+        assert report.model_extra is not None
+        assert report.model_extra["blueprint"] == {"domain": "answer"}
 
     def test_validate_invalid_bundle_raises_http_error(self, mocker: MockerFixture) -> None:
         """A 422 problem (invalid bundle) surfaces as an HTTP error, not a report."""
@@ -89,7 +91,9 @@ class TestMthdsAPIClientProtocol:
         assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/models"
         assert isinstance(deck, ModelDeck)
         assert deck.models[0].name == "gpt-test"
-        assert deck.aliases == {"best": "gpt-test"}
+        # Implementation routing metadata passes through as extensions, never named by the SDK.
+        assert deck.model_extra is not None
+        assert deck.model_extra["aliases"] == {"best": "gpt-test"}
 
     def test_models_category_filter_rides_querystring(self, mocker: MockerFixture) -> None:
         """A category filter is sent as ?type=<category>."""
@@ -106,14 +110,15 @@ class TestMthdsAPIClientProtocol:
         client = self._client()
         body = {
             "protocol_version": "0.1.0",
-            "implementation": "pipelex-api",
-            "implementation_version": "0.3.0",
-            "runtime_version": "0.32.1",
+            "runner_version": "0.3.0",
+            "some_vendor_name": "vendor-runner",
         }
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
         info = asyncio.run(client.version())
         assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/version"
         assert isinstance(info, VersionInfo)
-        assert info.implementation == "pipelex-api"
-        assert info.runtime_version == "0.32.1"
+        assert info.protocol_version == "0.1.0"
+        assert info.runner_version == "0.3.0"
+        # Implementation identification passes through as extensions, never named by the SDK.
+        assert info.model_extra == {"some_vendor_name": "vendor-runner"}

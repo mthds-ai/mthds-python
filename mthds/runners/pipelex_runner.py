@@ -340,11 +340,10 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
 
     @override
     async def version(self) -> VersionInfo:
-        """Protocol + implementation versions, from `pipelex --version`.
+        """Protocol + runner versions, from `pipelex --version`.
 
         Returns:
-            VersionInfo with the local pipelex version as both implementation
-            and runtime version.
+            VersionInfo with the local pipelex version as the runner version.
 
         Raises:
             PipelexRunnerError: If pipelex is unavailable or the output is unparsable.
@@ -359,7 +358,5 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         local_version = match.group(1)
         return VersionInfo(
             protocol_version="0.1.0",
-            implementation="pipelex-cli",
-            implementation_version=local_version,
-            runtime_version=local_version,
+            runner_version=local_version,
         )

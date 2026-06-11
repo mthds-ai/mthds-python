@@ -111,17 +111,19 @@ class RunRead(RunPublic):
 
 
 class RunResults(BaseModel):
-    """Result artifacts for a completed run — mirrors the platform's `RunResultsResponse`.
+    """Result artifacts for a completed run — the BASE shape of the results read.
 
-    `graph_spec` (`graphspec.json`) and `main_stuff` (`main_stuff.json`) are
-    runtime-produced S3 artifacts that the platform relays VERBATIM. `main_stuff`
-    is polymorphic — a list output renders to a top-level array, a structured
-    output to an object — so both are typed as opaque JSON (`Any`), never `dict`.
-    Either may be `None` when the run is partial mid-write.
+    `main_stuff` is the method's main output, relayed VERBATIM. It is
+    polymorphic — a list output renders to a top-level array, a structured
+    output to an object — so it is typed as opaque JSON (`Any`), never `dict`;
+    it may be `None` when the run is partial mid-write. Implementations may
+    return more artifacts (graphs, anything else) — preserved as extension
+    attributes (`extra="allow"`), never named by the SDK.
     """
 
+    model_config = ConfigDict(extra="allow")
+
     pipeline_run_id: str
-    graph_spec: Any = None
     main_stuff: Any = None
 
 

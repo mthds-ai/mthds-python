@@ -113,7 +113,7 @@ class TestRuns:
         )
         assert run.status == RunStatus.COMPLETED
         assert run.model_extra == {"some_vendor_field": "vendor_value", "another_one": {"nested": True}}
-        assert run.some_vendor_field == "vendor_value"  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+        assert run.some_vendor_field == "vendor_value"  # type: ignore[attr-defined] # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
 
     def test_run_read_defaults(self) -> None:
         """RunRead defaults degraded=False and retry_after_seconds=None."""
@@ -145,7 +145,7 @@ class TestRuns:
         """A structured output is an object; both artifacts default to None when absent."""
         result = RunResults(pipeline_run_id="run_1", main_stuff={"answer": "42"})
         assert result.main_stuff == {"answer": "42"}
-        assert result.graph_spec is None
+        assert result.model_extra == {}
 
     # ── RunResultState discriminated union ───────────────────────
 

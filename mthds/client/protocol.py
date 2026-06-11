@@ -133,13 +133,14 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             category: Optional deck filter (`llm`, `extract`, `img_gen`, `search`).
 
         Returns:
-            ModelDeck with presets, aliases, and routing waterfalls.
+            ModelDeck with the models this runner can route to (base fields
+            + any implementation extensions).
         """
         ...
 
     @abstractmethod
     async def version(self) -> VersionInfo:
-        """Protocol and implementation versions (always public on API runners).
+        """Protocol and runner versions (always public on API runners).
 
         Returns:
             VersionInfo — the handshake clients use for feature detection.

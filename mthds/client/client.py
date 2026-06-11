@@ -306,7 +306,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             category: Optional filter (`llm`, `extract`, `img_gen`, `search`).
 
         Returns:
-            ModelDeck with presets, aliases, and routing waterfalls.
+            ModelDeck with the models this runner can route to (base fields
+            + any implementation extensions).
         """
         endpoint = f"models?type={quote(category, safe='')}" if category is not None else "models"
         response = await self._send("GET", self._url(endpoint), content=None, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
@@ -315,7 +316,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
     @override
     async def version(self) -> VersionInfo:
-        """Protocol + implementation versions — `GET /v1/version` (public).
+        """Protocol + runner versions — `GET /v1/version` (public).
 
         Returns:
             VersionInfo — the handshake for feature detection (hosted extensions or not).

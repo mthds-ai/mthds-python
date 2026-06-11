@@ -30,7 +30,7 @@ async with MthdsAPIClient() as client:
 
     # Discovery
     deck = await client.models()           # optionally client.models(ModelCategory.LLM)
-    info = await client.version()          # {protocol_version, implementation, implementation_version, runtime_version}
+    info = await client.version()          # {protocol_version, runner_version} + server-specific extensions (info.model_extra)
 ```
 
 `execute` may raise `RunStillRunningError` if a server answers `202 + StartAck` (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`.
