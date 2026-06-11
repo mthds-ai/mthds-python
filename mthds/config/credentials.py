@@ -1,9 +1,11 @@
-"""Unified credentials management for the MTHDS CLI.
+"""Unified credentials management for the MTHDS client.
 
-Reads and writes ``~/.mthds/credentials`` using a dotenv-style format
+Reads and writes ``~/.mthds/config`` using a dotenv-style format — the SAME
+file, format, and key names the ``mthds`` CLI (mthds-js) uses, so a single
+``mthds config set …`` configures both the TypeScript and Python clients.
 (``KEY=VALUE``, ``#`` comments, blank lines allowed).
 
-Resolution order: environment variables > credentials file > defaults.
+Resolution order: environment variables > config file > defaults.
 """
 
 from __future__ import annotations
@@ -39,10 +41,16 @@ class CredentialEntry(NamedTuple):
 # ── Paths ───────────────────────────────────────────────────────────
 
 CONFIG_DIR = Path.home() / ".mthds"
-CREDENTIALS_PATH = CONFIG_DIR / "credentials"
+# Canonical file, shared with the mthds CLI (mthds-js writes the same path).
+CONFIG_PATH = CONFIG_DIR / "config"
 
-# Legacy paths (for auto-migration from JS config)
-_LEGACY_CONFIG_PATH = CONFIG_DIR / "config.json"
+# Legacy paths, auto-migrated forward into CONFIG_PATH when it does not yet
+# exist (an existing CONFIG_PATH always wins — the CLI is the source of truth):
+#   - ``credentials``  : the dotenv file earlier Python clients wrote.
+#   - ``config.json``  : the very first JS client format.
+#   - ``.env.local``   : early telemetry flag store.
+_LEGACY_CREDENTIALS_PATH = CONFIG_DIR / "credentials"
+_LEGACY_CONFIG_JSON_PATH = CONFIG_DIR / "config.json"
 _LEGACY_ENV_LOCAL_PATH = CONFIG_DIR / ".env.local"
 
 # ── Credential keys ────────────────────────────────────────────────
@@ -149,21 +157,21 @@ def _serialize_dotenv(entries: dict[str, str]) -> str:
 
 
 def _read_credentials_file() -> dict[str, str]:
-    """Read the credentials file, running migration if needed."""
+    """Read the config file, running migration if needed."""
     _migrate_if_needed()
-    if not CREDENTIALS_PATH.is_file():
+    if not CONFIG_PATH.is_file():
         return {}
     try:
-        return _parse_dotenv(CREDENTIALS_PATH.read_text(encoding="utf-8"))
+        return _parse_dotenv(CONFIG_PATH.read_text(encoding="utf-8"))
     except OSError:
         return {}
 
 
 def _write_credentials_file(entries: dict[str, str]) -> None:
-    """Write the credentials file with restricted permissions (owner-only)."""
+    """Write the config file with restricted permissions (owner-only)."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CREDENTIALS_PATH.write_text(_serialize_dotenv(entries), encoding="utf-8")
-    CREDENTIALS_PATH.chmod(0o600)
+    CONFIG_PATH.write_text(_serialize_dotenv(entries), encoding="utf-8")
+    CONFIG_PATH.chmod(0o600)
 
 
 # ── Migration ──────────────────────────────────────────────────────
@@ -172,22 +180,29 @@ _migration_done = False
 
 
 def _migrate_if_needed() -> None:
-    """Silently migrate from legacy config.json / .env.local if they exist."""
+    """Silently migrate legacy files forward into ``~/.mthds/config``.
+
+    No-op when ``config`` already exists — the CLI owns that file, so we never
+    clobber a current config with a stale legacy one. Sources, lowest to
+    highest precedence: ``config.json`` → ``.env.local`` → ``credentials``
+    (the dotenv file earlier Python clients wrote wins, being the most recent
+    Python format).
+    """
     global _migration_done  # noqa: PLW0603
     if _migration_done:
         return
     _migration_done = True
 
-    if CREDENTIALS_PATH.is_file():
+    if CONFIG_PATH.is_file():
         return
 
     migrated: dict[str, str] = {}
     did_migrate = False
 
-    # Migrate from config.json
-    if _LEGACY_CONFIG_PATH.is_file():
+    # Migrate from config.json (oldest JS format)
+    if _LEGACY_CONFIG_JSON_PATH.is_file():
         try:
-            raw = _LEGACY_CONFIG_PATH.read_text(encoding="utf-8")
+            raw = _LEGACY_CONFIG_JSON_PATH.read_text(encoding="utf-8")
             config: dict[str, object] = json.loads(raw)
 
             if isinstance(config.get("runner"), str):
@@ -213,12 +228,22 @@ def _migrate_if_needed() -> None:
         except OSError:
             pass
 
+    # Migrate from the old ``credentials`` dotenv file (earlier Python clients).
+    # Highest precedence: it is the most recent Python format and already uses
+    # the canonical MTHDS_/legacy PIPELEX_ keys, so copy every entry verbatim.
+    if _LEGACY_CREDENTIALS_PATH.is_file():
+        try:
+            migrated.update(_parse_dotenv(_LEGACY_CREDENTIALS_PATH.read_text(encoding="utf-8")))
+            did_migrate = True
+        except OSError:
+            pass
+
     if did_migrate:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        CREDENTIALS_PATH.write_text(_serialize_dotenv(migrated), encoding="utf-8")
+        CONFIG_PATH.write_text(_serialize_dotenv(migrated), encoding="utf-8")
 
         # Remove legacy files
-        for legacy_path in (_LEGACY_CONFIG_PATH, _LEGACY_ENV_LOCAL_PATH):
+        for legacy_path in (_LEGACY_CONFIG_JSON_PATH, _LEGACY_ENV_LOCAL_PATH, _LEGACY_CREDENTIALS_PATH):
             try:
                 if legacy_path.is_file():
                     legacy_path.unlink()
@@ -287,7 +312,7 @@ def get_credential_value(key: str) -> CredentialEntry:
 
 
 def set_credential_value(key: str, value: str) -> None:
-    """Set a credential value in the credentials file.
+    """Set a credential value in the config file.
 
     Args:
         key: Internal key (e.g. "runner", "api_url").

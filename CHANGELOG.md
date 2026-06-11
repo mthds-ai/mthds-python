@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.5.0] - 2026-06-11
+
+### Changed
+
+- **Config file unified with the `mthds` CLI.** The client now reads and writes `~/.mthds/config` — the same file, dotenv format, and `MTHDS_*` key names the `mthds` CLI (mthds-js) uses — instead of `~/.mthds/credentials`. A single `mthds config set base-url <host>` / `mthds config set api-key <key>` now configures both the TypeScript and Python clients. The old `~/.mthds/credentials` file is auto-migrated forward into `config` on first read (only when `config` does not already exist — the CLI's file always wins, so a stale legacy file never clobbers a current one). Legacy `PIPELEX_*` keys remain honored as read aliases.
+
+### Added
+
+- `examples/run_lifecycle_demo.py` + `examples/invoice_reimbursement.mthds` — an end-to-end demo of the run lifecycle against the hosted API (version, start & wait, start-only, poll-by-id, single-shot get), verified live.
+
 ## [v0.4.0] - 2026-06-10
 
 ### Breaking Changes

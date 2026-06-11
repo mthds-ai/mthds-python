@@ -21,10 +21,10 @@ class TestCredentialsIntegration:
         """Redirect credentials I/O to a temporary directory and reset migration flag."""
         config_dir = tmp_path / ".mthds"
         config_dir.mkdir()
-        credentials_path = config_dir / "credentials"
+        credentials_path = config_dir / "config"
 
         mocker.patch("mthds.config.credentials.CONFIG_DIR", config_dir)
-        mocker.patch("mthds.config.credentials.CREDENTIALS_PATH", credentials_path)
+        mocker.patch("mthds.config.credentials.CONFIG_PATH", credentials_path)
         mocker.patch("mthds.config.credentials._migrate_if_needed")
         # Hermetic env: a real MTHDS_*/PIPELEX_* var on the dev/CI machine must not leak in.
         mocker.patch.dict("os.environ", clear=True)
@@ -41,7 +41,7 @@ class TestCredentialsIntegration:
         assert creds["api_url"] == "https://custom.example.com"
 
         # Verify the file actually exists on disk
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         assert creds_path.is_file()
         content = creds_path.read_text(encoding="utf-8")
         assert "MTHDS_RUNNER=pipelex" in content
@@ -88,7 +88,7 @@ class TestCredentialsIntegration:
         assert entry.value == "api"
         assert entry.source == CredentialSource.FILE
 
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         content = creds_path.read_text(encoding="utf-8")
         assert content.count("MTHDS_RUNNER=") == 1
 
@@ -97,7 +97,7 @@ class TestCredentialsIntegration:
         set_credential_value("api_key", "my-key")
         set_credential_value("runner", "pipelex")
 
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         content = creds_path.read_text(encoding="utf-8")
         lines = [line for line in content.strip().splitlines() if line.strip()]
 

@@ -22,10 +22,10 @@ class TestCredentials:
         """Redirect credentials I/O to a temporary directory and reset migration flag."""
         config_dir = tmp_path / ".mthds"
         config_dir.mkdir()
-        credentials_path = config_dir / "credentials"
+        credentials_path = config_dir / "config"
 
         mocker.patch("mthds.config.credentials.CONFIG_DIR", config_dir)
-        mocker.patch("mthds.config.credentials.CREDENTIALS_PATH", credentials_path)
+        mocker.patch("mthds.config.credentials.CONFIG_PATH", credentials_path)
         # Prevent legacy config.json / .env.local migration side effects
         mocker.patch("mthds.config.credentials._migrate_if_needed")
         # Hermetic env: a real MTHDS_*/PIPELEX_* var on the dev/CI machine must not leak in.
@@ -63,7 +63,7 @@ class TestCredentials:
 
     def test_load_credentials_reads_file(self, tmp_path: Path) -> None:
         """Values written to the credentials file override defaults."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text("MTHDS_RUNNER=pipelex\nMTHDS_API_KEY=my-secret\n", encoding="utf-8")
 
         creds = load_credentials()
@@ -74,7 +74,7 @@ class TestCredentials:
 
     def test_load_credentials_env_overrides_file(self, tmp_path: Path, mocker: MockerFixture) -> None:
         """Environment variables take precedence over file values."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text("MTHDS_RUNNER=pipelex\n", encoding="utf-8")
 
         mocker.patch.dict("os.environ", {"MTHDS_RUNNER": "api"})
@@ -101,7 +101,7 @@ class TestCredentials:
 
     def test_get_credential_value_file_source(self, tmp_path: Path) -> None:
         """When value comes from file, source is FILE."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text("MTHDS_API_KEY=file-key\n", encoding="utf-8")
 
         entry = get_credential_value("api_key")
@@ -124,7 +124,7 @@ class TestCredentials:
         """Setting a value creates the credentials file with the entry."""
         set_credential_value("runner", "pipelex")
 
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         content = creds_path.read_text(encoding="utf-8")
         assert "MTHDS_RUNNER=pipelex" in content
 
@@ -133,14 +133,14 @@ class TestCredentials:
         set_credential_value("api_url", "https://alt.api.com")
         set_credential_value("api_key", "fresh-key")
 
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         content = creds_path.read_text(encoding="utf-8")
         assert "MTHDS_API_URL=https://alt.api.com" in content
         assert "MTHDS_API_KEY=fresh-key" in content
 
     def test_set_credential_value_preserves_other_keys(self, tmp_path: Path) -> None:
         """Setting one key does not remove other keys from the file."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text("MTHDS_API_KEY=existing\n", encoding="utf-8")
 
         set_credential_value("runner", "pipelex")
@@ -161,7 +161,7 @@ class TestCredentials:
 
     def test_load_credentials_ignores_comments_and_blanks(self, tmp_path: Path) -> None:
         """Comments and blank lines in the credentials file are ignored."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text(
             "# This is a comment\n\nMTHDS_RUNNER=pipelex\n\n# Another comment\n",
             encoding="utf-8",
@@ -174,7 +174,7 @@ class TestCredentials:
 
     def test_load_credentials_migrates_legacy_file_keys(self, tmp_path: Path) -> None:
         """Legacy PIPELEX_API_URL / PIPELEX_API_KEY in the file resolve to the new internal keys."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text(
             "PIPELEX_API_URL=https://legacy.example.com\nPIPELEX_API_KEY=legacy-secret\n",
             encoding="utf-8",
@@ -197,7 +197,7 @@ class TestCredentials:
 
     def test_new_key_takes_precedence_over_legacy_in_file(self, tmp_path: Path) -> None:
         """When both the new and legacy keys are present in the file, the new key wins."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text(
             "MTHDS_API_KEY=new-secret\nPIPELEX_API_KEY=old-secret\n",
             encoding="utf-8",
@@ -208,7 +208,7 @@ class TestCredentials:
 
     def test_legacy_env_overrides_file_new_key(self, tmp_path: Path, mocker: MockerFixture) -> None:
         """A legacy env var still outranks a new file value (env > file regardless of key spelling)."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text("MTHDS_API_KEY=file-new\n", encoding="utf-8")
 
         mocker.patch.dict("os.environ", {"PIPELEX_API_KEY": "env-legacy"})
@@ -218,7 +218,7 @@ class TestCredentials:
 
     def test_get_credential_value_legacy_file_source(self, tmp_path: Path) -> None:
         """A legacy file key reports source FILE for the new internal key."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text("PIPELEX_API_URL=https://legacy.example.com\n", encoding="utf-8")
 
         entry = get_credential_value("api_url")
@@ -236,7 +236,7 @@ class TestCredentials:
 
     def test_set_strips_legacy_alias(self, tmp_path: Path) -> None:
         """Setting api_url writes the new key and removes the stale legacy alias from the file."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text("PIPELEX_API_URL=https://legacy.example.com\n", encoding="utf-8")
 
         set_credential_value("api_url", "https://new.example.com")
@@ -247,7 +247,7 @@ class TestCredentials:
 
     def test_set_unrelated_key_preserves_legacy_alias(self, tmp_path: Path) -> None:
         """Setting an unrelated key must NOT drop a legacy alias for a different key (upgrade-critical)."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text("PIPELEX_API_KEY=legacy-secret\n", encoding="utf-8")
 
         set_credential_value("runner", "pipelex")
@@ -260,7 +260,7 @@ class TestCredentials:
 
     def test_empty_canonical_falls_through_to_legacy_in_file(self, tmp_path: Path) -> None:
         """An empty canonical value must not shadow a real legacy value in the file."""
-        creds_path = tmp_path / ".mthds" / "credentials"
+        creds_path = tmp_path / ".mthds" / "config"
         creds_path.write_text("MTHDS_API_KEY=\nPIPELEX_API_KEY=real-legacy\n", encoding="utf-8")
 
         creds = load_credentials()

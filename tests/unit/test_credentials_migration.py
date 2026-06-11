@@ -19,12 +19,45 @@ class TestCredentialsMigration:
         config_dir.mkdir()
 
         mocker.patch("mthds.config.credentials.CONFIG_DIR", config_dir)
-        mocker.patch("mthds.config.credentials.CREDENTIALS_PATH", config_dir / "credentials")
-        mocker.patch("mthds.config.credentials._LEGACY_CONFIG_PATH", config_dir / "config.json")
+        mocker.patch("mthds.config.credentials.CONFIG_PATH", config_dir / "config")
+        mocker.patch("mthds.config.credentials._LEGACY_CONFIG_JSON_PATH", config_dir / "config.json")
+        mocker.patch("mthds.config.credentials._LEGACY_CREDENTIALS_PATH", config_dir / "credentials")
         mocker.patch("mthds.config.credentials._LEGACY_ENV_LOCAL_PATH", config_dir / ".env.local")
         mocker.patch("mthds.config.credentials._migration_done", False)
         # Hermetic env: a real MTHDS_*/PIPELEX_* var must not shadow the migrated file values.
         mocker.patch.dict("os.environ", clear=True)
+
+    def test_legacy_credentials_file_migrates_to_config(self, tmp_path: Path) -> None:
+        """The old Python ``~/.mthds/credentials`` dotenv migrates into ``config``
+        (the file the mthds CLI shares), so a single config file serves both
+        clients. Legacy PIPELEX_ keys still resolve via the read aliases.
+        """
+        config_dir = tmp_path / ".mthds"
+        legacy = config_dir / "credentials"
+        legacy.write_text(
+            "MTHDS_API_URL=https://api-dev.pipelex.com\nPIPELEX_API_KEY=dev-secret\n",
+            encoding="utf-8",
+        )
+
+        creds = load_credentials()
+        assert creds["api_url"] == "https://api-dev.pipelex.com"
+        assert creds["api_key"] == "dev-secret"
+
+        assert (config_dir / "config").is_file()
+        assert not legacy.is_file()
+
+    def test_existing_config_is_never_clobbered_by_legacy(self, tmp_path: Path) -> None:
+        """An existing ``config`` (the CLI's source of truth) always wins — a
+        stale legacy ``credentials`` file must not overwrite it.
+        """
+        config_dir = tmp_path / ".mthds"
+        (config_dir / "config").write_text("MTHDS_API_URL=https://api-dev.pipelex.com\n", encoding="utf-8")
+        (config_dir / "credentials").write_text("MTHDS_API_URL=https://api.pipelex.com\n", encoding="utf-8")
+
+        creds = load_credentials()
+        assert creds["api_url"] == "https://api-dev.pipelex.com"
+        # The stale legacy file is left untouched (no migration ran).
+        assert (config_dir / "credentials").is_file()
 
     def test_config_json_migrates_to_new_keys(self, tmp_path: Path) -> None:
         """A legacy config.json migrates into the credentials file using the new MTHDS_ keys."""
@@ -49,7 +82,7 @@ class TestCredentialsMigration:
         assert creds["telemetry"] == "1"
 
         # The migrated credentials file uses the new storage keys and the legacy file is gone.
-        content = (config_dir / "credentials").read_text(encoding="utf-8")
+        content = (config_dir / "config").read_text(encoding="utf-8")
         assert "MTHDS_API_URL=https://legacy.example.com" in content
         assert "MTHDS_API_KEY=legacy-secret" in content
         assert "PIPELEX_API_URL" not in content
