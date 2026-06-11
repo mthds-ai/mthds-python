@@ -95,27 +95,25 @@ class TestRuns:
         run = RunPublic(pipeline_run_id="run_1", status=RunStatus.RUNNING, created_at="2026-06-10T00:00:00Z")
         assert run.pipeline_run_id == "run_1"
         assert run.status == RunStatus.RUNNING
-        assert run.org_id is None
-        assert run.created_by_user_id is None
+        assert run.model_extra == {}
         assert run.finished_at is None
 
-    def test_run_public_platform_tier_with_identity(self) -> None:
-        """A platform-tier run carries org + creator + method linkage."""
-        run = RunPublic(
-            pipeline_run_id="run_2",
-            org_id="org_x",
-            created_by_user_id="user_y",
-            method_id="mt_123",
-            pipe_code="answer",
-            workflow_id="wf_abc",
-            status=RunStatus.COMPLETED,
-            result_url="s3://bucket/run_2",
-            created_at="2026-06-10T00:00:00Z",
-            finished_at="2026-06-10T00:00:10Z",
+    def test_run_public_keeps_server_specific_response_fields(self) -> None:
+        """Server-specific response fields are preserved (extra=allow) and accessible, never named by the SDK."""
+        run = RunPublic.model_validate(
+            {
+                "pipeline_run_id": "run_2",
+                "pipe_code": "answer",
+                "status": "COMPLETED",
+                "created_at": "2026-06-10T00:00:00Z",
+                "finished_at": "2026-06-10T00:00:10Z",
+                "some_vendor_field": "vendor_value",
+                "another_one": {"nested": True},
+            }
         )
-        assert run.method_id == "mt_123"
-        assert run.workflow_id == "wf_abc"
         assert run.status == RunStatus.COMPLETED
+        assert run.model_extra == {"some_vendor_field": "vendor_value", "another_one": {"nested": True}}
+        assert run.some_vendor_field == "vendor_value"  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
 
     def test_run_read_defaults(self) -> None:
         """RunRead defaults degraded=False and retry_after_seconds=None."""

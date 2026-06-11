@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from mthds._compat import StrEnum
 
@@ -80,22 +80,20 @@ class RunStatus(StrEnum):
 
 
 class RunPublic(BaseModel):
-    """A run record. Mirrors `pipelex_shared.schemas.run.RunPublic`.
+    """A run record — the BASE shape of the run-lifecycle read surface.
 
-    The identity fields (`org_id`, `created_by_user_id`, `method_id`) are optional
-    because the open-source runner serves the same lifecycle shape without them —
-    only the hosted platform layers identity on. Tolerant of unknown fields so the
-    server can evolve its payload (default `extra="ignore"`).
+    Only the base fields are declared here. An implementation may return more
+    (identity, workflow ids, storage URLs, anything else) — those are
+    server-specific response fields, never named in this SDK. The model is
+    extension-open (`extra="allow"`): unknown fields are preserved and remain
+    accessible as attributes, mirroring the request-side `extra` passthrough.
     """
 
+    model_config = ConfigDict(extra="allow")
+
     pipeline_run_id: str
-    org_id: str | None = None
-    created_by_user_id: str | None = None
-    method_id: str | None = None
     pipe_code: str | None = None
-    workflow_id: str | None = None
     status: RunStatus
-    result_url: str | None = None
     created_at: str
     finished_at: str | None = None
 
