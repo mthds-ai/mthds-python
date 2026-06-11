@@ -23,9 +23,9 @@ pip install mthds
 ## Quick Start
 
 ```bash
-# Configure the API runner (default)
+# Configure the API runner (default) — Pipelex is the reference implementation
 mthds config set api-key YOUR_KEY
-mthds config set api-url https://your-api-instance.com
+mthds config set api-url https://api.pipelex.com
 
 # Run a pipe
 mthds run my_pipe_code

@@ -208,9 +208,9 @@ mthds build output pipelex my_pipe_code --format json
 
 ## Config
 
-Manage MTHDS configuration and credentials stored in `~/.mthds/credentials`.
+Manage MTHDS configuration and credentials stored in `~/.mthds/config` (the same file the `mthds` CLI reads/writes).
 
-Configuration values are resolved in this order: **environment variables > credentials file > defaults**.
+Configuration values are resolved in this order: **environment variables > config file > defaults**.
 
 ### Valid Configuration Keys
 
@@ -221,7 +221,7 @@ Configuration values are resolved in this order: **environment variables > crede
 | `api-key` | `MTHDS_API_KEY` | (empty) | API authentication key |
 | `telemetry` | `DISABLE_TELEMETRY` | `0` | Set to `1` to disable telemetry |
 
-The legacy `PIPELEX_API_URL` / `PIPELEX_API_KEY` environment variables (and credentials-file keys) are still read and migrated automatically; the `MTHDS_` names are canonical.
+Only the canonical `MTHDS_*` keys are recognized — there is no legacy `PIPELEX_*` fallback.
 
 ### `mthds config set`
 

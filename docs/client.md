@@ -56,3 +56,7 @@ async with MthdsAPIClient() as client:
 
 - `RunnerType.API` → the `MthdsAPIClient` itself.
 - `RunnerType.PIPELEX` → `PipelexRunner`, which shells out to a locally installed `pipelex` CLI (`execute` via `pipelex run`, `validate` via `pipelex validate`, `version` via `pipelex --version`; `start`/`models` raise `NotImplementedError`). Falls back to the API client when `pipelex` is not on PATH.
+
+## Runnable example
+
+`examples/run_lifecycle_demo.py` exercises the whole lifecycle against the hosted API — `version`, start & wait, start-only, poll-by-id, and a single-shot get — over the `examples/invoice_reimbursement.mthds` batch method. Configure your key (`mthds config set api-key …`) and run `python examples/run_lifecycle_demo.py`.

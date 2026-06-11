@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Config file unified with the `mthds` CLI.** The client reads and writes `~/.mthds/config` — the same file, dotenv format, and `MTHDS_*` key names the `mthds` CLI (mthds-js) uses. A single `mthds config set base-url <host>` / `mthds config set api-key <key>` configures both the TypeScript and Python clients.
+- **Config file unified with the `mthds` CLI.** The client reads and writes `~/.mthds/config` — the same file, dotenv format, and `MTHDS_*` key names the `mthds` CLI (mthds-js) uses. A single `mthds config set api-url <host>` / `mthds config set api-key <key>` configures the Python client, and the `mthds` CLI writes the same file (its key is spelled `base-url`).
 
 ### Removed
 
