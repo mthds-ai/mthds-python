@@ -54,7 +54,11 @@ class TestMthdsAPIClientProtocol:
     def test_validate_posts_contents_and_parses_report(self, mocker: MockerFixture) -> None:
         """Validate posts to /v1/validate with mthds_contents + allow_signatures and parses the report."""
         client = self._client()
-        body: dict[str, object] = {"blueprint": {"domain": "answer"}, "graph_spec": {"nodes": []}, "pipe_structures": {}}  # implementation artifacts
+        body: dict[str, object] = {
+            "blueprint": {"domain": "answer"},
+            "graph_spec": {"nodes": []},
+            "pipe_io_contracts": {},
+        }  # implementation artifacts
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
         report = asyncio.run(client.validate(['domain = "answer"'], allow_signatures=True))
