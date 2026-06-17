@@ -8,7 +8,7 @@ from typing_extensions import runtime_checkable
 from mthds.protocol.models import PipeOutputT
 
 if TYPE_CHECKING:
-    from mthds.protocol.models import ModelCategory, ModelDeck, RunResultExecute, RunResultStart, ValidationReport, VersionInfo
+    from mthds.protocol.models import ModelCategory, ModelDeck, RunResultExecute, RunResultStart, ValidationResult, VersionInfo
     from mthds.protocol.pipe_output import VariableMultiplicity
     from mthds.protocol.pipeline_inputs import PipelineInputs
     from mthds.protocol.stuff import StuffType
@@ -117,7 +117,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         self,
         mthds_contents: list[str],
         allow_signatures: bool = False,
-    ) -> ValidationReport:
+    ) -> ValidationResult:
         """Parse, validate, and dry-run an MTHDS bundle.
 
         Args:
@@ -126,8 +126,13 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
                 unimplemented pipe signatures. Strict by default.
 
         Returns:
-            ValidationReport with the structural artifacts of a VALID bundle.
-            Invalid bundles raise (HTTP 422 problem on API runners).
+            The 200-diagnostic verdict union, discriminated on `is_valid`: a
+            `ValidationReport` (`is_valid: true`, structural artifacts) or an
+            `InvalidValidationReport` (`is_valid: false`, `validation_errors[]`).
+            An invalid bundle is a produced verdict, NOT a raised 422 — non-2xx is
+            reserved for "no verdict could be produced". (The local CLI runner is the
+            documented exception: it surfaces an invalid bundle as a raised
+            `PipelexRunnerError` from the CLI's exit code.)
         """
         ...
 

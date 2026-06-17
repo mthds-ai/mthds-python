@@ -10,11 +10,13 @@ domain shapes these mirror live in `mthds.protocol.*`.
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, TypeAlias
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from mthds.protocol.models import RunResultExecute
+from mthds._compat import StrEnum
+from mthds._utils.pydantic_utils import empty_list_factory_of
+from mthds.protocol.models import InvalidValidationReport, RunResultExecute, ValidationDiagnostic, ValidationReport
 
 if TYPE_CHECKING:
     from mthds.protocol.pipe_output import PipeOutputAbstract
@@ -106,3 +108,87 @@ class DictRunResultExecute(RunResultExecute[DictPipeOutputAbstract]):
                 "main_stuff_name": pipe_output.working_memory.aliases.get(MAIN_STUFF_NAME, MAIN_STUFF_NAME),
             }
         )
+
+
+# ── Pipelex narrowing of the `POST /validate` 200-diagnostic union ───
+#
+# The protocol layer (`mthds.protocol.models`) declares the brand-neutral verdict
+# shapes; the pipelex runner narrows them with its structural artifacts and its
+# closed `ValidationErrorCategory` vocabulary. Names here carry Pipelex branding
+# because they are runtime-specific; the protocol field names stay neutral.
+
+
+class DryRunStatus(StrEnum):
+    """Per-pipe dry-run sweep outcome on `ValidatedPipeEntry.status`."""
+
+    SUCCESS = "SUCCESS"
+    FAILURE = "FAILURE"
+    SKIPPED = "SKIPPED"
+
+
+class ValidationErrorCategory(StrEnum):
+    """The closed `validation_errors[].category` vocabulary (locked).
+
+    Mirrors the single source of truth in the conformance suite
+    (`conformance/conformance/validation_contract.py`); keep in sync with it.
+    """
+
+    BLUEPRINT_VALIDATION = "blueprint_validation"
+    PIPE_FACTORY = "pipe_factory"
+    PIPE_VALIDATION = "pipe_validation"
+    DRY_RUN = "dry_run"
+
+
+class ValidatedPipeEntry(BaseModel):
+    """One entry of `PipelexValidationReport.validated_pipes[]`."""
+
+    model_config = ConfigDict(extra="allow")
+
+    pipe_ref: str
+    status: DryRunStatus
+
+
+class ValidationErrorItem(ValidationDiagnostic):
+    """Pipelex's structured `validation_errors[]` item — narrows the protocol base.
+
+    `category` narrows to the closed `ValidationErrorCategory` set; the locators are
+    populated per category and dropped from the wire when unset. Built by pipelex's
+    one shared builder, so the hosted `InvalidReport` and the agent-CLI envelope
+    cannot drift.
+    """
+
+    category: ValidationErrorCategory  # pyright: ignore[reportIncompatibleVariableOverride]
+    error_type: str | None = None
+    pipe_code: str | None = None
+    concept_code: str | None = None
+    domain_code: str | None = None
+    source: str | None = None
+    field_path: str | None = None
+    field_name: str | None = None
+    missing_concept_code: str | None = None
+    variable_names: list[str] | None = None
+    declared_concepts: list[str] | None = None
+
+
+class PipelexValidationReport(ValidationReport):
+    """The valid arm narrowed with pipelex's structural artifacts (`is_valid: true`)."""
+
+    bundle_blueprint: dict[str, Any] = Field(default_factory=dict)
+    pipe_io_contracts: dict[str, Any] = Field(default_factory=dict)
+    graph_spec: Any = None
+    validated_pipes: list[ValidatedPipeEntry] = Field(default_factory=empty_list_factory_of(ValidatedPipeEntry))
+    pending_signatures: list[str] = Field(default_factory=list)
+    is_runnable: bool = True
+    message: str = ""
+    mthds_contents: list[str] | None = None
+
+
+class PipelexInvalidReport(InvalidValidationReport[ValidationErrorItem]):
+    """The invalid arm carrying pipelex's structured `validation_errors[]` (`is_valid: false`)."""
+
+
+PipelexValidationResult: TypeAlias = Annotated[
+    PipelexValidationReport | PipelexInvalidReport,
+    Field(discriminator="is_valid"),
+]
+"""Pipelex's `POST /v1/validate` 200 response — discriminated on `is_valid`."""

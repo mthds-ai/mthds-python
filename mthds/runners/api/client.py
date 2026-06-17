@@ -13,7 +13,7 @@ from typing_extensions import override
 
 from mthds.config.credentials import load_credentials
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationReport, VersionInfo
+from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.exceptions import (
     ClientAuthenticationError,
@@ -22,7 +22,13 @@ from mthds.runners.api.exceptions import (
     RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
+from mthds.runners.api.models import (
+    DictPipeOutputAbstract,
+    DictRunResultExecute,
+    PipelexInvalidReport,
+    PipelexValidationReport,
+    PipelexValidationResult,
+)
 from mthds.runners.api.runs import (
     PollInfo,
     RunRead,
@@ -269,20 +275,34 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         self,
         mthds_contents: list[str],
         allow_signatures: bool = False,
-    ) -> ValidationReport:
+        mthds_sources: list[str] | None = None,
+    ) -> PipelexValidationResult:
         """Parse, validate, and dry-run an MTHDS bundle — `POST /v1/validate`.
+
+        `/validate` is 200-diagnostic: a produced verdict — valid or invalid — rides a
+        200 body discriminated on `is_valid`. A non-2xx response means no verdict could
+        be produced (request shape, auth, server fault) and surfaces as an
+        `httpx.HTTPStatusError`; an invalid bundle does NOT raise.
 
         Args:
             mthds_contents: MTHDS contents to load (always a list, even for one file)
             allow_signatures: Tolerate unimplemented pipe signatures (strict by default)
+            mthds_sources: Optional per-content source names, parallel to
+                `mthds_contents`; each is threaded onto the corresponding
+                `blueprint.source` so diagnostics name their owning file. A length
+                mismatch against `mthds_contents` is a request-shape 422.
 
         Returns:
-            ValidationReport with the structural artifacts of a valid bundle.
+            The 200-diagnostic union: `PipelexValidationReport` (`is_valid: true`) or
+            `PipelexInvalidReport` (`is_valid: false`, with `validation_errors`).
 
         Raises:
-            httpx.HTTPStatusError: 422 when the bundle is invalid (RFC 7807 problem body).
+            httpx.HTTPStatusError: a no-verdict response (request-shape 422, 401/403,
+                or 5xx) — never an invalid bundle, which is a 200 `PipelexInvalidReport`.
         """
-        body = {"mthds_contents": mthds_contents, "allow_signatures": allow_signatures}
+        body: dict[str, Any] = {"mthds_contents": mthds_contents, "allow_signatures": allow_signatures}
+        if mthds_sources is not None:
+            body["mthds_sources"] = mthds_sources
         response = await self._send(
             "POST",
             self._url("validate"),
@@ -290,7 +310,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
-        return ValidationReport.model_validate(response.json())
+        payload = response.json()
+        if payload.get("is_valid") is False:
+            return PipelexInvalidReport.model_validate(payload)
+        return PipelexValidationReport.model_validate(payload)
 
     @override
     async def models(self, category: ModelCategory | None = None) -> ModelDeck:

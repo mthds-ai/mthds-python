@@ -12,7 +12,7 @@ from typing import Any, cast
 from pydantic_core import to_json
 from typing_extensions import override
 
-from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationReport, VersionInfo
+from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationReport, ValidationResult, VersionInfo
 from mthds.protocol.pipe_output import VariableMultiplicity
 from mthds.protocol.pipeline_inputs import PipelineInputs
 from mthds.protocol.protocol import MTHDSProtocol
@@ -298,19 +298,25 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         self,
         mthds_contents: list[str],
         allow_signatures: bool = False,
-    ) -> ValidationReport:
+    ) -> ValidationResult:
         """Validate MTHDS bundles via `pipelex validate`.
 
         The CLI reports validity through its exit code; it does not emit the
         protocol's structural artifacts, so a passing validation returns an
-        empty `ValidationReport`.
+        empty `ValidationReport` (`is_valid: true`).
+
+        Documented divergence from the 200-diagnostic wire contract: the local CLI
+        runner surfaces an INVALID bundle as a raised `PipelexRunnerError` (the CLI's
+        non-zero exit), not as a returned `InvalidValidationReport`. Only the API
+        runner returns the discriminated invalid arm. (The strict gate also exits
+        non-zero on unimplemented signatures unless `allow_signatures`.)
 
         Args:
             mthds_contents: MTHDS contents to load (always a list, even for one file).
             allow_signatures: Tolerate unimplemented pipe signatures.
 
         Returns:
-            An empty ValidationReport when the bundle is valid.
+            An empty ValidationReport (`is_valid: true`) when the bundle is valid.
 
         Raises:
             PipelexRunnerError: If validation fails or pipelex is unavailable.

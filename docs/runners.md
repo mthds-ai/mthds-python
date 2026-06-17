@@ -38,8 +38,18 @@ async with MthdsAPIClient() as client:
     # anything else the server returned (run state, timestamps, output naming)
     # is an implementation extension — preserved in result.model_extra
 
-    # Validation (dry-run included); raises on an invalid bundle (HTTP 422 problem)
+    # Validation (dry-run included) — 200-diagnostic: read the verdict from the body
     report = await client.validate([bundle_text])
+    if report.is_valid:
+        ...                                          # PipelexValidationReport — structural artifacts
+    else:
+        for item in report.validation_errors:        # PipelexInvalidReport — typed diagnostics
+            print(item.category, item.message, item.source)
+    # An invalid bundle is a 200 InvalidReport, NOT a 422; non-2xx (request-shape 422,
+    # auth, 5xx) means no verdict could be produced and raises httpx.HTTPStatusError.
+    # `validate(contents, allow_signatures, mthds_sources=[...])` threads per-content
+    # source names onto each diagnostic's `source`. The local PipelexRunner instead
+    # raises PipelexRunnerError on an invalid bundle (the CLI's exit code).
 
     # Discovery
     deck = await client.models()           # optionally client.models(ModelCategory.LLM)
