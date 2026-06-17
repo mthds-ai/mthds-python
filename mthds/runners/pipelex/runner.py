@@ -298,6 +298,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         self,
         mthds_contents: list[str],
         allow_signatures: bool = False,
+        extra: dict[str, Any] | None = None,
     ) -> ValidationResult:
         """Validate MTHDS bundles via `pipelex validate`.
 
@@ -314,13 +315,18 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         Args:
             mthds_contents: MTHDS contents to load (always a list, even for one file).
             allow_signatures: Tolerate unimplemented pipe signatures.
+            extra: Rejected — the CLI runner defines no extension args.
 
         Returns:
             An empty ValidationReport (`is_valid: true`) when the bundle is valid.
 
         Raises:
-            PipelexRunnerError: If validation fails or pipelex is unavailable.
+            PipelexRunnerError: If validation fails, pipelex is unavailable, or
+                extension args are passed (the CLI runner accepts none).
         """
+        if extra:
+            msg = f"The pipelex CLI runner defines no extension args; got {sorted(extra)}."
+            raise PipelexRunnerError(msg)
         pipelex_path = _ensure_pipelex()
 
         if not mthds_contents:

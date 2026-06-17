@@ -11,12 +11,14 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from mthds.runners.api.models import (
     DryRunStatus,
     PipelexInvalidReport,
     PipelexValidationReport,
     PipelexValidationResult,
+    PipelexValidationResultAdapter,
     ValidationErrorCategory,
 )
 
@@ -86,10 +88,8 @@ PENDING_SIGNATURE_BODY: dict[str, Any] = {
 
 
 def _parse(body: dict[str, Any]) -> PipelexValidationResult:
-    """Discriminate on `is_valid` exactly as the API client does."""
-    if body.get("is_valid") is False:
-        return PipelexInvalidReport.model_validate(body)
-    return PipelexValidationReport.model_validate(body)
+    """Parse a wire body through the real discriminated-union adapter — the exact parse path the API client uses."""
+    return PipelexValidationResultAdapter.validate_python(body)
 
 
 class TestValidationContract:
@@ -157,5 +157,25 @@ class TestValidationContract:
     def test_unknown_category_is_rejected(self) -> None:
         """An out-of-vocabulary category fails validation — the enum is a closed set."""
         bad_body = {**INVALID_BODY, "validation_errors": [{"category": "made_up", "message": "x"}]}
-        with pytest.raises(ValueError, match="made_up"):
-            PipelexInvalidReport.model_validate(bad_body)
+        with pytest.raises(ValidationError, match="made_up"):
+            PipelexValidationResultAdapter.validate_python(bad_body)
+
+    @pytest.mark.parametrize(
+        "malformed_body",
+        [
+            {},  # no discriminant at all
+            {"message": "x"},  # still no discriminant — must NOT be read as a valid verdict
+            {"is_valid": None},  # null discriminant cannot be tagged
+            {"is_valid": "false"},  # non-boolean discriminant cannot be tagged
+            {"is_valid": False, "message": "x"},  # invalid arm tagged, but required validation_errors missing
+        ],
+    )
+    def test_malformed_200_body_raises_no_silent_valid(self, malformed_body: dict[str, Any]) -> None:
+        """A 200 body that can't be discriminated, or whose tagged arm misses a required field, raises.
+
+        Regression guard for the silent-valid hole: the old hand-rolled `is_valid is False` check
+        treated any non-`False` discriminant (missing, null, anything) as valid. Routing through the
+        discriminated-union adapter makes a missing/bad discriminant a loud `ValidationError` instead.
+        """
+        with pytest.raises(ValidationError):
+            PipelexValidationResultAdapter.validate_python(malformed_body)

@@ -14,7 +14,7 @@ The 200-diagnostic `/validate` contract: a produced verdict — valid or invalid
 
 - Protocol wire models: `ValidationDiagnostic` (neutral `category` + `message` base — named to stay distinct from `pydantic.ValidationError`), generic `InvalidValidationReport`, and the `ValidationResult` discriminated union.
 - Pipelex narrowing (`mthds.runners.api.models`): `ValidationErrorItem`, `ValidationErrorCategory` (closed set incl. `dry_run`), `ValidatedPipeEntry`, `DryRunStatus`, `PipelexValidationReport`, `PipelexInvalidReport`, `PipelexValidationResult`.
-- Optional `mthds_sources` on `MthdsAPIClient.validate()` — per-content source names threaded onto each diagnostic's `source`.
+- Generic `extra` passthrough on `validate()` (mirrors `execute`/`start`) — server-specific extension args merge into the request body as top-level properties; protocol args (`mthds_contents`, `allow_signatures`) inside `extra` are rejected client-side with `PipelineRequestError`. Server extensions like `mthds_sources` (per-content source names threaded onto each diagnostic's `source`) ride it. The local `PipelexRunner.validate()` rejects any `extra` (the CLI runner defines no extension args).
 
 ### Changed
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from mthds._compat import StrEnum
 from mthds._utils.pydantic_utils import empty_list_factory_of
@@ -192,3 +192,12 @@ PipelexValidationResult: TypeAlias = Annotated[
     Field(discriminator="is_valid"),
 ]
 """Pipelex's `POST /v1/validate` 200 response — discriminated on `is_valid`."""
+
+
+PipelexValidationResultAdapter: TypeAdapter[PipelexValidationResult] = TypeAdapter(PipelexValidationResult)
+"""The single parse path for a 200 `/validate` body — built once at import (TypeAdapter construction is expensive).
+
+Routes on the `is_valid` discriminant: a present `True` → `PipelexValidationReport`, a present
+`False` → `PipelexInvalidReport`. A body missing/with-a-bad `is_valid` cannot be tagged and raises
+`pydantic.ValidationError`, so a malformed 200 can never be mistaken for a valid verdict.
+"""

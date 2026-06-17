@@ -117,6 +117,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         self,
         mthds_contents: list[str],
         allow_signatures: bool = False,
+        extra: dict[str, Any] | None = None,
     ) -> ValidationResult:
         """Parse, validate, and dry-run an MTHDS bundle.
 
@@ -124,6 +125,9 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             mthds_contents: MTHDS contents to load (always a list, even for one file)
             allow_signatures: When True, the validation sweep tolerates
                 unimplemented pipe signatures. Strict by default.
+            extra: Implementation-defined extension args, merged into the
+                request body as top-level properties. The server is the source
+                of truth for what it accepts.
 
         Returns:
             The 200-diagnostic verdict union, discriminated on `is_valid`: a
