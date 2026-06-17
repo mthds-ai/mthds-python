@@ -2,7 +2,7 @@
 
     POST /execute  : -> RunResultExecute (200: pipeline_run_id + pipe_output)
     POST /start    : -> RunResultStart   (202: pipeline_run_id only)
-    POST /validate :              -> ValidationReport
+    POST /validate :              -> ValidationResult (200 union: ValidationReport | InvalidValidationReport)
     GET  /models   :              -> ModelDeck
     GET  /version  :              -> VersionInfo
 
@@ -18,7 +18,7 @@ principle as the request-side `extra`.
 
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import Annotated, Generic, Literal, TypeAlias, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -97,15 +97,74 @@ class ModelDeck(BaseModel):
 
 
 class ValidationReport(BaseModel):
-    """Verdict of `POST /validate` for a VALID bundle — the 200 status IS the verdict.
+    """The VALID arm of the `POST /validate` 200 response union (`is_valid: true`).
 
-    Failures never reach this model — they are RFC 7807 problems (HTTP 422).
-    The protocol declares no body fields; implementations may include their own
-    artifacts (parsed structures, graphs, anything else), preserved here as
-    extension attributes.
+    `/validate` is a diagnostic endpoint: any produced verdict — valid or invalid —
+    rides a **200** body discriminated on `is_valid`. This is the valid arm; an
+    invalid verdict is the sibling `InvalidValidationReport` (also 200), NOT a 422
+    problem. Non-2xx is reserved for "no verdict could be produced" (malformed
+    request, auth, server fault).
+
+    The protocol declares only the `is_valid` discriminant here; implementations
+    include their own artifacts (parsed structures, graphs, anything else),
+    preserved as extension attributes (`extra="allow"`).
     """
 
     model_config = ConfigDict(extra="allow")
+
+    is_valid: Literal[True] = True
+
+
+class ValidationDiagnostic(BaseModel):
+    """One diagnostic in `InvalidValidationReport.validation_errors[]` — protocol base.
+
+    The protocol fixes only the neutral `category` + `message`; implementations
+    narrow `category` to their closed vocabulary and add structured locators
+    (preserved as extensions until narrowed). Named `ValidationDiagnostic` to stay
+    distinct from `pydantic.ValidationError` (this is a wire model, not an exception).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    category: str
+    message: str
+
+
+ValidationDiagnosticT = TypeVar("ValidationDiagnosticT", bound=ValidationDiagnostic, covariant=True)
+
+
+class InvalidValidationReport(BaseModel, Generic[ValidationDiagnosticT]):
+    """The INVALID arm of the `POST /validate` 200 response union (`is_valid: false`).
+
+    Carries the per-error diagnostics (`validation_errors[]`, always non-empty on an
+    invalid verdict), best-effort `pending_signatures`, `is_runnable: false`, and a
+    human-readable `message`. The structural artifacts of the valid arm are absent —
+    they do not exist when load/parse/wiring failed.
+
+    Generic over the diagnostic item type so an implementation can narrow
+    `validation_errors` to its structured item (e.g. pipelex's `ValidationErrorItem`)
+    without re-declaring the field.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    is_valid: Literal[False] = False
+    validation_errors: list[ValidationDiagnosticT]
+    pending_signatures: list[str] = Field(default_factory=list)
+    is_runnable: Literal[False] = False
+    message: str
+
+
+ValidationResult: TypeAlias = Annotated[
+    ValidationReport | InvalidValidationReport[ValidationDiagnostic],
+    Field(discriminator="is_valid"),
+]
+"""The `POST /validate` 200 response — discriminated on `is_valid`.
+
+A consumer pattern-matches the one mandatory field (`is_valid`) regardless of
+outcome, and never inspects a status code or catches an exception body to learn the
+verdict. Non-2xx means the endpoint could not produce a verdict.
+"""
 
 
 class VersionInfo(BaseModel):
