@@ -7,9 +7,11 @@ import httpx
 import pytest
 from pytest_mock import MockerFixture
 
-from mthds.protocol.models import ModelCategory, ModelDeck, ValidationReport, VersionInfo
+from mthds.protocol.exceptions import PipelineRequestError
+from mthds.protocol.models import ModelCategory, ModelDeck, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.client import MthdsAPIClient
+from mthds.runners.api.models import PipelexInvalidReport, PipelexValidationReport, ValidationErrorCategory
 
 _BASE_URL = "http://localhost:8081"
 
@@ -51,29 +53,84 @@ class TestMthdsAPIClientProtocol:
 
     # ── validate ─────────────────────────────────────────────────
 
-    def test_validate_posts_contents_and_parses_report(self, mocker: MockerFixture) -> None:
-        """Validate posts to /v1/validate with mthds_contents + allow_signatures and parses the report."""
+    def test_validate_posts_contents_and_parses_valid_report(self, mocker: MockerFixture) -> None:
+        """A 200 valid verdict posts mthds_contents + allow_signatures and parses the valid arm."""
         client = self._client()
-        body: dict[str, object] = {"blueprint": {"domain": "answer"}, "graph_spec": {"nodes": []}, "pipe_structures": {}}  # implementation artifacts
+        body: dict[str, object] = {
+            "is_valid": True,
+            "bundle_blueprint": {"domain": "answer"},
+            "graph_spec": {"nodes": []},
+            "pipe_io_contracts": {},
+            "validated_pipes": [],
+            "pending_signatures": [],
+            "is_runnable": True,
+            "message": "Validation succeeded.",
+        }
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
         report = asyncio.run(client.validate(['domain = "answer"'], allow_signatures=True))
         assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/validate"
         sent = send_mock.call_args.kwargs["content"].decode("utf-8")
-        assert '"allow_signatures": true' in sent
-        assert isinstance(report, ValidationReport)
-        # The protocol declares no body fields — implementation artifacts pass through as extensions.
-        assert report.model_extra is not None
-        assert report.model_extra["blueprint"] == {"domain": "answer"}
+        # `to_json` emits compact JSON (no spaces after ':' / ',').
+        assert '"mthds_contents":["domain = \\"answer\\""]' in sent
+        assert '"allow_signatures":true' in sent
+        # No extra passed → mthds_sources is omitted from the request body.
+        assert "mthds_sources" not in sent
+        assert isinstance(report, PipelexValidationReport)
+        assert report.is_valid is True
+        assert report.bundle_blueprint == {"domain": "answer"}
 
-    def test_validate_invalid_bundle_raises_http_error(self, mocker: MockerFixture) -> None:
-        """A 422 problem (invalid bundle) surfaces as an HTTP error, not a report."""
+    def test_validate_threads_mthds_sources(self, mocker: MockerFixture) -> None:
+        """A server extension arg (mthds_sources) rides the generic `extra` passthrough into the request body."""
         client = self._client()
-        body = {"type": "about:blank", "title": "Validation failed", "status": 422}
+        body: dict[str, object] = {"is_valid": True, "message": "ok"}
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
+
+        asyncio.run(client.validate(['domain = "answer"'], extra={"mthds_sources": ["answer.mthds"]}))
+        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
+        assert '"mthds_sources":["answer.mthds"]' in sent
+
+    def test_validate_invalid_bundle_returns_200_invalid_report(self, mocker: MockerFixture) -> None:
+        """An invalid bundle is a 200 diagnostic verdict — NOT a silent pass, NOT a raise.
+
+        Regression guard for the 200-diagnostic reframe: the old client did
+        `raise_for_status()` then parsed into an empty report, so a 200 invalid body
+        would have been mistaken for valid.
+        """
+        client = self._client()
+        body: dict[str, object] = {
+            "is_valid": False,
+            "validation_errors": [{"category": "pipe_validation", "message": "Unknown concept.", "pipe_code": "summarize"}],
+            "pending_signatures": [],
+            "is_runnable": False,
+            "message": "Validation found errors.",
+        }
+        mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
+
+        report = asyncio.run(client.validate(["domain = "]))
+        assert isinstance(report, PipelexInvalidReport)
+        assert report.is_valid is False
+        assert report.validation_errors[0].category is ValidationErrorCategory.PIPE_VALIDATION
+        assert report.validation_errors[0].pipe_code == "summarize"
+
+    def test_validate_no_verdict_response_raises_http_error(self, mocker: MockerFixture) -> None:
+        """A request-shape 422 (no verdict could be produced) surfaces as an HTTP error, not a report.
+
+        The 422 is the server's verdict on the request shape; this client does no local
+        validation of the request beyond the `extra` protocol-arg guard.
+        """
+        client = self._client()
+        body = {"type": "about:blank", "title": "Malformed request", "status": 422}
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(422, json=body)))
 
         with pytest.raises(httpx.HTTPStatusError):
             asyncio.run(client.validate(["domain = "]))
+
+    def test_validate_extra_rejects_protocol_arg(self) -> None:
+        """A protocol arg smuggled through `extra` is rejected client-side (mirrors the execute/start guard)."""
+        client = self._client()
+        with pytest.raises(PipelineRequestError):
+            asyncio.run(client.validate(['domain = "answer"'], extra={"mthds_contents": ["x"]}))
 
     # ── models ───────────────────────────────────────────────────
 

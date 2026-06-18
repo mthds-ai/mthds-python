@@ -1,5 +1,26 @@
 # Changelog
 
+## [v0.5.0] - 2026-06-18
+
+The 200-diagnostic `/validate` contract: a produced verdict — valid or invalid — rides a 200 body discriminated on `is_valid`; non-2xx is reserved for "no verdict could be produced". Brings `mthds-python` in line with the MTHDS Protocol (`mthds-protocol.openapi.yaml`) and its `mthds-js` twin.
+
+### Breaking Changes
+
+- **`ValidationReport` is now the VALID arm of a discriminated union.** It carries the `is_valid: Literal[True]` discriminant; an invalid bundle is the sibling `InvalidValidationReport` (`is_valid: false`, with `validation_errors[]`) returned at **200**, not a 422 RFC 7807 problem. `POST /validate` is 200-diagnostic.
+- **`MthdsAPIClient.validate()` returns `PipelexValidationResult` and no longer raises on an invalid bundle.** It reads the verdict from the 200 body discriminant; `httpx.HTTPStatusError` now surfaces only for no-verdict responses (request-shape 422, 401/403, 5xx). Previously an invalid bundle (then a 422) raised — under the new server contract that 422 became a 200, which the old `raise_for_status()`-then-parse path would have silently mistaken for valid.
+- **`MTHDSProtocol.validate()` and `PipelexRunner.validate()` return `ValidationResult`.** The local CLI runner keeps surfacing an invalid bundle as a raised `PipelexRunnerError` (the CLI's exit code) — a documented divergence from the wire's 200 invalid arm.
+
+### Added
+
+- Protocol wire models: `ValidationDiagnostic` (neutral `category` + `message` base — named to stay distinct from `pydantic.ValidationError`), generic `InvalidValidationReport`, and the `ValidationResult` discriminated union.
+- Pipelex narrowing (`mthds.runners.api.models`): `ValidationErrorItem`, `ValidationErrorCategory` (closed set incl. `dry_run`), `ValidatedPipeEntry`, `DryRunStatus`, `PipelexValidationReport`, `PipelexInvalidReport`, `PipelexValidationResult`.
+- Generic `extra` passthrough on `validate()` (mirrors `execute`/`start`) — server-specific extension args merge into the request body as top-level properties; protocol args (`mthds_contents`, `allow_signatures`) inside `extra` are rejected client-side with `PipelineRequestError`. Server extensions like `mthds_sources` (per-content source names threaded onto each diagnostic's `source`) ride it. The local `PipelexRunner.validate()` rejects any `extra` (the CLI runner defines no extension args).
+- Typed `rendered_markdown: str | None` on both `PipelexValidationReport` and `PipelexInvalidReport` — the opt-in Pipelex-API presentation extra (the server-rendered Markdown view of the verdict, present only when the request asked for it via `render: ["markdown"]`) is now a first-class field on both verdict arms instead of riding `model_extra`. SDK peer of the `mthds-js` parity change.
+
+### Changed
+
+- The validate consumer reads the body discriminant instead of `raise_for_status`-on-invalid; the abstract interface, the local runner, and the docs are aligned to the contract.
+
 ## [v0.4.1] - 2026-06-11
 
 ### Fixed

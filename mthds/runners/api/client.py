@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import time
 from typing import TYPE_CHECKING, Any, cast
@@ -13,7 +12,7 @@ from typing_extensions import override
 
 from mthds.config.credentials import load_credentials
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationReport, VersionInfo
+from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.exceptions import (
     ClientAuthenticationError,
@@ -22,7 +21,12 @@ from mthds.runners.api.exceptions import (
     RunStillRunningError,
     RunTimeoutError,
 )
-from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
+from mthds.runners.api.models import (
+    DictPipeOutputAbstract,
+    DictRunResultExecute,
+    PipelexValidationResult,
+    PipelexValidationResultAdapter,
+)
 from mthds.runners.api.runs import (
     PollInfo,
     RunRead,
@@ -269,28 +273,52 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         self,
         mthds_contents: list[str],
         allow_signatures: bool = False,
-    ) -> ValidationReport:
+        extra: dict[str, Any] | None = None,
+    ) -> PipelexValidationResult:
         """Parse, validate, and dry-run an MTHDS bundle — `POST /v1/validate`.
+
+        `/validate` is 200-diagnostic: a produced verdict — valid or invalid — rides a
+        200 body discriminated on `is_valid`. A non-2xx response means no verdict could
+        be produced (request shape, auth, server fault) and surfaces as an
+        `httpx.HTTPStatusError`; an invalid bundle does NOT raise.
 
         Args:
             mthds_contents: MTHDS contents to load (always a list, even for one file)
             allow_signatures: Tolerate unimplemented pipe signatures (strict by default)
+            extra: Server-specific extension args, merged into the request body
+                as top-level properties — the server you call defines and handles
+                them; this SDK only passes them through. For example, a server may
+                accept `extra={"mthds_sources": [...]}` (per-content source names,
+                parallel to `mthds_contents`) to thread each onto the corresponding
+                diagnostic's `source`. Protocol args (`mthds_contents`,
+                `allow_signatures`) must be passed as named parameters, not through
+                `extra` (raises `PipelineRequestError`).
 
         Returns:
-            ValidationReport with the structural artifacts of a valid bundle.
+            The 200-diagnostic union: `PipelexValidationReport` (`is_valid: true`) or
+            `PipelexInvalidReport` (`is_valid: false`, with `validation_errors`).
 
         Raises:
-            httpx.HTTPStatusError: 422 when the bundle is invalid (RFC 7807 problem body).
+            PipelineRequestError: if `extra` carries a protocol arg (`mthds_contents`
+                or `allow_signatures`) — pass it as a named parameter instead.
+            pydantic.ValidationError: a malformed 200 body — missing or non-boolean
+                `is_valid` (the discriminant cannot be tagged), or a tagged arm missing
+                a required field. A malformed 200 is a server bug, surfaced raw rather
+                than wrapped or mistaken for a valid verdict.
+            httpx.HTTPStatusError: a no-verdict response (request-shape 422, 401/403,
+                or 5xx) — never an invalid bundle, which is a 200 `PipelexInvalidReport`.
         """
-        body = {"mthds_contents": mthds_contents, "allow_signatures": allow_signatures}
+        body: dict[str, Any] = {"mthds_contents": mthds_contents, "allow_signatures": allow_signatures}
+        body.update(_build_extensions(extra, protocol_args=_VALIDATE_REQUEST_ARGS))
+        content = to_json(body)
         response = await self._send(
             "POST",
             self._url("validate"),
-            content=json.dumps(body).encode("utf-8"),
+            content=content,
             request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
-        return ValidationReport.model_validate(response.json())
+        return PipelexValidationResultAdapter.validate_python(response.json())
 
     @override
     async def models(self, category: ModelCategory | None = None) -> ModelDeck:
@@ -530,6 +558,11 @@ _PROTOCOL_REQUEST_ARGS: frozenset[str] = frozenset(
     {"pipe_code", "mthds_contents", "inputs", "output_name", "output_multiplicity", "dynamic_output_concept_ref"}
 )
 
+# The protocol's `/validate` request args — the named parameters of validate().
+# Same guard as execute()/start(): a validate protocol arg smuggled through
+# `extra` is rejected; it must be passed as a named parameter.
+_VALIDATE_REQUEST_ARGS: frozenset[str] = frozenset({"mthds_contents", "allow_signatures"})
+
 
 def _build_run_body(
     *,
@@ -568,7 +601,7 @@ def _build_run_body(
     return body
 
 
-def _build_extensions(extra: dict[str, Any] | None) -> dict[str, Any]:
+def _build_extensions(extra: dict[str, Any] | None, *, protocol_args: frozenset[str] = _PROTOCOL_REQUEST_ARGS) -> dict[str, Any]:
     """Validate and copy the generic `extra` passthrough.
 
     Extension args ride the request body as top-level properties; the protocol's
@@ -576,6 +609,9 @@ def _build_extensions(extra: dict[str, Any] | None) -> dict[str, Any]:
 
     Args:
         extra: Server-specific extension args from the caller, or None.
+        protocol_args: The endpoint's protocol request args — a key in `extra`
+            overlapping this set is rejected (it must be passed as a named
+            parameter). Defaults to the `execute`/`start` arg set.
 
     Returns:
         A mutable copy of `extra` safe to merge into the body.
@@ -584,7 +620,7 @@ def _build_extensions(extra: dict[str, Any] | None) -> dict[str, Any]:
         PipelineRequestError: If `extra` carries a protocol arg.
     """
     extensions: dict[str, Any] = dict(extra or {})
-    protocol_overlap = extensions.keys() & _PROTOCOL_REQUEST_ARGS
+    protocol_overlap = extensions.keys() & protocol_args
     if protocol_overlap:
         msg = f"extra carries protocol args {sorted(protocol_overlap)} — pass them as named parameters instead."
         raise PipelineRequestError(msg)
