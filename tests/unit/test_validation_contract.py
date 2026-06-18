@@ -145,6 +145,24 @@ class TestValidationContract:
         assert report.is_runnable is False
         assert report.pending_signatures == ["pending_sig.draft_step"]
 
+    def test_rendered_markdown_is_typed_on_both_arms_when_present(self) -> None:
+        """The opt-in `rendered_markdown` extra parses to a typed field on both verdict arms."""
+        valid = _parse({**VALID_BODY, "rendered_markdown": "# Validation passed"})
+        assert isinstance(valid, PipelexValidationReport)
+        assert valid.rendered_markdown == "# Validation passed"
+        invalid = _parse({**INVALID_BODY, "rendered_markdown": "# Validation failed"})
+        assert isinstance(invalid, PipelexInvalidReport)
+        assert invalid.rendered_markdown == "# Validation failed"
+
+    def test_rendered_markdown_is_none_when_absent(self) -> None:
+        """Default responses omit `rendered_markdown` — the typed field defaults to None on both arms."""
+        valid = _parse(VALID_BODY)
+        assert isinstance(valid, PipelexValidationReport)
+        assert valid.rendered_markdown is None
+        invalid = _parse(INVALID_BODY)
+        assert isinstance(invalid, PipelexInvalidReport)
+        assert invalid.rendered_markdown is None
+
     def test_category_vocabulary_is_the_locked_set(self) -> None:
         """The closed category set mirrors `conformance/.../validation_contract.py` (drift guard)."""
         assert {category.value for category in ValidationErrorCategory} == {
