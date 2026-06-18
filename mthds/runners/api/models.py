@@ -181,10 +181,17 @@ class PipelexValidationReport(ValidationReport):
     is_runnable: bool = True
     message: str = ""
     mthds_contents: list[str] | None = None
+    rendered_markdown: str | None = None
+    """Opt-in Pipelex-API presentation extra: the server-rendered Markdown view of the verdict,
+    present only when the request asked for it (`render: ["markdown"]`); absent (None) otherwise."""
 
 
 class PipelexInvalidReport(InvalidValidationReport[ValidationErrorItem]):
     """The invalid arm carrying pipelex's structured `validation_errors[]` (`is_valid: false`)."""
+
+    rendered_markdown: str | None = None
+    """Opt-in Pipelex-API presentation extra: the server-rendered Markdown view of the invalid
+    verdict, present only when the request asked for it (`render: ["markdown"]`); absent otherwise."""
 
 
 PipelexValidationResult: TypeAlias = Annotated[
