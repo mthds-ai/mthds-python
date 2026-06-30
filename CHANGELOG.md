@@ -1,11 +1,14 @@
 # Changelog
 
-## [v0.7.0] - 2026-06-30
+## [v0.6.0] - 2026-06-30
 
-`mthds` becomes **brand-neutral on `/validate`**: the Pipelex-branded narrowing of the validation verdict union moves out of `mthds` into `pipelex-sdk`, leaving `mthds` with only the standard's neutral verdict shapes. This completes the MTHDS-vs-Pipelex brand boundary on the validation surface — the protocol package no longer names a Pipelex-specific report type — and mirrors the documented `mthds-js` / `@pipelex/sdk` split.
+`mthds` becomes **protocol-only and brand-neutral**: it now mirrors the MTHDS Protocol's five routes and nothing more, and its `/validate` surface carries only the standard's neutral verdict shapes. Two hosted-API / Pipelex-branded extensions move out of `mthds` into `pipelex-sdk` (`PipelexAPIClient`), which builds on this base — the durable run lifecycle (polling a started run to completion by id) and the Pipelex narrowing of the validation verdict union. This completes the MTHDS-vs-Pipelex brand boundary on these surfaces and mirrors the `mthds-js` / `@pipelex/sdk` split on the TypeScript side.
 
 ### Breaking Changes
 
+- **Removed the durable run lifecycle from `MthdsAPIClient`.** The `get_run_status`, `get_run_result`, `wait_for_result`, and `start_and_wait` methods are gone. They live in `pipelex-sdk`'s `PipelexAPIClient` now (which adds a bare-runner blocking-execute fallback on top). `execute`, `start`, `validate`, `models`, and `version` — the protocol routes — are unchanged.
+- **Removed the run-lifecycle models module `mthds.runners.api.runs`.** `RunStatus`, `RunPublic`, `RunRead`, `RunResults`, the `RunResultRunning` / `RunResultCompleted` / `RunResultFailed` discriminated union (`RunResultState`), `PollInfo`, and `WaitForResultOptions` are no longer part of this package; they live in `pipelex-sdk` (`pipelex_sdk.runs`).
+- **Removed the lifecycle errors from `mthds.runners.api.exceptions`.** `RunFailedError`, `RunTimeoutError`, and `RunLifecycleUnavailableError` are gone (they now live in `pipelex-sdk`). `ClientAuthenticationError` and `RunStillRunningError` — the latter being the protocol's optional 202-degrade signal raised by `execute` — remain.
 - **Removed the Pipelex validation narrowing from `mthds.runners.api.models`.** `PipelexValidationReport`, `PipelexInvalidReport`, `PipelexValidationResult`, `PipelexValidationResultAdapter`, `ValidationErrorItem`, `ValidationErrorCategory`, `ValidatedPipeEntry`, and `DryRunStatus` are gone from this package; they are Pipelex-branded implementation envelopes and now live in `pipelex-sdk` (`pipelex_sdk.validation_models`). The neutral protocol bases they narrowed — `ValidationReport`, `InvalidValidationReport`, `ValidationResult`, `ValidationDiagnostic` (in `mthds.protocol.models`) — are unchanged.
 - **`MthdsAPIClient.validate()` now returns the protocol-neutral `ValidationResult`** (`ValidationReport | InvalidValidationReport`), not the Pipelex narrowing. Implementation-specific artifacts (structural blueprints, `rendered_markdown`, etc.) ride `model_extra`; a consumer that wants them typed uses `pipelex-sdk`'s `PipelexAPIClient`, whose `validate()` narrows the same 200 body to `PipelexValidationReport` / `PipelexInvalidReport`.
 
@@ -16,16 +19,6 @@
 ### Unchanged
 
 - The `Dict*` wire models (`DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute`, `MAIN_STUFF_NAME`) stay in `mthds.runners.api.models`. They are brand-neutral and a shared wire contract — the in-process `PipelexRunner`, the API client, and the `pipelex` runtime all build on them.
-
-## [v0.6.0] - 2026-06-30
-
-`mthds` becomes **protocol-only**: it now mirrors the MTHDS Protocol's five routes and nothing more. The durable run lifecycle (polling a started run to completion by id) was a hosted-API extension, not part of the protocol — it has moved to `pipelex-sdk` (`PipelexAPIClient`), which builds on this base. This mirrors the `mthds-js` / `@pipelex/sdk` split on the TypeScript side.
-
-### Breaking Changes
-
-- **Removed the durable run lifecycle from `MthdsAPIClient`.** The `get_run_status`, `get_run_result`, `wait_for_result`, and `start_and_wait` methods are gone. They live in `pipelex-sdk`'s `PipelexAPIClient` now (which adds a bare-runner blocking-execute fallback on top). `execute`, `start`, `validate`, `models`, and `version` — the protocol routes — are unchanged.
-- **Removed the run-lifecycle models module `mthds.runners.api.runs`.** `RunStatus`, `RunPublic`, `RunRead`, `RunResults`, the `RunResultRunning` / `RunResultCompleted` / `RunResultFailed` discriminated union (`RunResultState`), `PollInfo`, and `WaitForResultOptions` are no longer part of this package; they live in `pipelex-sdk` (`pipelex_sdk.runs`).
-- **Removed the lifecycle errors from `mthds.runners.api.exceptions`.** `RunFailedError`, `RunTimeoutError`, and `RunLifecycleUnavailableError` are gone (they now live in `pipelex-sdk`). `ClientAuthenticationError` and `RunStillRunningError` — the latter being the protocol's optional 202-degrade signal raised by `execute` — remain.
 
 ## [v0.5.0] - 2026-06-18
 
