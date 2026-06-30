@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **`guard-branches.yml`: the `protect-workflows` job no longer silently passes.** Under `pull_request_target` the `actions/checkout` default is the BASE branch, so `git diff FETCH_HEAD HEAD` was comparing base-against-base and never saw a fork's workflow edits. The checkout now pins `ref: github.event.pull_request.head.sha` (safe here — the job only fetches/diffs/greps, it never executes the untrusted tree).
+- **`guard-branches.yml`: the `protect-workflows` association gate now blocks all external authors.** The previous `author_association == 'CONTRIBUTOR'` check skipped `FIRST_TIME_CONTRIBUTOR` / `FIRST_TIMER` / `NONE`, letting first-time external authors modify workflow files unguarded. Inverted to a maintainer allow-list (`OWNER` / `MEMBER` / `COLLABORATOR`).
+- **`tests-check.yml`: dropped `id-token: write` from the `matrix-test` job.** The job runs untrusted PR code but no step uses OIDC, so the unused permission only created a path to mint a repo OIDC token. Reduced to `contents: read` (least privilege).
+
 ## [v0.6.0] - 2026-06-30
 
 `mthds` becomes **protocol-only and brand-neutral**: it now mirrors the MTHDS Protocol's five routes and nothing more, and its `/validate` surface carries only the standard's neutral verdict shapes. Two hosted-API / Pipelex-branded extensions move out of `mthds` into `pipelex-sdk` (`PipelexAPIClient`), which builds on this base — the durable run lifecycle (polling a started run to completion by id) and the Pipelex narrowing of the validation verdict union. This completes the MTHDS-vs-Pipelex brand boundary on these surfaces and mirrors the `mthds-js` / `@pipelex/sdk` split on the TypeScript side.

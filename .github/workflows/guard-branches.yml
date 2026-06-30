@@ -46,12 +46,22 @@ jobs:
   # ───────────────────────────────────────────────────────────────
   protect-workflows:
     runs-on: ubuntu-latest
-    # only block non-maintainers
-    if: github.event.pull_request.author_association == 'CONTRIBUTOR'
+    # Block everyone except trusted maintainers. An allow-list (rather than singling out
+    # 'CONTRIBUTOR') is required because external authors also surface as
+    # FIRST_TIME_CONTRIBUTOR / FIRST_TIMER / NONE — those must not slip past the guard.
+    if: >-
+      github.event.pull_request.author_association != 'OWNER' &&
+      github.event.pull_request.author_association != 'MEMBER' &&
+      github.event.pull_request.author_association != 'COLLABORATOR'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          # In pull_request_target the default checkout is the BASE branch; without this the
+          # diff below would compare base-against-base and never see the fork's changes. We
+          # only fetch/diff/grep here — the untrusted head is never executed — so checking
+          # out the PR head SHA is safe.
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - name: Detect workflow changes
         run: |
