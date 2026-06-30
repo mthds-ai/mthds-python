@@ -8,10 +8,9 @@ import pytest
 from pytest_mock import MockerFixture
 
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.protocol.models import ModelCategory, ModelDeck, VersionInfo
+from mthds.protocol.models import InvalidValidationReport, ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.client import MthdsAPIClient
-from mthds.runners.api.models import PipelexInvalidReport, PipelexValidationReport, ValidationErrorCategory
 
 _BASE_URL = "http://localhost:8081"
 
@@ -76,9 +75,11 @@ class TestMthdsAPIClientProtocol:
         assert '"allow_signatures":true' in sent
         # No extra passed → mthds_sources is omitted from the request body.
         assert "mthds_sources" not in sent
-        assert isinstance(report, PipelexValidationReport)
+        assert isinstance(report, ValidationReport)
         assert report.is_valid is True
-        assert report.bundle_blueprint == {"domain": "answer"}
+        # Implementation artifacts (bundle_blueprint, graph_spec, …) ride model_extra on the
+        # neutral protocol arm — the `pipelex-sdk` subclass narrows them to typed fields.
+        assert (report.model_extra or {})["bundle_blueprint"] == {"domain": "answer"}
 
     def test_validate_threads_mthds_sources(self, mocker: MockerFixture) -> None:
         """A server extension arg (mthds_sources) rides the generic `extra` passthrough into the request body."""
@@ -108,10 +109,12 @@ class TestMthdsAPIClientProtocol:
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
         report = asyncio.run(client.validate(["domain = "]))
-        assert isinstance(report, PipelexInvalidReport)
+        assert isinstance(report, InvalidValidationReport)
         assert report.is_valid is False
-        assert report.validation_errors[0].category is ValidationErrorCategory.PIPE_VALIDATION
-        assert report.validation_errors[0].pipe_code == "summarize"
+        # Neutral arm: `category` is a plain string and `pipe_code` rides model_extra — the
+        # `pipelex-sdk` subclass narrows category to its closed enum and types the locators.
+        assert report.validation_errors[0].category == "pipe_validation"
+        assert (report.validation_errors[0].model_extra or {})["pipe_code"] == "summarize"
 
     def test_validate_no_verdict_response_raises_http_error(self, mocker: MockerFixture) -> None:
         """A request-shape 422 (no verdict could be produced) surfaces as an HTTP error, not a report.
