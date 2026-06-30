@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.6.0] - 2026-06-30
+
+`mthds` becomes **protocol-only**: it now mirrors the MTHDS Protocol's five routes and nothing more. The durable run lifecycle (polling a started run to completion by id) was a hosted-API extension, not part of the protocol — it has moved to `pipelex-sdk` (`PipelexAPIClient`), which builds on this base. This mirrors the `mthds-js` / `@pipelex/sdk` split on the TypeScript side.
+
+### Breaking Changes
+
+- **Removed the durable run lifecycle from `MthdsAPIClient`.** The `get_run_status`, `get_run_result`, `wait_for_result`, and `start_and_wait` methods are gone. They live in `pipelex-sdk`'s `PipelexAPIClient` now (which adds a bare-runner blocking-execute fallback on top). `execute`, `start`, `validate`, `models`, and `version` — the protocol routes — are unchanged.
+- **Removed the run-lifecycle models module `mthds.runners.api.runs`.** `RunStatus`, `RunPublic`, `RunRead`, `RunResults`, the `RunResultRunning` / `RunResultCompleted` / `RunResultFailed` discriminated union (`RunResultState`), `PollInfo`, and `WaitForResultOptions` are no longer part of this package; they live in `pipelex-sdk` (`pipelex_sdk.runs`).
+- **Removed the lifecycle errors from `mthds.runners.api.exceptions`.** `RunFailedError`, `RunTimeoutError`, and `RunLifecycleUnavailableError` are gone (they now live in `pipelex-sdk`). `ClientAuthenticationError` and `RunStillRunningError` — the latter being the protocol's optional 202-degrade signal raised by `execute` — remain.
+
 ## [v0.5.0] - 2026-06-18
 
 The 200-diagnostic `/validate` contract: a produced verdict — valid or invalid — rides a 200 body discriminated on `is_valid`; non-2xx is reserved for "no verdict could be produced". Brings `mthds-python` in line with the MTHDS Protocol (`mthds-protocol.openapi.yaml`) and its `mthds-js` twin.
