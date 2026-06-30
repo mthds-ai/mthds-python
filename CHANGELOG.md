@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.7.0] - 2026-06-30
+
+`mthds` becomes **brand-neutral on `/validate`**: the Pipelex-branded narrowing of the validation verdict union moves out of `mthds` into `pipelex-sdk`, leaving `mthds` with only the standard's neutral verdict shapes. This completes the MTHDS-vs-Pipelex brand boundary on the validation surface — the protocol package no longer names a Pipelex-specific report type — and mirrors the documented `mthds-js` / `@pipelex/sdk` split.
+
+### Breaking Changes
+
+- **Removed the Pipelex validation narrowing from `mthds.runners.api.models`.** `PipelexValidationReport`, `PipelexInvalidReport`, `PipelexValidationResult`, `PipelexValidationResultAdapter`, `ValidationErrorItem`, `ValidationErrorCategory`, `ValidatedPipeEntry`, and `DryRunStatus` are gone from this package; they are Pipelex-branded implementation envelopes and now live in `pipelex-sdk` (`pipelex_sdk.validation_models`). The neutral protocol bases they narrowed — `ValidationReport`, `InvalidValidationReport`, `ValidationResult`, `ValidationDiagnostic` (in `mthds.protocol.models`) — are unchanged.
+- **`MthdsAPIClient.validate()` now returns the protocol-neutral `ValidationResult`** (`ValidationReport | InvalidValidationReport`), not the Pipelex narrowing. Implementation-specific artifacts (structural blueprints, `rendered_markdown`, etc.) ride `model_extra`; a consumer that wants them typed uses `pipelex-sdk`'s `PipelexAPIClient`, whose `validate()` narrows the same 200 body to `PipelexValidationReport` / `PipelexInvalidReport`.
+
+### Added
+
+- **`MthdsAPIClient._post_validate(...)`** — a protected transport seam (alongside `_send` / `_url` / `_build_run_body`) that builds + sends the `/validate` request and returns the raw 200-diagnostic response, leaving the verdict-union parse to the caller. The `pipelex-sdk` subclass reuses it to parse the same body into its Pipelex-branded narrowing without re-implementing the wire call.
+
+### Unchanged
+
+- The `Dict*` wire models (`DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute`, `MAIN_STUFF_NAME`) stay in `mthds.runners.api.models`. They are brand-neutral and a shared wire contract — the in-process `PipelexRunner`, the API client, and the `pipelex` runtime all build on them.
+
 ## [v0.6.0] - 2026-06-30
 
 `mthds` becomes **protocol-only**: it now mirrors the MTHDS Protocol's five routes and nothing more. The durable run lifecycle (polling a started run to completion by id) was a hosted-API extension, not part of the protocol — it has moved to `pipelex-sdk` (`PipelexAPIClient`), which builds on this base. This mirrors the `mthds-js` / `@pipelex/sdk` split on the TypeScript side.

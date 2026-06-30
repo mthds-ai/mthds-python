@@ -41,10 +41,13 @@ async with MthdsAPIClient() as client:
     # Validation (dry-run included) — 200-diagnostic: read the verdict from the body
     report = await client.validate([bundle_text])
     if report.is_valid is True:
-        ...                                          # PipelexValidationReport — structural artifacts
+        ...                                          # ValidationReport — structural artifacts ride model_extra
     else:
-        for item in report.validation_errors:        # PipelexInvalidReport — typed diagnostics
-            print(item.category, item.message, item.source)
+        for item in report.validation_errors:        # InvalidValidationReport — neutral diagnostics
+            print(item.category, item.message)       # category/message typed; locators ride item.model_extra
+    # `validate()` returns the protocol-neutral ValidationResult. pipelex-sdk's PipelexAPIClient
+    # narrows the same 200 body to typed PipelexValidationReport / PipelexInvalidReport (structural
+    # artifacts, typed locators like `source` / `pipe_code`, `rendered_markdown`).
     # An invalid bundle is a 200 InvalidReport, NOT a 422; non-2xx (request-shape 422,
     # auth, 5xx) means no verdict could be produced and raises httpx.HTTPStatusError.
     # Server-specific extension args ride `extra` — e.g. a server may accept
@@ -88,6 +91,7 @@ async with MthdsAPIClient() as client:
 - `_send(method, url, *, content, request_timeout)` — issue one HTTP request, return the raw `httpx.Response` with no status interpretation (the caller decides). The reusable transport primitive every endpoint composes from.
 - `_url(endpoint)` — compose `{base}/v1/{endpoint}`.
 - `_build_run_body(...)` and `_build_extensions(extra, *, protocol_args=...)` (module-level) — assemble the `execute` / `start` request body and validate the generic `extra` passthrough (rejecting protocol args smuggled through it).
+- `_post_validate(mthds_contents, allow_signatures, extra)` — build + send the `/validate` request and return the raw 200-diagnostic `httpx.Response`, leaving the verdict-union parse to the caller. The base's own `validate()` parses it into the neutral `ValidationResult`; `pipelex-sdk` reuses this seam to parse the same body into its Pipelex-branded narrowing.
 
 Everything else (private methods not listed here, internal constants) is implementation detail and may change freely.
 

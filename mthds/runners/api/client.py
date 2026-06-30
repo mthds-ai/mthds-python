@@ -4,20 +4,16 @@ from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
 
 import httpx
+from pydantic import TypeAdapter
 from pydantic_core import to_json
 from typing_extensions import override
 
 from mthds.config.credentials import load_credentials
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, VersionInfo
+from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationResult, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.exceptions import ClientAuthenticationError, RunStillRunningError
-from mthds.runners.api.models import (
-    DictPipeOutputAbstract,
-    DictRunResultExecute,
-    PipelexValidationResult,
-    PipelexValidationResultAdapter,
-)
+from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
 from mthds.runners.types import RunnerType
 
 if TYPE_CHECKING:
@@ -228,13 +224,41 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         response.raise_for_status()
         return RunResultStart.model_validate(response.json())
 
+    async def _post_validate(self, mthds_contents: list[str], allow_signatures: bool, extra: dict[str, Any] | None) -> httpx.Response:
+        """POST a `/validate` request and return the raw 200-diagnostic response.
+
+        The shared transport + body-building seam for `validate`: builds the request body
+        (the protocol's basic args plus the generic `extra` extension passthrough, guarded
+        against a smuggled protocol arg), sends it, and raises on a no-verdict non-2xx. The
+        200 body — a produced verdict discriminated on `is_valid` — is left for the caller to
+        parse into its own verdict union (the protocol-neutral `ValidationResult` here; the
+        `pipelex-sdk` subclass narrows it to its Pipelex-branded report types). A documented
+        protected extension seam, alongside `_send` / `_url` / `_build_run_body`.
+
+        Raises:
+            PipelineRequestError: if `extra` carries a protocol arg (`mthds_contents` or
+                `allow_signatures`) — pass it as a named parameter instead.
+            httpx.HTTPStatusError: a no-verdict response (request-shape 422, 401/403, or 5xx).
+        """
+        body: dict[str, Any] = {"mthds_contents": mthds_contents, "allow_signatures": allow_signatures}
+        body.update(_build_extensions(extra, protocol_args=_VALIDATE_REQUEST_ARGS))
+        content = to_json(body)
+        response = await self._send(
+            "POST",
+            self._url("validate"),
+            content=content,
+            request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return response
+
     @override
     async def validate(
         self,
         mthds_contents: list[str],
         allow_signatures: bool = False,
         extra: dict[str, Any] | None = None,
-    ) -> PipelexValidationResult:
+    ) -> ValidationResult:
         """Parse, validate, and dry-run an MTHDS bundle — `POST /v1/validate`.
 
         `/validate` is 200-diagnostic: a produced verdict — valid or invalid — rides a
@@ -255,8 +279,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 `extra` (raises `PipelineRequestError`).
 
         Returns:
-            The 200-diagnostic union: `PipelexValidationReport` (`is_valid: true`) or
-            `PipelexInvalidReport` (`is_valid: false`, with `validation_errors`).
+            The protocol-neutral 200-diagnostic union (`ValidationResult`): a
+            `ValidationReport` (`is_valid: true`) or an `InvalidValidationReport`
+            (`is_valid: false`, with `validation_errors`). Implementation-specific
+            artifacts (e.g. pipelex's structural artifacts, `rendered_markdown`) ride
+            `model_extra`; the `pipelex-sdk` subclass narrows this to its typed
+            `PipelexValidationReport` / `PipelexInvalidReport`.
 
         Raises:
             PipelineRequestError: if `extra` carries a protocol arg (`mthds_contents`
@@ -266,19 +294,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 a required field. A malformed 200 is a server bug, surfaced raw rather
                 than wrapped or mistaken for a valid verdict.
             httpx.HTTPStatusError: a no-verdict response (request-shape 422, 401/403,
-                or 5xx) — never an invalid bundle, which is a 200 `PipelexInvalidReport`.
+                or 5xx) — never an invalid bundle, which is a 200 `InvalidValidationReport`.
         """
-        body: dict[str, Any] = {"mthds_contents": mthds_contents, "allow_signatures": allow_signatures}
-        body.update(_build_extensions(extra, protocol_args=_VALIDATE_REQUEST_ARGS))
-        content = to_json(body)
-        response = await self._send(
-            "POST",
-            self._url("validate"),
-            content=content,
-            request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        return PipelexValidationResultAdapter.validate_python(response.json())
+        response = await self._post_validate(mthds_contents, allow_signatures, extra)
+        return _VALIDATION_RESULT_ADAPTER.validate_python(response.json())
 
     @override
     async def models(self, category: ModelCategory | None = None) -> ModelDeck:
@@ -352,6 +371,11 @@ _PROTOCOL_REQUEST_ARGS: frozenset[str] = frozenset(
 # Same guard as execute()/start(): a validate protocol arg smuggled through
 # `extra` is rejected; it must be passed as a named parameter.
 _VALIDATE_REQUEST_ARGS: frozenset[str] = frozenset({"mthds_contents", "allow_signatures"})
+
+# Built once at import (TypeAdapter construction is expensive): the single parse path for a
+# 200 `/validate` body into the protocol-neutral verdict union, discriminated on `is_valid`.
+# The `pipelex-sdk` subclass parses the same body into its Pipelex-branded narrowing instead.
+_VALIDATION_RESULT_ADAPTER: TypeAdapter[ValidationResult] = TypeAdapter(ValidationResult)
 
 
 def _build_run_body(
