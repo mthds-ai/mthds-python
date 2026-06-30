@@ -201,7 +201,7 @@ PipelexValidationResult: TypeAlias = Annotated[
 """Pipelex's `POST /v1/validate` 200 response — discriminated on `is_valid`."""
 
 
-PipelexValidationResultAdapter: TypeAdapter[PipelexValidationResult] = TypeAdapter(PipelexValidationResult)
+PipelexValidationResultAdapter: TypeAdapter[PipelexValidationResult] = TypeAdapter(PipelexValidationResult)  # pylint: disable=invalid-name
 """The single parse path for a 200 `/validate` body — built once at import (TypeAdapter construction is expensive).
 
 Routes on the `is_valid` discriminant: a present `True` → `PipelexValidationReport`, a present
