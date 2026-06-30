@@ -82,7 +82,15 @@ module = [
 [tool.pyright]
 pythonVersion = "3.11"
 include = ["mthds", "tests"]
-exclude = ["**/__pycache__", ".venv", ".git", "build", "dist"]
+exclude = [
+  "**/__pycache__",
+  ".venv",
+  ".git",
+  "build",
+  "dist",
+  "**/node_modules",
+  "**/.*",
+]
 analyzeUnannotatedFunctions = true
 deprecateTypingAliases = false
 disableBytesTypePromotions = true
