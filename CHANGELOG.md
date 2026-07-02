@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.7.0] - 2026-07-02
 
 `mthds` is now positioned as the client for the open-source `pipelex-api` runner rather than the hosted MTHDS API: it defaults to a local runner, and `MthdsAPIClient` construction speaks the runner's vocabulary.
 
