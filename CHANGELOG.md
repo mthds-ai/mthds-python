@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **`MthdsAPIClient(request_timeout_seconds=0.0)` is now honored** as the per-request ceiling instead of silently falling back to the default. The resolution tests presence (`is not None`), not truthiness, so the same-named constructor parameter means the same thing here and in `pipelex-sdk`'s `PipelexAPIClient`.
+- **`MthdsAPIClient(request_timeout_seconds=0.0)` is now honored** as the per-request ceiling instead of silently falling back to the default. The resolution tests presence (`is not None`).
 
 ## [v0.7.0] - 2026-07-02
 
