@@ -55,9 +55,9 @@ Need local execution instead of an API? `PipelexRunner` (`mthds.runners.pipelex.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `MTHDS_API_KEY` | API authentication key | (empty) |
-| `MTHDS_API_URL` | API base URL — any [MTHDS Protocol](https://mthds.ai) server | `https://api.pipelex.com` |
+| `MTHDS_API_URL` | API base URL — any [MTHDS Protocol](https://mthds.ai) server | `http://localhost:8081` |
 
-The reference server is **Pipelex** (`https://api.pipelex.com`) — get a key at [app.pipelex.com](https://app.pipelex.com), or point `MTHDS_API_URL` at your own MTHDS-Protocol server. You can also pass `api_token` / `api_base_url` straight to `MthdsAPIClient(...)`.
+This client targets the open-source **`pipelex-api`** runner, so it defaults to a local instance (`http://localhost:8081`, `pipelex-api`'s default port). Point `MTHDS_API_URL` at any other MTHDS-Protocol server to use it instead. You can also pass `api_key` / `base_url` straight to `MthdsAPIClient(...)`.
 
 To set the config from a terminal, use the npm CLI (`mthds config set api-key …`) or edit `~/.mthds/config` directly.
 

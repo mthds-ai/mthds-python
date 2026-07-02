@@ -55,7 +55,7 @@ class TestCredentials:
         """With no credentials file, defaults are returned."""
         creds = load_credentials()
         assert creds["runner"] == "api"
-        assert creds["api_url"] == "https://api.pipelex.com"
+        assert creds["api_url"] == "http://localhost:8081"
         assert creds["api_key"] == ""
         assert creds["telemetry"] == "0"
 
@@ -68,7 +68,7 @@ class TestCredentials:
         assert creds["runner"] == "pipelex"
         assert creds["api_key"] == "my-secret"
         # Unchanged keys still return defaults
-        assert creds["api_url"] == "https://api.pipelex.com"
+        assert creds["api_url"] == "http://localhost:8081"
 
     def test_load_credentials_env_overrides_file(self, tmp_path: Path, mocker: MockerFixture) -> None:
         """Environment variables take precedence over file values."""

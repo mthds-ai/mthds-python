@@ -35,7 +35,7 @@ class TestMthdsAPIClientProtocol:
         )
 
     def _client(self) -> MthdsAPIClient:
-        return MthdsAPIClient(api_token="test-token", api_base_url=_BASE_URL)
+        return MthdsAPIClient(api_key="test-token", base_url=_BASE_URL)
 
     def test_client_satisfies_protocol(self) -> None:
         """MthdsAPIClient structurally satisfies MTHDSProtocol (runtime-checkable)."""

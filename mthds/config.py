@@ -59,7 +59,9 @@ _CREDENTIAL_KEYS: dict[str, str] = {
 # Defaults
 _DEFAULTS: dict[str, str] = {
     "runner": "api",
-    "api_url": "https://api.pipelex.com",
+    # This client targets the open-source pipelex-api runner; default to a local instance
+    # (pipelex-api's default port). Point MTHDS_API_URL at any MTHDS-Protocol server to override.
+    "api_url": "http://localhost:8081",
     "api_key": "",
     "telemetry": "0",  # DISABLE_TELEMETRY=0 means enabled
 }

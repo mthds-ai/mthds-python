@@ -68,7 +68,7 @@ class TestCredentialsIntegration:
         creds = load_credentials()
 
         assert creds["runner"] == "api"
-        assert creds["api_url"] == "https://api.pipelex.com"
+        assert creds["api_url"] == "http://localhost:8081"
         assert creds["api_key"] == ""
         assert creds["telemetry"] == "0"
 
