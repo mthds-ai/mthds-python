@@ -27,15 +27,15 @@ class TestMthdsAPIClientProtocol:
     """Tests for validate/models/version and the protocol conformance of the client."""
 
     @pytest.fixture(autouse=True)
-    def _mock_credentials(self, mocker: MockerFixture) -> None:
-        """Keep construction hermetic — never touch the real credentials file/env."""
+    def _mock_config(self, mocker: MockerFixture) -> None:
+        """Keep construction hermetic — never touch the real config file/env."""
         mocker.patch(
-            "mthds.runners.api.client.load_credentials",
-            return_value={"api_key": "", "api_url": "", "runner": "api", "telemetry": "0"},
+            "mthds.runners.api.client.load_config",
+            return_value={"api_key": "", "base_url": "", "runner": "api"},
         )
 
     def _client(self) -> MthdsAPIClient:
-        return MthdsAPIClient(api_token="test-token", api_base_url=_BASE_URL)
+        return MthdsAPIClient(api_key="test-token", base_url=_BASE_URL)
 
     def test_client_satisfies_protocol(self) -> None:
         """MthdsAPIClient structurally satisfies MTHDSProtocol (runtime-checkable)."""

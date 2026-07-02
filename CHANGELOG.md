@@ -1,5 +1,26 @@
 # Changelog
 
+## [v0.7.0] - 2026-07-02
+
+`mthds` is now positioned as the client for the open-source `pipelex-api` runner rather than the hosted MTHDS API: it defaults to a local runner, and `MthdsAPIClient` construction speaks the runner's vocabulary.
+
+### Breaking Changes
+
+- **Default `MTHDS_BASE_URL` is now `http://localhost:8081`** (a local `pipelex-api` runner, using `pipelex-api`'s default port), was `https://api.pipelex.com`. The hosted API is no longer the default target — point `MTHDS_BASE_URL` at any MTHDS-Protocol server to use another. A caller that relied on the implicit hosted default must now set `MTHDS_BASE_URL` explicitly.
+- **`MthdsAPIClient.__init__` renamed its arguments** — `api_token` → `api_key` and `api_base_url` → `base_url` — to match the `MTHDS_API_KEY` / `MTHDS_BASE_URL` config keys. Update keyword call sites.
+- **Renamed the config surface `mthds.config.credentials` → `mthds.config`.** The credential-flavored names become config-flavored: `load_credentials` → `load_config`, `get_credential_value` → `get_config_value`, `set_credential_value` → `set_config_value`, `list_credentials` → `list_config`, `CredentialSource` → `ConfigSource`, `CredentialEntry` → `ConfigEntry`. Update imports and call sites (`from mthds.config import load_config`).
+- **Renamed the `api_url` internal key and `api-url` CLI flag to `base_url` / `base-url`, and the shared env/file key `MTHDS_API_URL` to `MTHDS_BASE_URL`.** All three naming layers now align (`base_url` internal, `base-url` CLI flag, `MTHDS_BASE_URL` env/file). The wire-key rename is coordinated with the `mthds` npm CLI, which makes the same change. Migration: an `MTHDS_API_URL=…` line in an existing `~/.mthds/config` is now an unknown key — ignored on read, preserved on write — so re-set it with `mthds config set base-url <url>` (or rename the key in the file), and update any `MTHDS_API_URL` environment variables.
+- **Removed telemetry handling from the Python client.** `is_telemetry_enabled()` and the `telemetry` / `DISABLE_TELEMETRY` key are gone — telemetry lives only in the `mthds` npm client. A `DISABLE_TELEMETRY` line written into the shared config file by that client is harmlessly ignored on the Python side.
+
+### Added
+
+- **`MthdsAPIClient(request_timeout_seconds=…)`** — the per-request timeout is now an overridable constructor argument (default `1200.0`, the runner blocking-execute ceiling).
+- **Shared config-dialect conformance fixture.** The `~/.mthds/config` dotenv dialect is now pinned by a spec (workspace `docs/specs/mthds-config-file.md`) and a shared case fixture whose canonical copy lives in the `conformance` repo; this package vendors a byte-identical copy (`tests/fixtures/config_dialect_cases.json`, drift-gated by conformance) and runs every case in its own unit suite (`tests/unit/test_config_dialect.py`), so the Python and TypeScript parsers cannot silently diverge.
+
+### Changed
+
+- **Config-file parsing splits lines on `\n` only**, per the config-file spec. Previously `splitlines()` also treated a lone `\r` (and other Unicode line boundaries) as line separators, diverging from the `mthds` npm client; a lone `\r` now stays inside the surrounding value. Files using `\n` or `\r\n` line endings parse exactly as before.
+
 ## [v0.6.1] - 2026-06-30
 
 ### Fixed

@@ -1,0 +1,147 @@
+{
+  "description": "Shared test cases for the ~/.mthds/config dotenv dialect, pinned by docs/specs/mthds-config-file.md. The canonical copy lives at conformance/tests/mthds/fixtures/config_dialect_cases.json; mthds-python (tests/fixtures/config_dialect_cases.json) and mthds-js (tests/fixtures/config-dialect-cases.json) vendor byte-identical copies, gated by conformance/scripts/check-config-dialect-fixture.py. Edit the canonical copy first, then propagate.",
+  "parse_cases": [
+    {
+      "name": "empty_file",
+      "description": "An empty file parses to an empty mapping.",
+      "input": "",
+      "expected": {}
+    },
+    {
+      "name": "basic_pair",
+      "description": "A single KEY=value line parses to one entry.",
+      "input": "MTHDS_RUNNER=api\n",
+      "expected": { "MTHDS_RUNNER": "api" }
+    },
+    {
+      "name": "no_trailing_newline",
+      "description": "A final line without a trailing newline still parses.",
+      "input": "MTHDS_RUNNER=api",
+      "expected": { "MTHDS_RUNNER": "api" }
+    },
+    {
+      "name": "first_equals_wins",
+      "description": "Only the first = splits key from value; later = signs are part of the value.",
+      "input": "MTHDS_API_KEY=abc=def=ghi\n",
+      "expected": { "MTHDS_API_KEY": "abc=def=ghi" }
+    },
+    {
+      "name": "base64_padding_preserved",
+      "description": "Base64 == padding at the end of a value survives (first-=-wins).",
+      "input": "MTHDS_API_KEY=c2VjcmV0LWtleQ==\n",
+      "expected": { "MTHDS_API_KEY": "c2VjcmV0LWtleQ==" }
+    },
+    {
+      "name": "comment_lines_skipped",
+      "description": "Whole-line # comments are skipped, including when indented.",
+      "input": "# a comment\nMTHDS_RUNNER=api\n   # indented comment\n",
+      "expected": { "MTHDS_RUNNER": "api" }
+    },
+    {
+      "name": "blank_lines_skipped",
+      "description": "Empty and whitespace-only lines are skipped.",
+      "input": "\n\nMTHDS_RUNNER=api\n   \n",
+      "expected": { "MTHDS_RUNNER": "api" }
+    },
+    {
+      "name": "whitespace_trimmed",
+      "description": "Whitespace around the key and around the value is trimmed.",
+      "input": "  MTHDS_RUNNER  =  api  \n",
+      "expected": { "MTHDS_RUNNER": "api" }
+    },
+    {
+      "name": "hash_in_value_preserved",
+      "description": "A # after the = is part of the value — there are no inline comments.",
+      "input": "MTHDS_BASE_URL=http://localhost:8081#not-a-comment\n",
+      "expected": { "MTHDS_BASE_URL": "http://localhost:8081#not-a-comment" }
+    },
+    {
+      "name": "quotes_are_literal",
+      "description": "Quotes are ordinary value characters, not delimiters — no dequoting.",
+      "input": "MTHDS_RUNNER=\"api\"\n",
+      "expected": { "MTHDS_RUNNER": "\"api\"" }
+    },
+    {
+      "name": "line_without_equals_skipped",
+      "description": "A non-empty, non-comment line with no = is skipped.",
+      "input": "this line has no equals sign\nMTHDS_RUNNER=api\n",
+      "expected": { "MTHDS_RUNNER": "api" }
+    },
+    {
+      "name": "duplicate_key_last_wins",
+      "description": "A duplicate key overwrites the earlier occurrence.",
+      "input": "MTHDS_RUNNER=api\nMTHDS_RUNNER=pipelex\n",
+      "expected": { "MTHDS_RUNNER": "pipelex" }
+    },
+    {
+      "name": "unknown_keys_parsed",
+      "description": "Keys a given client does not recognize (e.g. the mthds-js-only telemetry/upgrade keys) still parse at the dialect level.",
+      "input": "DISABLE_TELEMETRY=1\nMTHDS_AUTO_UPGRADE=1\nMTHDS_RUNNER=api\n",
+      "expected": { "DISABLE_TELEMETRY": "1", "MTHDS_AUTO_UPGRADE": "1", "MTHDS_RUNNER": "api" }
+    },
+    {
+      "name": "crlf_tolerated",
+      "description": "\\r\\n line endings are tolerated: the trailing \\r is removed by trimming.",
+      "input": "MTHDS_RUNNER=api\r\nMTHDS_API_KEY=key-123\r\n",
+      "expected": { "MTHDS_RUNNER": "api", "MTHDS_API_KEY": "key-123" }
+    },
+    {
+      "name": "lone_cr_not_a_separator",
+      "description": "A lone \\r (classic-Mac line ending) is NOT a line separator: lines split on \\n only, so the \\r and everything after it stay inside the value.",
+      "input": "MTHDS_RUNNER=api\rMTHDS_API_KEY=key-123\n",
+      "expected": { "MTHDS_RUNNER": "api\rMTHDS_API_KEY=key-123" }
+    },
+    {
+      "name": "empty_value",
+      "description": "KEY= with nothing after it parses to an empty-string value.",
+      "input": "MTHDS_API_KEY=\n",
+      "expected": { "MTHDS_API_KEY": "" }
+    }
+  ],
+  "serialize_cases": [
+    {
+      "name": "single_entry",
+      "description": "One entry serializes to one KEY=value line with a trailing newline.",
+      "entries": { "MTHDS_RUNNER": "api" },
+      "expected": "MTHDS_RUNNER=api\n"
+    },
+    {
+      "name": "insertion_order_preserved",
+      "description": "Entries are written in insertion order, joined by \\n, with a single trailing newline.",
+      "entries": { "MTHDS_BASE_URL": "http://localhost:8081", "MTHDS_API_KEY": "key-123", "MTHDS_RUNNER": "api" },
+      "expected": "MTHDS_BASE_URL=http://localhost:8081\nMTHDS_API_KEY=key-123\nMTHDS_RUNNER=api\n"
+    },
+    {
+      "name": "equals_in_value_unquoted",
+      "description": "A value containing = (base64 padding) is written literally, with no quoting.",
+      "entries": { "MTHDS_API_KEY": "c2VjcmV0LWtleQ==" },
+      "expected": "MTHDS_API_KEY=c2VjcmV0LWtleQ==\n"
+    },
+    {
+      "name": "empty_entries",
+      "description": "An empty mapping serializes to a single newline (join of nothing plus the trailing newline).",
+      "entries": {},
+      "expected": "\n"
+    }
+  ],
+  "rewrite_cases": [
+    {
+      "name": "comments_and_blanks_dropped",
+      "description": "A parse-then-serialize rewrite (what a programmatic set does) keeps only key=value pairs: comments and blank lines are lost.",
+      "input": "# top comment\n\nMTHDS_RUNNER=api\n\n# trailing comment\nMTHDS_API_KEY=key-123\n",
+      "expected": "MTHDS_RUNNER=api\nMTHDS_API_KEY=key-123\n"
+    },
+    {
+      "name": "unknown_keys_survive_rewrite",
+      "description": "Unrecognized keys pass through a rewrite untouched — one client's write preserves the other client's keys.",
+      "input": "MTHDS_RUNNER=api\nDISABLE_TELEMETRY=1\nMTHDS_UPDATE_CHECK=0\n",
+      "expected": "MTHDS_RUNNER=api\nDISABLE_TELEMETRY=1\nMTHDS_UPDATE_CHECK=0\n"
+    },
+    {
+      "name": "whitespace_and_duplicates_normalized",
+      "description": "A rewrite trims padding around keys/values and collapses duplicate keys to the last value.",
+      "input": "  MTHDS_RUNNER = api \nMTHDS_RUNNER=pipelex\n",
+      "expected": "MTHDS_RUNNER=pipelex\n"
+    }
+  ]
+}
