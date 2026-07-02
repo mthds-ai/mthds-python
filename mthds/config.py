@@ -100,7 +100,9 @@ def _lookup_in_store(internal_key: str, store: Mapping[str, str]) -> str | None:
 def _parse_dotenv(content: str) -> dict[str, str]:
     """Parse a dotenv-style string into a dict."""
     result: dict[str, str] = {}
-    for line in content.splitlines():
+    # The dialect mandates \n / \r\n line endings only (the strip below removes a
+    # trailing \r); a lone \r is NOT a separator — same split as mthds-js.
+    for line in content.split("\n"):
         trimmed = line.strip()
         if not trimmed or trimmed.startswith("#"):
             continue
