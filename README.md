@@ -50,7 +50,7 @@ Need local execution instead of an API? `PipelexRunner` (`mthds.runners.pipelex.
 
 ## Configuration
 
-`MthdsAPIClient()` resolves credentials from `~/.mthds/config` — the same file the `mthds` CLI (npm) reads and writes, so configuring either configures both. Environment variables take precedence:
+`MthdsAPIClient()` reads its config from `~/.mthds/config` — the same file the `mthds` CLI (npm) reads and writes, so configuring either configures both. Environment variables take precedence:
 
 | Variable | Description | Default |
 |----------|-------------|---------|

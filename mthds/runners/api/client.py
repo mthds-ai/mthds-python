@@ -8,7 +8,7 @@ from pydantic import TypeAdapter
 from pydantic_core import to_json
 from typing_extensions import override
 
-from mthds.config.credentials import load_credentials
+from mthds.config import load_config
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationResult, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
@@ -52,17 +52,17 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         base_url: str | None = None,
         request_timeout_seconds: float | None = None,
     ):
-        credentials = load_credentials()
+        config = load_config()
 
-        resolved_api_key = api_key or credentials["api_key"]
+        resolved_api_key = api_key or config["api_key"]
         if not resolved_api_key:
             msg = "API key is required for API execution. Set MTHDS_API_KEY or run: mthds config set api-key <key>"
             raise ClientAuthenticationError(msg)
         self.api_key = resolved_api_key
 
-        resolved_base_url = base_url or credentials["api_url"]
+        resolved_base_url = base_url or config["base_url"]
         if not resolved_base_url:
-            msg = "API base URL is required for API execution. Set MTHDS_API_URL or run: mthds config set api-url <url>"
+            msg = "API base URL is required for API execution. Set MTHDS_API_URL or run: mthds config set base-url <url>"
             raise ClientAuthenticationError(msg)
         self.base_url = resolved_base_url.rstrip("/")
 

@@ -8,6 +8,9 @@
 
 - **Default `MTHDS_API_URL` is now `http://localhost:8081`** (a local `pipelex-api` runner, using `pipelex-api`'s default port), was `https://api.pipelex.com`. The hosted API is no longer the default target — point `MTHDS_API_URL` at any MTHDS-Protocol server to use another. A caller that relied on the implicit hosted default must now set `MTHDS_API_URL` explicitly.
 - **`MthdsAPIClient.__init__` renamed its arguments** — `api_token` → `api_key` and `api_base_url` → `base_url` — to match the `MTHDS_API_KEY` / `MTHDS_API_URL` config keys. Update keyword call sites.
+- **Renamed the config surface `mthds.config.credentials` → `mthds.config`.** The credential-flavored names become config-flavored: `load_credentials` → `load_config`, `get_credential_value` → `get_config_value`, `set_credential_value` → `set_config_value`, `list_credentials` → `list_config`, `CredentialSource` → `ConfigSource`, `CredentialEntry` → `ConfigEntry`. Update imports and call sites (`from mthds.config import load_config`).
+- **Renamed the `api_url` internal key and `api-url` CLI flag to `base_url` / `base-url`.** The shared env/file key `MTHDS_API_URL` is unchanged — it stays the wire contract with the `mthds` npm CLI and existing `~/.mthds/config` files; only the Python-internal key and the CLI flag change.
+- **Removed telemetry handling from the Python client.** `is_telemetry_enabled()` and the `telemetry` / `DISABLE_TELEMETRY` key are gone — telemetry lives only in the `mthds` npm client. A `DISABLE_TELEMETRY` line written into the shared config file by that client is harmlessly ignored on the Python side.
 
 ### Added
 
