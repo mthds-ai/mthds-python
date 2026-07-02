@@ -28,14 +28,14 @@ if TYPE_CHECKING:
 class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     """Client for any MTHDS runner — the MTHDS Protocol surface over HTTP.
 
-    One base URL (`MTHDS_API_URL`); every endpoint is `<base>/v1/<endpoint>`. The
+    One base URL (`MTHDS_BASE_URL`); every endpoint is `<base>/v1/<endpoint>`. The
     five protocol routes (`execute` / `start` / `validate` / `models` / `version`)
     work against any MTHDS-compliant runner, hosted or bare. The durable run
     lifecycle (polling a run to completion by id) is a hosted-API extension that
     lives in `pipelex-sdk` (`PipelexAPIClient`), not in this protocol base.
     """
 
-    # The client composes every endpoint from one origin (MTHDS_API_URL): `{base}/v1/{endpoint}`.
+    # The client composes every endpoint from one origin (MTHDS_BASE_URL): `{base}/v1/{endpoint}`.
     # It targets the open-source pipelex-api runner (default http://localhost:8081/v1), but the
     # same paths are served by any MTHDS-Protocol server — the protocol surface is identical;
     # server-specific extensions (e.g. the hosted durable run lifecycle) are detectable via GET /version.
@@ -62,7 +62,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         resolved_base_url = base_url or config["base_url"]
         if not resolved_base_url:
-            msg = "API base URL is required for API execution. Set MTHDS_API_URL or run: mthds config set base-url <url>"
+            msg = "API base URL is required for API execution. Set MTHDS_BASE_URL or run: mthds config set base-url <url>"
             raise ClientAuthenticationError(msg)
         self.base_url = resolved_base_url.rstrip("/")
 

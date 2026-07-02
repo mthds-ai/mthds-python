@@ -120,7 +120,7 @@ class TestConfig:
 
     def test_get_config_value_env_source(self, mocker: MockerFixture) -> None:
         """When value comes from env, source is ENV and it wins over file."""
-        mocker.patch.dict("os.environ", {"MTHDS_API_URL": "https://custom.url"})
+        mocker.patch.dict("os.environ", {"MTHDS_BASE_URL": "https://custom.url"})
 
         entry = get_config_value("base_url")
         assert entry.value == "https://custom.url"
@@ -144,7 +144,7 @@ class TestConfig:
 
         config_path = tmp_path / ".mthds" / "config"
         content = config_path.read_text(encoding="utf-8")
-        assert "MTHDS_API_URL=https://alt.api.com" in content
+        assert "MTHDS_BASE_URL=https://alt.api.com" in content
         assert "MTHDS_API_KEY=fresh-key" in content
 
     def test_set_config_value_preserves_other_keys(self, tmp_path: Path) -> None:

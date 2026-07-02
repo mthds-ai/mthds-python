@@ -49,10 +49,10 @@ CONFIG_PATH = CONFIG_DIR / "config"
 
 # Map from internal key to the canonical config key (env var name and file key share the same names).
 # The package is vendor-neutral ``mthds``, so the public keys use the ``MTHDS_`` prefix.
-# Note: the internal name is ``base_url`` but the wire key is ``MTHDS_API_URL`` — intentional,
-# it is the shared contract with mthds-js and existing ``~/.mthds/config`` files.
+# The wire keys are the shared contract with mthds-js; all three naming layers align
+# (internal ``base_url`` / CLI ``base-url`` / wire ``MTHDS_BASE_URL``).
 _CONFIG_KEYS: dict[str, str] = {
-    "base_url": "MTHDS_API_URL",
+    "base_url": "MTHDS_BASE_URL",
     "api_key": "MTHDS_API_KEY",
     "runner": "MTHDS_RUNNER",
 }
@@ -61,7 +61,7 @@ _CONFIG_KEYS: dict[str, str] = {
 _DEFAULTS: dict[str, str] = {
     "runner": "api",
     # This client targets the open-source pipelex-api runner; default to a local instance
-    # (pipelex-api's default port). Point MTHDS_API_URL at any MTHDS-Protocol server to override.
+    # (pipelex-api's default port). Point MTHDS_BASE_URL at any MTHDS-Protocol server to override.
     "base_url": "http://localhost:8081",
     "api_key": "",
 }

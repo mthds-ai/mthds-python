@@ -18,10 +18,10 @@ One URL, one key:
 
 | Setting | Env var / config key | Default |
 | --- | --- | --- |
-| API base URL (host only, no path) | `MTHDS_API_URL` | `http://localhost:8081` |
+| API base URL (host only, no path) | `MTHDS_BASE_URL` | `http://localhost:8081` |
 | API key | `MTHDS_API_KEY` | — |
 
-The client composes every endpoint as `{MTHDS_API_URL}/v1/{endpoint}`. It defaults to a local `pipelex-api` runner (`http://localhost:8081`), but the same paths work against any remote MTHDS-Protocol server; server-specific extensions are detectable via the `version()` handshake. Config lives in `~/.mthds/config` (the same file the `mthds` CLI reads/writes) — keys `MTHDS_API_URL` / `MTHDS_API_KEY`.
+The client composes every endpoint as `{MTHDS_BASE_URL}/v1/{endpoint}`. It defaults to a local `pipelex-api` runner (`http://localhost:8081`), but the same paths work against any remote MTHDS-Protocol server; server-specific extensions are detectable via the `version()` handshake. Config lives in `~/.mthds/config` (the same file the `mthds` CLI reads/writes) — keys `MTHDS_BASE_URL` / `MTHDS_API_KEY`.
 
 ## The protocol surface (works on any runner)
 

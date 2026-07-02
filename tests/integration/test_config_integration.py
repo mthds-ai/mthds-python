@@ -45,7 +45,7 @@ class TestConfigIntegration:
         content = config_path.read_text(encoding="utf-8")
         assert "MTHDS_RUNNER=pipelex" in content
         assert "MTHDS_API_KEY=secret-123" in content
-        assert "MTHDS_API_URL=https://custom.example.com" in content
+        assert "MTHDS_BASE_URL=https://custom.example.com" in content
 
     def test_env_override_file(self, mocker: MockerFixture) -> None:
         """Environment variables take precedence over values in the config file."""

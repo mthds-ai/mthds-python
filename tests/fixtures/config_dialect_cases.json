@@ -52,8 +52,8 @@
     {
       "name": "hash_in_value_preserved",
       "description": "A # after the = is part of the value — there are no inline comments.",
-      "input": "MTHDS_API_URL=http://localhost:8081#not-a-comment\n",
-      "expected": { "MTHDS_API_URL": "http://localhost:8081#not-a-comment" }
+      "input": "MTHDS_BASE_URL=http://localhost:8081#not-a-comment\n",
+      "expected": { "MTHDS_BASE_URL": "http://localhost:8081#not-a-comment" }
     },
     {
       "name": "quotes_are_literal",
@@ -108,8 +108,8 @@
     {
       "name": "insertion_order_preserved",
       "description": "Entries are written in insertion order, joined by \\n, with a single trailing newline.",
-      "entries": { "MTHDS_API_URL": "http://localhost:8081", "MTHDS_API_KEY": "key-123", "MTHDS_RUNNER": "api" },
-      "expected": "MTHDS_API_URL=http://localhost:8081\nMTHDS_API_KEY=key-123\nMTHDS_RUNNER=api\n"
+      "entries": { "MTHDS_BASE_URL": "http://localhost:8081", "MTHDS_API_KEY": "key-123", "MTHDS_RUNNER": "api" },
+      "expected": "MTHDS_BASE_URL=http://localhost:8081\nMTHDS_API_KEY=key-123\nMTHDS_RUNNER=api\n"
     },
     {
       "name": "equals_in_value_unquoted",
