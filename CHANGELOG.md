@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.7.1] - 2026-07-02
+
+### Fixed
+
+- **`MthdsAPIClient(request_timeout_seconds=0.0)` is now honored** as the per-request ceiling instead of silently falling back to the default. The resolution tests presence (`is not None`), not truthiness, so the same-named constructor parameter means the same thing here and in `pipelex-sdk`'s `PipelexAPIClient`.
+
 ## [v0.7.0] - 2026-07-02
 
 `mthds` is now positioned as the client for the open-source `pipelex-api` runner rather than the hosted MTHDS API: it defaults to a local runner, and `MthdsAPIClient` construction speaks the runner's vocabulary.

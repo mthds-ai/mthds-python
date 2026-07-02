@@ -50,6 +50,22 @@ class TestMthdsAPIClientProtocol:
         assert execute_params == basic
         assert start_params == basic
 
+    # ── construction ─────────────────────────────────────────────
+
+    def test_request_timeout_seconds_defaults_to_ceiling(self) -> None:
+        """With no override, the per-request timeout is the runner blocking-execute ceiling."""
+        client = self._client()
+        assert client.request_timeout_seconds == 1200.0
+
+    @pytest.mark.parametrize("timeout_seconds", [30.0, 0.0])
+    def test_request_timeout_seconds_override(self, timeout_seconds: float) -> None:
+        """An explicit `request_timeout_seconds` sets the per-instance ceiling — including a
+        falsy `0.0` (presence semantics, so the same-named parameter means the same thing
+        here and in `pipelex-sdk`'s `PipelexAPIClient`).
+        """
+        client = MthdsAPIClient(api_key="test-token", base_url=_BASE_URL, request_timeout_seconds=timeout_seconds)
+        assert client.request_timeout_seconds == timeout_seconds
+
     # ── validate ─────────────────────────────────────────────────
 
     def test_validate_posts_contents_and_parses_valid_report(self, mocker: MockerFixture) -> None:

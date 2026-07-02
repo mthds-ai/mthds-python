@@ -70,7 +70,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             raise ClientAuthenticationError(msg)
         self.base_url = resolved_base_url.rstrip("/")
 
-        self.request_timeout_seconds = request_timeout_seconds or self._DEFAULT_REQUEST_TIMEOUT_SECONDS
+        # Presence semantics (`is not None`), not truthiness: an explicit `0.0` is honored as
+        # the real per-request ceiling instead of silently falling back to the default —
+        # the same-named parameter means the same thing in `pipelex-sdk`'s `PipelexAPIClient`.
+        self.request_timeout_seconds = request_timeout_seconds if request_timeout_seconds is not None else self._DEFAULT_REQUEST_TIMEOUT_SECONDS
 
         self.client: httpx.AsyncClient | None = None
 
