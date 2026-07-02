@@ -44,6 +44,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     # for the overridable per-instance `request_timeout_seconds`.
     _API_PREFIX: ClassVar[str] = "v1"
 
+    # TODO: restore differentiated timeouts — lightweight endpoints (`start`, `models`, `version`)
+    # used to fail fast with a dedicated 30s poll timeout; they now inherit this 1200s default and
+    # can hang for 20 minutes on an unresponsive server. Pass a short timeout explicitly for those
+    # calls, or accept endpoint-category overrides in the constructor.
     _DEFAULT_REQUEST_TIMEOUT_SECONDS: ClassVar[float] = 1200.0  # runner blocking-execute ceiling
 
     def __init__(
