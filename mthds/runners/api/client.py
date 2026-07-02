@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 from urllib.parse import quote
 
 import httpx
@@ -8,7 +8,7 @@ from pydantic import TypeAdapter
 from pydantic_core import to_json
 from typing_extensions import override
 
-from mthds.config.credentials import load_credentials
+from mthds.config import load_config
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationResult, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
@@ -24,44 +24,53 @@ if TYPE_CHECKING:
     from mthds.protocol.stuff import StuffType
     from mthds.protocol.working_memory import WorkingMemoryAbstract
 
-# The SDK composes every endpoint from one origin (MTHDS_API_URL): `{base}/v1/{endpoint}`.
-# The same paths are served by the hosted MTHDS API (api.pipelex.com/v1) and by a bare
-# pipelex-api runner (localhost:8081/v1) — the protocol surface is identical; hosted-only
-# extensions (e.g. the durable run lifecycle) are detectable via GET /version.
-_API_PREFIX = "v1"
-
-_DEFAULT_REQUEST_TIMEOUT_SECONDS = 1200.0  # runner blocking-execute ceiling
-_POLL_REQUEST_TIMEOUT_SECONDS = 30.0  # start/models/version GETs; the hosted gateway caps responses at ~30s
-
 
 class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     """Client for any MTHDS runner — the MTHDS Protocol surface over HTTP.
 
-    One base URL (`MTHDS_API_URL`); every endpoint is `<base>/v1/<endpoint>`. The
+    One base URL (`MTHDS_BASE_URL`); every endpoint is `<base>/v1/<endpoint>`. The
     five protocol routes (`execute` / `start` / `validate` / `models` / `version`)
     work against any MTHDS-compliant runner, hosted or bare. The durable run
     lifecycle (polling a run to completion by id) is a hosted-API extension that
     lives in `pipelex-sdk` (`PipelexAPIClient`), not in this protocol base.
     """
 
+    # The client composes every endpoint from one origin (MTHDS_BASE_URL): `{base}/v1/{endpoint}`.
+    # It targets the open-source pipelex-api runner (default http://localhost:8081/v1), but the
+    # same paths are served by any MTHDS-Protocol server — the protocol surface is identical;
+    # server-specific extensions (e.g. the hosted durable run lifecycle) are detectable via GET /version.
+    # `_API_PREFIX` is the protocol surface identity (it tracks the protocol major version),
+    # not per-call configuration — it stays a class constant; the timeout below is the default
+    # for the overridable per-instance `request_timeout_seconds`.
+    _API_PREFIX: ClassVar[str] = "v1"
+
+    # TODO: restore differentiated timeouts — lightweight endpoints (`start`, `models`, `version`)
+    # used to fail fast with a dedicated 30s poll timeout; they now inherit this 1200s default and
+    # can hang for 20 minutes on an unresponsive server. Pass a short timeout explicitly for those
+    # calls, or accept endpoint-category overrides in the constructor.
+    _DEFAULT_REQUEST_TIMEOUT_SECONDS: ClassVar[float] = 1200.0  # runner blocking-execute ceiling
+
     def __init__(
         self,
-        api_token: str | None = None,
-        api_base_url: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        request_timeout_seconds: float | None = None,
     ):
-        credentials = load_credentials()
+        config = load_config()
 
-        resolved_api_token = api_token or credentials["api_key"]
-        if not resolved_api_token:
-            msg = "API token is required for API execution. Set MTHDS_API_KEY or run: mthds config set api-key <key>"
+        resolved_api_key = api_key or config["api_key"]
+        if not resolved_api_key:
+            msg = "API key is required for API execution. Set MTHDS_API_KEY or run: mthds config set api-key <key>"
             raise ClientAuthenticationError(msg)
-        self.api_token = resolved_api_token
+        self.api_key = resolved_api_key
 
-        resolved_api_base_url = api_base_url or credentials["api_url"]
-        if not resolved_api_base_url:
-            msg = "API base URL is required for API execution. Set MTHDS_API_URL or run: mthds config set api-url <url>"
+        resolved_base_url = base_url or config["base_url"]
+        if not resolved_base_url:
+            msg = "API base URL is required for API execution. Set MTHDS_BASE_URL or run: mthds config set base-url <url>"
             raise ClientAuthenticationError(msg)
-        self.api_base_url = resolved_api_base_url.rstrip("/")
+        self.base_url = resolved_base_url.rstrip("/")
+
+        self.request_timeout_seconds = request_timeout_seconds or self._DEFAULT_REQUEST_TIMEOUT_SECONDS
 
         self.client: httpx.AsyncClient | None = None
 
@@ -74,7 +83,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
     def start_client(self) -> MthdsAPIClient:
         """Initialize the HTTP client for API calls."""
-        self.client = httpx.AsyncClient(headers={"Authorization": f"Bearer {self.api_token}"})
+        self.client = httpx.AsyncClient(headers={"Authorization": f"Bearer {self.api_key}"})
         return self
 
     async def close(self) -> None:
@@ -94,7 +103,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
     def _url(self, endpoint: str) -> str:
         """Build an API URL: `<base>/v1/<endpoint>`."""
-        return f"{self.api_base_url}/{_API_PREFIX}/{endpoint}"
+        return f"{self.base_url}/{self._API_PREFIX}/{endpoint}"
 
     # ── Transport ──────────────────────────────────────────────────────
 
@@ -169,7 +178,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             exclude_none=True,
         )
         content = to_json(body)
-        response = await self._send("POST", self._url("execute"), content=content, request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS)
+        response = await self._send("POST", self._url("execute"), content=content, request_timeout=self.request_timeout_seconds)
         self._raise_if_execute_degraded(response)
         response.raise_for_status()
         return DictRunResultExecute.model_validate(response.json())
@@ -220,7 +229,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             exclude_none=True,
         )
         content = to_json(body)
-        response = await self._send("POST", self._url("start"), content=content, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
+        response = await self._send("POST", self._url("start"), content=content, request_timeout=self.request_timeout_seconds)
         response.raise_for_status()
         return RunResultStart.model_validate(response.json())
 
@@ -247,7 +256,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             "POST",
             self._url("validate"),
             content=content,
-            request_timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+            request_timeout=self.request_timeout_seconds,
         )
         response.raise_for_status()
         return response
@@ -311,7 +320,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             + any implementation extensions).
         """
         endpoint = f"models?type={quote(category, safe='')}" if category is not None else "models"
-        response = await self._send("GET", self._url(endpoint), content=None, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
+        response = await self._send("GET", self._url(endpoint), content=None, request_timeout=self.request_timeout_seconds)
         response.raise_for_status()
         return ModelDeck.model_validate(response.json())
 
@@ -322,7 +331,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         Returns:
             VersionInfo — the handshake for feature detection (hosted extensions or not).
         """
-        response = await self._send("GET", self._url("version"), content=None, request_timeout=_POLL_REQUEST_TIMEOUT_SECONDS)
+        response = await self._send("GET", self._url("version"), content=None, request_timeout=self.request_timeout_seconds)
         response.raise_for_status()
         return VersionInfo.model_validate(response.json())
 
