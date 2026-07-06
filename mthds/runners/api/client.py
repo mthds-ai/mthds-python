@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 from urllib.parse import quote
 
 import httpx
@@ -17,8 +17,6 @@ from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecut
 from mthds.runners.types import RunnerType
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
-
     from mthds.protocol.pipe_output import VariableMultiplicity
     from mthds.protocol.pipeline_inputs import PipelineInputs
     from mthds.protocol.stuff import StuffType

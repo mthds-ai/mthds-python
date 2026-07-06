@@ -17,7 +17,7 @@ We are open to contributions in all areas of the mthds package:
 
 ## Requirements
 
-- Python ≥3.10
+- Python ≥3.11
 - [uv](https://docs.astral.sh/uv/) ≥0.7.2
 
 ## Contribution Process

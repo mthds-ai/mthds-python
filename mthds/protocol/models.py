@@ -18,11 +18,11 @@ principle as the request-side `extra`.
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Annotated, Generic, Literal, TypeAlias, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from mthds._compat import StrEnum
 from mthds._utils.pydantic_utils import empty_list_factory_of
 
 PipeOutputT = TypeVar("PipeOutputT")

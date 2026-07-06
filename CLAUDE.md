@@ -2,12 +2,10 @@
 
 ## Python Version Compatibility
 
-- Target Python 3.10+. Never use features introduced after Python 3.10 without a compatibility fallback.
+- Target Python 3.11+. Never use features introduced after Python 3.11 without a compatibility fallback.
+- `StrEnum` (`from enum import StrEnum`), `Self` (`from typing import Self`), `datetime.UTC`, `tomllib`, and `ExceptionGroup` / `except*` are all available at 3.11 — use them directly, no shim.
 - Common pitfalls:
-  - `datetime.UTC` was added in Python 3.11. Use `datetime.timezone.utc` instead.
-  - `StrEnum` was added in Python 3.11. Provide a compatibility shim or backport.
   - `type` statement (PEP 695) was added in Python 3.12. Use `TypeAlias` from `typing` instead.
-  - `ExceptionGroup` / `except*` was added in Python 3.11. Avoid unless using the `exceptiongroup` backport.
 
 ## Variables, Loops and Indexes
 
