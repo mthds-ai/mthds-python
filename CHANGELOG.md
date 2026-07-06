@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Blocking `execute()` no longer rejects the hosted runner's enriched `/v1/execute` response.** The Dict wire models (`DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`) were `extra="forbid"`, contradicting the protocol's extension-openness — parsing a hosted `pipelex-api` response (which dumps the full `PipeOutput`: per-stuff `stuff_code` / `stuff_name`, pipe-output `graph_spec` / `tokens_usages` / `working_memory_raw` / assembly errors) raised a pydantic `ValidationError` after the run had succeeded server-side. They are now `extra="allow"` like every other protocol response model; extension fields ride `model_extra`.
+
+### Changed
+
+- **Breaking: `DictStuffAbstract.concept` is now `str | DictConcept`** — a stuff's `concept` arrives on the wire either as the reduced namespaced ref string (what this SDK's own serialization emits) or as the full concept object the hosted runner dumps, now modeled by the new extension-open `DictConcept` (`code` + `domain_code` typed, the rest in `model_extra`). Use the new `DictStuffAbstract.concept_ref` property to get the ref string regardless of wire form.
+
 ## [v0.7.1] - 2026-07-02
 
 ### Fixed

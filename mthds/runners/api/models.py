@@ -1,10 +1,21 @@
 """Dict-serialized wire models — the concrete JSON materialization of the protocol's domain shapes.
 
-These are the JSON forms the runners deal in: each `Stuff` reduced to
-`{concept: <ref>, content}`, working memory as a flat root + aliases, the
-pipe-output as that working memory + a run id, and `DictRunResultExecute` as the
-protocol's `RunResult` carrying a `DictPipeOutput`. The abstract (non-dict)
-domain shapes these mirror live in `mthds.protocol.*`.
+These are the JSON forms the runners deal in: each `Stuff` carrying a `concept`
+(the namespaced ref string, or the full concept object a runner may dump) and a
+`content`, working memory as a flat root + aliases, the pipe-output as that
+working memory + a run id, and `DictRunResultExecute` as the protocol's
+`RunResult` carrying a `DictPipeOutput`. The abstract (non-dict) domain shapes
+these mirror live in `mthds.protocol.*`.
+
+Like every response model in `mthds.protocol.models`, these are
+extension-open (`extra="allow"`): the protocol's OpenAPI spec declares
+`pipe_output` as an open object, and a compliant runner may return richer
+shapes than the base fields named here — the hosted `pipelex-api` runner dumps
+its full `PipeOutput` (per-stuff `stuff_code` / `stuff_name`, pipe-output
+`graph_spec` / `tokens_usages` / `working_memory_raw`, …). Anything beyond the
+base fields rides `model_extra`, never named by this SDK. This SDK's own
+serialization (`from_pipe_output`) emits the reduced form: `concept` as the
+ref string, base fields only.
 
 These shapes are brand-neutral (no `pipelex_` prefix) and are a shared wire
 contract: the in-process `PipelexRunner` and the `MthdsAPIClient` both deal in
@@ -32,20 +43,45 @@ if TYPE_CHECKING:
 MAIN_STUFF_NAME = "main_stuff"
 
 
+class DictConcept(BaseModel):
+    """The full-object wire form of a stuff's `concept`.
+
+    A runner may dump the whole concept object instead of the reduced ref
+    string (the hosted `pipelex-api` runner does). Only the two fields needed
+    to reconstitute the namespaced ref are required; anything more
+    (`description`, `structure_class_name`, `refines`, …) rides `model_extra`.
+    """
+
+    model_config = ConfigDict(extra="allow", strict=True)
+    code: str
+    domain_code: str
+
+    @property
+    def concept_ref(self) -> str:
+        return f"{self.domain_code}.{self.code}"
+
+
 class DictStuffAbstract(BaseModel, ABC):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    concept: str
+    model_config = ConfigDict(extra="allow", strict=True)
+    concept: str | DictConcept
     content: Any
+
+    @property
+    def concept_ref(self) -> str:
+        """The namespaced concept ref, whichever wire form `concept` arrived in."""
+        if isinstance(self.concept, str):
+            return self.concept
+        return self.concept.concept_ref
 
 
 class DictWorkingMemoryAbstract(BaseModel, ABC):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="allow", strict=True)
     root: dict[str, DictStuffAbstract]
     aliases: dict[str, str]
 
 
 class DictPipeOutputAbstract(BaseModel, ABC):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="allow", strict=True)
     working_memory: DictWorkingMemoryAbstract
     pipeline_run_id: str
 
