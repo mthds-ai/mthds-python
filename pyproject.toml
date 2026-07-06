@@ -1,6 +1,6 @@
 [project]
 name = "mthds"
-version = "0.8.0"
+version = "0.8.1"
 description = "The Python interface for methods — base structures for structured outputs and the base runner for executing methods via API."
 authors = [{ name = "Evotis S.A.S.", email = "oss@pipelex.com" }]
 maintainers = [{ name = "Pipelex staff", email = "oss@pipelex.com" }]
@@ -31,7 +31,7 @@ dev = [
   "pyright==1.1.411",
   "pylint==4.0.4",
   "ruff==0.14.13",
-  "pytest>=8.0.0,<9.0.0",
+  "pytest>=9.0.3",
   "pytest-mock>=3.12.0,<4.0.0",
   "pytest-sugar>=1.0.0",
 ]
@@ -47,7 +47,8 @@ Repository = "https://github.com/mthds-ai/mthds"
 Documentation = "https://docs.mthds.ai/"
 Changelog = "https://github.com/mthds-ai/mthds/releases"
 
-[tool.pytest.ini_options]
+[tool.pytest]
+minversion = "9.0"
 testpaths = ["tests"]
 pythonpath = ["."]
 
