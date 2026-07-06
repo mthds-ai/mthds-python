@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.8.1] - 2026-07-06
+
+### Changed
+
+- **Dev tooling: upgraded pytest to `>=9.0.3` and adopted the pytest-9 config norm.** The dev dependency moves from `pytest>=8.0.0,<9.0.0` to `pytest>=9.0.3`, and the pytest settings switch from the legacy `[tool.pytest.ini_options]` table to the native `[tool.pytest]` table with `minversion = "9.0"`, matching the `pipelex` repo. No change to the shipped package.
+
 ## [v0.8.0] - 2026-07-06
 
 ### Fixed
