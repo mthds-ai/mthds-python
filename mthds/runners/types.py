@@ -1,6 +1,6 @@
 """Runner types for the MTHDS CLI."""
 
-from mthds._compat import StrEnum
+from enum import StrEnum
 
 
 class RunnerType(StrEnum):

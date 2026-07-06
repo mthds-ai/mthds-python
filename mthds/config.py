@@ -13,11 +13,9 @@ Resolution order: environment variables > config file > defaults.
 from __future__ import annotations
 
 import os
-from enum import unique
+from enum import StrEnum, unique
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
-
-from mthds._compat import StrEnum
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

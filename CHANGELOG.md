@@ -8,6 +8,7 @@
 
 ### Changed
 
+- **Breaking: dropped Python 3.10 support — `requires-python` is now `>=3.11,<3.15`.** The 3.10 compatibility bridges are gone: `StrEnum` and `Self` are imported directly from the stdlib (`enum` / `typing`, the `mthds._compat` shim is removed), `tomllib` replaces the `tomli` fallback, and the `backports.strenum` / `tomli` conditional dependencies are dropped. Install on Python 3.11 or newer.
 - **Breaking: `DictStuffAbstract.concept` is now `str | DictConcept`** — a stuff's `concept` arrives on the wire either as the reduced namespaced ref string (what this SDK's own serialization emits) or as the full concept object the hosted runner dumps, now modeled by the new extension-open `DictConcept` (`code` + `domain_code` typed, the rest in `model_extra`). Use the new `DictStuffAbstract.concept_ref` property to get the ref string regardless of wire form.
 
 ## [v0.7.1] - 2026-07-02
