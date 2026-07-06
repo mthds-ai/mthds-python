@@ -1,10 +1,9 @@
 import re
 import unicodedata
-from typing import Any, cast
+from typing import Any, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from mthds._compat import Self
 from mthds.package.manifest.validation import is_domain_code_valid, is_pipe_code_valid
 
 # Semver regex: MAJOR.MINOR.PATCH with optional pre-release and build metadata

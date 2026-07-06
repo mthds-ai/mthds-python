@@ -8,7 +8,7 @@ The protocol contract and its implementations live in separate packages:
 
 - `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResultExecute`, `RunResultStart`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
 - `mthds/runners/` — every runner implementation, one subpackage per runner:
-    - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute` — the runners' concrete JSON materialization of the protocol's domain shapes), `exceptions.py` (API auth + the protocol's 202-degrade error, `RunStillRunningError`).
+    - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictConcept`, `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute` — the runners' concrete JSON materialization of the protocol's domain shapes), `exceptions.py` (API auth + the protocol's 202-degrade error, `RunStillRunningError`).
     - `pipelex/runner.py` — `PipelexRunner`, the local runner that shells out to the `pipelex` CLI.
     - `types.py` — `RunnerType`.
 
@@ -61,6 +61,8 @@ async with MthdsAPIClient() as client:
 ```
 
 `execute` may raise `RunStillRunningError` if a server answers 202 (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`. `execute` answers with `RunResultExecute` (`pipeline_run_id` + `pipe_output`, both present — a completed run has output); `start` answers with `RunResultStart` (`pipeline_run_id` only). Both are extension-open on the response side.
+
+The Dict wire models are extension-open at every level, matching the protocol's OpenAPI spec (which declares `pipe_output` as an open object). Base fields are typed; anything more a runner returns rides `model_extra`. The hosted `pipelex-api` runner dumps its full `PipeOutput` — per-stuff `stuff_code` / `stuff_name`, pipe-output `graph_spec` / `tokens_usages` / `working_memory_raw` and assembly errors — and all of it is preserved. A stuff's `concept` accepts both wire forms: the reduced namespaced ref string (what this SDK's own serialization emits) or the full concept object (`DictConcept`, what the hosted runner dumps); `DictStuffAbstract.concept_ref` normalizes either form to the ref string.
 
 ### Basic args vs extension args
 

@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import os
-import sys
+import tomllib
 from typing import Any
 
 import tomlkit
 from tomlkit.exceptions import ParseError as TomlkitParseError  # type: ignore[import-untyped]
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib  # type: ignore[no-redef]
 
 
 class TomlError(Exception):
