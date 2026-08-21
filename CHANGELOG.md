@@ -1,10 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [v0.8.2] - 2026-08-21
 
 ### Changed
 
-- **Ruff moves to 0.16.4, matching the version the VS Code extension bundles.** The extension now syncs `pyproject.toml` and `ruff.toml` documents to the language server, because Ruff from 0.16 on lints its own config files. A binary older than that parses those documents as Python source and paints phantom `invalid-syntax` diagnostics across every `pyproject.toml`. Pinning the dev dependency to the exact version the extension ships keeps the editor and the command line on one binary. This is a dev-dependency change: nothing shipped changes, and there is no version bump.
+- **Ruff moves to 0.16.4, matching the version the VS Code extension bundles.** The extension now syncs `pyproject.toml` and `ruff.toml` documents to the language server, because Ruff from 0.16 on lints its own config files. A binary older than that parses those documents as Python source and paints phantom `invalid-syntax` diagnostics across every `pyproject.toml`. Pinning the dev dependency to the exact version the extension ships keeps the editor and the command line on one binary. This is a dev-dependency change: nothing shipped changes.
 
   Two mechanical conversions ride along, both applied by `ruff check --fix` and therefore not deferrable, since `make lint` would re-apply them on first contact: selector lists in `pyproject.toml` now name rules rather than code them, and `# noqa: CODE` suppressions became `# ruff: ignore[rule-name]`. Of the rules newly reported under `preview`, `too-many-statements-in-try-clause` is ignored globally — shrinking an existing `try` clause changes which statements its handlers cover, so it is an error-handling refactor rather than lint cleanup — and `float-equality-comparison` only under `tests/`, whose float literals round-trip exactly.
 
