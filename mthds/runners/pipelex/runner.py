@@ -4,7 +4,7 @@
 
 import json
 import shutil
-import subprocess  # noqa: S404
+import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import tempfile
 from pathlib import Path
 from typing import Any, cast
@@ -61,7 +61,7 @@ def run_subprocess(cmd: list[str], *, timeout: int = 600, capture_output: bool =
         PipelexRunnerError: If the command fails or times out.
     """
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
             cmd,
             check=False,
             timeout=timeout,
@@ -168,7 +168,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
 
     @property
     def runner_type(self) -> RunnerType:
-        """Return the runner type."""
+        """The runner type."""
         return RunnerType.PIPELEX
 
     @override

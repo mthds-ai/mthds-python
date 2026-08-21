@@ -77,7 +77,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
     @property
     def runner_type(self) -> RunnerType:
-        """Return the runner type (the API client IS the API runner — parity D8)."""
+        """The runner type (the API client IS the API runner — parity D8)."""
         return RunnerType.API
 
     # ── Lifecycle ──────────────────────────────────────────────────────
