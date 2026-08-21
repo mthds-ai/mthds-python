@@ -33,7 +33,7 @@ from mthds.runners.api.client import MthdsAPIClient
 async with MthdsAPIClient() as client:
     # Synchronous execution — the full output comes back in the response
     result = await client.execute(mthds_contents=[bundle_text], inputs={"topic": {"concept": "Text", "content": "owls"}})
-    print(result.pipeline_run_id)                    # the protocol's two base fields...
+    print(result.pipeline_run_id)  # the protocol's two base fields...
     print(result.pipe_output)
     # anything else the server returned (run state, timestamps, output naming)
     # is an implementation extension — preserved in result.model_extra
@@ -41,10 +41,10 @@ async with MthdsAPIClient() as client:
     # Validation (dry-run included) — 200-diagnostic: read the verdict from the body
     report = await client.validate([bundle_text])
     if report.is_valid is True:
-        ...                                          # ValidationReport — structural artifacts ride model_extra
+        ...  # ValidationReport — structural artifacts ride model_extra
     else:
-        for item in report.validation_errors:        # InvalidValidationReport — neutral diagnostics
-            print(item.category, item.message)       # category/message typed; locators ride item.model_extra
+        for item in report.validation_errors:  # InvalidValidationReport — neutral diagnostics
+            print(item.category, item.message)  # category/message typed; locators ride item.model_extra
     # `validate()` returns the protocol-neutral ValidationResult. pipelex-sdk's PipelexAPIClient
     # narrows the same 200 body to typed PipelexValidationReport / PipelexInvalidReport (structural
     # artifacts, typed locators like `source` / `pipe_code`, `rendered_markdown`).
@@ -56,8 +56,8 @@ async with MthdsAPIClient() as client:
     # PipelexRunnerError on an invalid bundle (the CLI's exit code).
 
     # Discovery
-    deck = await client.models()           # optionally client.models(ModelCategory.LLM)
-    info = await client.version()          # {protocol_version, runner_version} + server-specific extensions (info.model_extra)
+    deck = await client.models()  # optionally client.models(ModelCategory.LLM)
+    info = await client.version()  # {protocol_version, runner_version} + server-specific extensions (info.model_extra)
 ```
 
 `execute` may raise `RunStillRunningError` if a server answers 202 (the protocol's optional async degrade) — the run keeps executing server-side and the error carries `run_id`, `retry_after_seconds`, and `location`. `execute` answers with `RunResultExecute` (`pipeline_run_id` + `pipe_output`, both present — a completed run has output); `start` answers with `RunResultStart` (`pipeline_run_id` only). Both are extension-open on the response side.
@@ -78,7 +78,7 @@ The abstract `MTHDSProtocol` interface carries the protocol's **basic** argument
 ```python
 async with MthdsAPIClient() as client:
     # Submit a long run and get back its authoritative id (no output yet):
-    started = await client.start(pipe_code="answer", inputs=inputs)     # POST /v1/start → 202 RunResultStart (id only)
+    started = await client.start(pipe_code="answer", inputs=inputs)  # POST /v1/start → 202 RunResultStart (id only)
     # server-specific args (defined by the server, not this SDK) ride `extra`:
     # started = await client.start(inputs=inputs, extra={...})
     # ...then poll it to completion via pipelex-sdk's PipelexAPIClient.

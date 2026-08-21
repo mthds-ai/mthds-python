@@ -5,7 +5,7 @@ Maps package addresses to clone URLs, lists remote version tags, selects
 versions via MVS, and clones at a specific tag.
 """
 
-import subprocess  # noqa: S404
+import subprocess  # ruff: ignore[suspicious-subprocess-import]
 from pathlib import Path
 
 from semantic_version import Version  # type: ignore[import-untyped]
@@ -48,8 +48,8 @@ def list_remote_version_tags(clone_url: str) -> list[tuple[Version, str]]:
         VCSFetchError: If the git command fails or git is not installed.
     """
     try:
-        result = subprocess.run(  # noqa: S603
-            ["git", "ls-remote", "--tags", clone_url],  # noqa: S607
+        result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+            ["git", "ls-remote", "--tags", clone_url],  # ruff: ignore[start-process-with-partial-path]
             capture_output=True,
             text=True,
             check=True,
@@ -144,8 +144,8 @@ def clone_default_branch(clone_url: str, destination: Path) -> None:
         VCSFetchError: If the clone operation fails.
     """
     try:
-        subprocess.run(  # noqa: S603
-            ["git", "clone", "--depth", "1", clone_url, str(destination)],  # noqa: S607
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+            ["git", "clone", "--depth", "1", clone_url, str(destination)],  # ruff: ignore[start-process-with-partial-path]
             capture_output=True,
             text=True,
             check=True,
@@ -174,8 +174,8 @@ def clone_at_version(clone_url: str, version_tag: str, destination: Path) -> Non
         VCSFetchError: If the clone operation fails.
     """
     try:
-        subprocess.run(  # noqa: S603
-            ["git", "clone", "--depth", "1", "--branch", version_tag, clone_url, str(destination)],  # noqa: S607
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+            ["git", "clone", "--depth", "1", "--branch", version_tag, clone_url, str(destination)],  # ruff: ignore[start-process-with-partial-path]
             capture_output=True,
             text=True,
             check=True,

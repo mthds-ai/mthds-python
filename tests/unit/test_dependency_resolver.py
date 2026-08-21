@@ -36,7 +36,7 @@ class TestDependencyResolver:
         # from the schema but the resolver still reads it via getattr().
         # Pydantic's __setattr__ would reject unknown fields, so we bypass it.
         if dependencies:
-            object.__setattr__(manifest, "dependencies", dependencies)  # noqa: PLC2801  # noqa: PLC2801
+            object.__setattr__(manifest, "dependencies", dependencies)  # ruff: ignore[unnecessary-dunder-call]
         return manifest
 
     # --- collect_mthds_files ---
