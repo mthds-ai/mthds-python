@@ -1,4 +1,4 @@
-import subprocess  # noqa: S404
+import subprocess  # ruff: ignore[suspicious-subprocess-import]
 from pathlib import Path
 
 import pytest

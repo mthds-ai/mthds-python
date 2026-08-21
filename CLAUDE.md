@@ -60,6 +60,7 @@
   ```python
   from pydantic import BaseModel, Field
 
+
   class MyModel(BaseModel):
       names: list[str] = Field(default_factory=list)  # OK for strings
       numbers: list[int] = Field(default_factory=list)

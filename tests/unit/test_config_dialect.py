@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 
 # The dialect engine is deliberately private (an implementation detail of the config surface);
 # this suite pins the dialect itself, so it reaches the private names on purpose.
-from mthds.config import _parse_dotenv, _serialize_dotenv  # noqa: PLC2701  # pyright: ignore[reportPrivateUsage]
+from mthds.config import _parse_dotenv, _serialize_dotenv  # ruff: ignore[import-private-name]  # pyright: ignore[reportPrivateUsage]
 
 _FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "config_dialect_cases.json"
 
