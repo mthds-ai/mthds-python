@@ -360,4 +360,7 @@ method-rgx = "^(?!.$)[a-z_][a-z0-9_]*$"
 # Classes: CapWords, not length 1
 class-rgx = "^(?!.$)[A-Z_][a-zA-Z0-9_]*$"
 typevar-rgx = "^[A-Za-z_][A-Za-z0-9_]*$"
+# Type aliases follow the class style: pylint's default regex refuses consecutive capitals,
+# which rejects a wire-named alias such as `PipeIOContracts`.
+typealias-rgx = "^(?!.$)[A-Z_][a-zA-Z0-9_]*$"
 good-names = ["_"]

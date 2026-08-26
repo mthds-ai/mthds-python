@@ -73,3 +73,122 @@ class ExecuteWireResponses:
         },
         "main_stuff_name": "extracted_entities",
     }
+
+
+class InputFormWireNodes:
+    """Hand-written field descriptors probing the closed shapes of `mthds.protocol.input_form`.
+
+    They complement the engine-produced parity fixture in `tests/fixtures/protocol/`, which only
+    shows conforming nodes: these state what a member the standard never defined, a slot of
+    another kind, or a broken invariant looks like on the wire.
+    """
+
+    # Rejected at the parse.
+    UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {"kind": "text", "name": "title", "required": True, "widget": "textarea"}
+    SLOT_OF_ANOTHER_KIND: ClassVar[dict[str, Any]] = {"kind": "text", "name": "tone", "required": False, "choices": ["formal", "casual"]}
+    UNKNOWN_KIND: ClassVar[dict[str, Any]] = {"kind": "slider", "name": "volume", "required": True}
+    NUMBER_WITHOUT_INTEGER: ClassVar[dict[str, Any]] = {"kind": "number", "name": "count", "required": True}
+    DATE_WITHOUT_DATETIME: ClassVar[dict[str, Any]] = {"kind": "date", "name": "released_on", "required": True}
+    ENUM_WITHOUT_CHOICES: ClassVar[dict[str, Any]] = {"kind": "enum", "name": "tone", "required": True}
+    OBJECT_WITHOUT_FIELDS: ClassVar[dict[str, Any]] = {"kind": "object", "name": "widget", "required": True}
+    LIST_WITHOUT_ITEM: ClassVar[dict[str, Any]] = {"kind": "list", "name": "tags", "required": True}
+    LIST_COUNT_OF_ONE: ClassVar[dict[str, Any]] = {
+        "kind": "list",
+        "name": "two",
+        "required": True,
+        "item": {"kind": "text", "required": True},
+        "item_count": 1,
+    }
+    REQUIRED_WITH_DEFAULT: ClassVar[dict[str, Any]] = {"kind": "text", "name": "motto", "required": True, "default_value": "carpe diem"}
+    HINT_VALUE_NOT_A_STRING: ClassVar[dict[str, Any]] = {"kind": "text", "name": "headline", "required": True, "hints": {"intent": 3}}
+    NESTED_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {
+        "kind": "object",
+        "name": "widget",
+        "required": True,
+        "fields": [{"kind": "text", "name": "title", "required": True, "placeholder": "Title"}],
+    }
+    DESCRIPTOR_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {"fields": [], "layout": "two-column"}
+
+    # Accepted, and what the accepted dump must look like.
+    HINTS_CONTENT_LENIENT: ClassVar[dict[str, Any]] = {
+        "kind": "text",
+        "name": "quirk",
+        "required": False,
+        "hints": {"emphasis": "strong", "intent": "a-word-from-a-later-version"},
+    }
+    FALSY_SLOTS_STATED: ClassVar[dict[str, Any]] = {"kind": "number", "name": "price", "required": False, "integer": False}
+    ITEM_WITHOUT_NAME: ClassVar[dict[str, Any]] = {
+        "kind": "list",
+        "name": "tags",
+        "concept_ref": "native.Text",
+        "required": True,
+        "item": {"kind": "prose", "concept_ref": "native.Text", "required": True},
+    }
+    NUMBER_WITH_INTEGRAL_BOUNDS: ClassVar[dict[str, Any]] = {
+        "kind": "number",
+        "name": "stars",
+        "required": False,
+        "integer": True,
+        "minimum": 1,
+        "maximum": 5,
+    }
+    EMPTY_FORM: ClassVar[dict[str, Any]] = {"fields": []}
+
+
+class PipeIOContractWireNodes:
+    """Hand-written contract entries probing the closed shapes of `mthds.protocol.pipe_io_contracts`."""
+
+    _TEXT_SCHEMA: ClassVar[dict[str, Any]] = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
+    _OUTPUT: ClassVar[dict[str, Any]] = {"concept_ref": "legal.Summary", "multiplicity": "single", "item_count": None, "optional": False}
+
+    # Rejected at the parse.
+    INPUT_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {
+        "concept_ref": "native.Text",
+        "presence": "plain",
+        "multiplicity": "single",
+        "item_count": None,
+        "json_schema": _TEXT_SCHEMA,
+        "label": "Instructions",
+    }
+    INPUT_ITEM_COUNT_MISSING: ClassVar[dict[str, Any]] = {
+        "concept_ref": "native.Text",
+        "presence": "plain",
+        "multiplicity": "single",
+        "json_schema": _TEXT_SCHEMA,
+    }
+    INPUT_FIXED_WITHOUT_COUNT: ClassVar[dict[str, Any]] = {
+        "concept_ref": "legal.Clause",
+        "presence": "plain",
+        "multiplicity": "fixed",
+        "item_count": None,
+        "json_schema": {"type": "array", "items": _TEXT_SCHEMA},
+    }
+    INPUT_SINGLE_WITH_COUNT: ClassVar[dict[str, Any]] = {
+        "concept_ref": "legal.Clause",
+        "presence": "plain",
+        "multiplicity": "single",
+        "item_count": 2,
+        "json_schema": _TEXT_SCHEMA,
+    }
+    INPUT_FIXED_COUNT_OF_ONE: ClassVar[dict[str, Any]] = {
+        "concept_ref": "legal.Clause",
+        "presence": "plain",
+        "multiplicity": "fixed",
+        "item_count": 1,
+        "json_schema": {"type": "array", "items": _TEXT_SCHEMA, "minItems": 1, "maxItems": 1},
+    }
+    INPUT_UNKNOWN_PRESENCE: ClassVar[dict[str, Any]] = {
+        "concept_ref": "native.Text",
+        "presence": "required",
+        "multiplicity": "single",
+        "item_count": None,
+        "json_schema": _TEXT_SCHEMA,
+    }
+    OUTPUT_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {**_OUTPUT, "json_schema": _TEXT_SCHEMA}
+    OUTPUT_FIXED_WITHOUT_COUNT: ClassVar[dict[str, Any]] = {**_OUTPUT, "multiplicity": "fixed"}
+    ENTRY_WITHOUT_INPUTS: ClassVar[dict[str, Any]] = {"output": _OUTPUT}
+    ENTRY_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {"inputs": {}, "output": _OUTPUT, "description": "Summarize a contract"}
+
+    # Accepted.
+    ENTRY_WITHOUT_DECLARED_INPUTS: ClassVar[dict[str, Any]] = {"inputs": {}, "output": _OUTPUT}
+    OUTPUT_FIXED_OPTIONAL: ClassVar[dict[str, Any]] = {"concept_ref": "legal.Clause", "multiplicity": "fixed", "item_count": 3, "optional": True}

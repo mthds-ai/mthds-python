@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **`mthds.protocol` types the two validate artifacts the standard owns since `mthds` v0.9.0.** `mthds/protocol/pipe_io_contracts.py` mirrors `docs/spec/pipe-io-contracts.md` — `PipeInputContract`, `PipeOutputContract`, `PipeIOContract`, the `PipeIOContracts` map alias, and the `PresenceMarker` / `IOMultiplicity` enums — and `mthds/protocol/input_form.py` mirrors `docs/spec/input-form-descriptor.md` (with the `hints` slot shaped by `docs/spec/intent-hints.md`) — `FieldKind`, one model per kind behind the `InputFormField` discriminated union, `PipeInputFormDescriptor`, and the `InputForm` map alias. Both artifacts are closed shapes (`extra="forbid"`): an unknown member is version drift and fails the parse, while the validate report itself stays extension-open — the artifacts ride it as the recommended extension fields `pipe_io_contracts` and `input_form`, reachable through `ValidationReport.model_extra` and narrowed with a `TypeAdapter`. The models are pinned to the reference engine by a parity fixture under `tests/fixtures/protocol/` that `mthds-js` commits byte-for-byte, so the two clients mirror each other by measurement. This is new surface on the protocol package and warrants a **minor** bump.
+
+### Changed
+
+- **Dev tooling: pylint's type-alias naming rule follows the class naming style** (`typealias-rgx` in `pyproject.toml`), so a wire-named alias such as `PipeIOContracts` passes `make check`. Nothing shipped changes.
+
 ## [v0.8.2] - 2026-08-21
 
 ### Changed
