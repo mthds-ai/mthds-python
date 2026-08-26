@@ -108,6 +108,19 @@ class ValidationReport(BaseModel):
     The protocol declares only the `is_valid` discriminant here; implementations
     include their own artifacts (parsed structures, graphs, anything else),
     preserved as extension attributes (`extra="allow"`).
+
+    Two of those extensions are the standard's own **recommended extension
+    fields**, each with a page of its own since `mthds` v0.9.0 and typed in this
+    package: `pipe_io_contracts` (`mthds.protocol.pipe_io_contracts.PipeIOContracts`)
+    and `input_form` (`mthds.protocol.input_form.InputForm`). They stay extensions —
+    the protocol's base fields did not change, and how a caller asks for the
+    descriptor is implementation-defined — so they ride `model_extra` and a
+    consumer narrows them by declaring typed fields on a model that extends this
+    report — `pipe_io_contracts: PipeIOContracts | None = None` and
+    `input_form: InputForm | None = None` — parsed by pydantic from the plain
+    annotations, with no adapter machinery. That is how the Pipelex SDK narrows
+    the same 200 body. Unlike this envelope, the artifacts themselves are closed
+    shapes.
     """
 
     model_config = ConfigDict(extra="allow")
