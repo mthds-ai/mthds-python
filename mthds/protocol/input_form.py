@@ -32,8 +32,8 @@ the table the shape itself — a slot that does not belong to a kind is an unkno
 that kind's model, and a kind's required slots are simply required fields. It is also what
 the TypeScript mirror in `mthds-js` declares, so the two clients agree by construction.
 `InputFormField` is that union, `Annotated` with `Field(discriminator="kind")`; a consumer
-narrows a node with `match node: case ListField(): ...` (or `isinstance`), and parses a
-payload with `TypeAdapter(InputForm)`.
+narrows a parsed node with `match node: case ListField(): ...` (or `isinstance`). A node is
+never parsed in isolation: the payload arrives as a typed field (see `InputForm` below).
 
 Absent, never `null`. A slot that does not apply to a node is absent from the wire, and
 applicable falsy values (`required: false`, `integer: false`) are stated. The models own
@@ -291,8 +291,9 @@ InputFormField: TypeAlias = Annotated[
 ]
 """One field descriptor: a recursive node, discriminated on `kind` — one per-kind model per kind of the closed union.
 
-An `object` node recurses through `fields`, a `list` node through `item`. Parse a single node with
-`TypeAdapter(InputFormField)`; a payload's nodes are reached through `InputForm`.
+An `object` node recurses through `fields`, a `list` node through `item`. A node is reached by
+parsing the payload it arrives in (see `InputForm`), never parsed in isolation; a consumer narrows
+a parsed node with `match` or `isinstance`.
 """
 
 # The two recursive kinds name `InputFormField` before the alias exists; resolve them now that it does.
@@ -318,5 +319,8 @@ InputForm: TypeAlias = dict[str, PipeInputFormDescriptor]
 """The `input_form` artifact: namespaced `pipe_ref` (`domain_path.pipe_code`) → the pipe's input form.
 
 The same key set as `pipe_io_contracts` — the descriptor is per pipe input, and that map's key
-space is its natural address. Parse a payload with `TypeAdapter(InputForm).validate_python(...)`.
+space is its natural address. The artifact arrives as an extension field of the validate report,
+so a consumer parses it by declaring a typed field — `input_form: InputForm | None = None` on a
+model extending the report — and pydantic parses the map and the discriminated union from that
+plain annotation; no adapter machinery is involved.
 """

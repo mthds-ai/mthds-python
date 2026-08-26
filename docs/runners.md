@@ -66,25 +66,32 @@ The Dict wire models are extension-open at every level, matching the protocol's 
 
 ### The validate artifacts: `pipe_io_contracts` and `input_form`
 
-Two artifacts of the valid `/validate` report are owned by the standard since `mthds` v0.9.0 — [Pipe I/O Contracts](https://mthds.ai/spec/pipe-io-contracts/) and the [Input-Form Descriptor](https://mthds.ai/spec/input-form-descriptor/) — and this package types them: `mthds/protocol/pipe_io_contracts.py` and `mthds/protocol/input_form.py` mirror those pages exactly, snake_case slot for snake_case slot. Both are **recommended extension fields** of the report, not base fields: the protocol's base did not change, and how a caller asks a runner for the descriptor is implementation-defined (the hosted Pipelex API gates it behind its `views` request extension). They therefore reach you through `ValidationReport.model_extra`, and you narrow them explicitly:
+Two artifacts of the valid `/validate` report are owned by the standard since `mthds` v0.9.0 — [Pipe I/O Contracts](https://mthds.ai/spec/pipe-io-contracts/) and the [Input-Form Descriptor](https://mthds.ai/spec/input-form-descriptor/) — and this package types them: `mthds/protocol/pipe_io_contracts.py` and `mthds/protocol/input_form.py` mirror those pages exactly, snake_case slot for snake_case slot. Both are **recommended extension fields** of the report, not base fields: the protocol's base did not change, and how a caller asks a runner for the descriptor is implementation-defined (the hosted Pipelex API gates it behind its `views` request extension). They therefore arrive beside the report's typed base fields, and you narrow them by declaring them as typed fields on a model that extends the report — pydantic parses the maps and the discriminated union from the plain annotations, with no adapter machinery (this is exactly how `pipelex-sdk`'s report narrowing consumes them):
 
 ```python
-from pydantic import TypeAdapter
-
 from mthds.protocol.input_form import InputForm, ListField
+from mthds.protocol.models import ValidationReport
 from mthds.protocol.pipe_io_contracts import IOMultiplicity, PipeIOContracts
 
-report = await client.validate([bundle_text])
-if report.is_valid is True and report.model_extra is not None:
-    contracts = TypeAdapter(PipeIOContracts).validate_python(report.model_extra["pipe_io_contracts"])
-    summarize = contracts["legal.summarize_contract"]
-    for input_name, slot in summarize.inputs.items():  # a map — the descriptor below carries the order
-        print(input_name, slot.concept_ref, slot.presence, slot.multiplicity, slot.item_count, slot.json_schema)
-    print(summarize.output.concept_ref, summarize.output.multiplicity is IOMultiplicity.SINGLE, summarize.output.optional)
 
-    if "input_form" in report.model_extra:  # only when the runner was asked for the view
-        form = TypeAdapter(InputForm).validate_python(report.model_extra["input_form"])
-        for field in form["legal.summarize_contract"].fields:  # authored input order
+class ValidReportWithArtifacts(ValidationReport):
+    """The valid arm, narrowed: the standard's two artifacts as typed fields instead of `model_extra`."""
+
+    pipe_io_contracts: PipeIOContracts | None = None
+    input_form: InputForm | None = None  # served only when the runner was asked for the view
+
+
+report = await client.validate([bundle_text])
+if report.is_valid is True:
+    narrowed = ValidReportWithArtifacts.model_validate(report.model_dump())
+    if narrowed.pipe_io_contracts is not None:
+        summarize = narrowed.pipe_io_contracts["legal.summarize_contract"]
+        for input_name, slot in summarize.inputs.items():  # a map — the descriptor below carries the order
+            print(input_name, slot.concept_ref, slot.presence, slot.multiplicity, slot.item_count, slot.json_schema)
+        print(summarize.output.concept_ref, summarize.output.multiplicity is IOMultiplicity.SINGLE, summarize.output.optional)
+
+    if narrowed.input_form is not None:
+        for field in narrowed.input_form["legal.summarize_contract"].fields:  # authored input order
             match field:
                 case ListField():
                     print(field.name, "list of", field.item.kind, field.item_count)

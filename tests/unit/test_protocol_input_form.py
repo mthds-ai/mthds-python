@@ -2,9 +2,11 @@
 
 The fixture `tests/fixtures/protocol/input_form.json` is the reference engine's own emission,
 committed byte-for-byte here and in `mthds-js` (its README carries the provenance and the known
-engine drift). Every entry must parse under the closed shapes — `extra="forbid"` on every model is
-what makes the parse a real check — and dump back to exactly the input: absent slots stay absent,
-never `null`, and applicable falsy values are kept.
+engine drift). It is parsed the way the artifact actually arrives: as a typed field declared on a
+model narrowing the validate report — pydantic parses the map and the discriminated union from the
+plain annotation, no adapter machinery involved. Every entry must parse under the closed shapes —
+`extra="forbid"` on every model is what makes the parse a real check — and dump back to exactly
+the input: absent slots stay absent, never `null`, and applicable falsy values are kept.
 """
 
 import json
@@ -12,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic import TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from mthds.protocol.input_form import (
     BooleanField,
@@ -22,7 +24,6 @@ from mthds.protocol.input_form import (
     FieldKind,
     ImageField,
     InputForm,
-    InputFormField,
     ListField,
     NumberField,
     ObjectField,
@@ -34,11 +35,23 @@ from mthds.protocol.input_form import (
 from mthds.protocol.pipe_io_contracts import PresenceMarker
 from tests.unit.test_data import InputFormWireNodes
 
+
+class NarrowedValidateReport(BaseModel):
+    """How the artifact arrives: a typed field on a model narrowing the validate report.
+
+    `pipelex-sdk-python` declares exactly this field (as `InputForm | None`) on its own report
+    narrowing at Stage 3.4; a plain field annotation is the whole parse path.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_form: InputForm
+
+
 _FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "protocol" / "input_form.json"
 _RAW: dict[str, Any] = json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
-_FORM_ADAPTER = TypeAdapter(InputForm)
-_NODE_ADAPTER: TypeAdapter[InputFormField] = TypeAdapter(InputFormField)
-_FORM = _FORM_ADAPTER.validate_python(_RAW)
+_REPORT = NarrowedValidateReport.model_validate({"input_form": _RAW})
+_FORM = _REPORT.input_form
 
 
 class TestInputFormProtocolModels:
@@ -50,10 +63,10 @@ class TestInputFormProtocolModels:
         assert json.loads(descriptor.model_dump_json()) == _RAW[pipe_ref]
 
     def test_whole_artifact_round_trips(self) -> None:
-        """The map alias parses the whole payload, keyed by namespaced pipe ref, and dumps it back unchanged."""
+        """Parsed as the typed field it rides in on, the whole payload dumps back unchanged."""
         assert list(_FORM) == list(_RAW)
-        assert _FORM_ADAPTER.dump_python(_FORM, mode="json") == _RAW
-        assert json.loads(_FORM_ADAPTER.dump_json(_FORM)) == _RAW
+        assert _REPORT.model_dump(mode="json") == {"input_form": _RAW}
+        assert json.loads(_REPORT.model_dump_json()) == {"input_form": _RAW}
 
     def test_slot_facts_are_stated_on_top_level_fields(self) -> None:
         """Presence, required, gating and the structured multiplicity are read as stated facts."""
@@ -242,7 +255,7 @@ class TestInputFormProtocolModels:
     def test_closed_shapes_reject(self, node: dict[str, Any]) -> None:
         """A member the standard does not define, a slot of another kind, or a broken invariant fails the parse."""
         with pytest.raises(ValidationError):
-            _NODE_ADAPTER.validate_python(node)
+            PipeInputFormDescriptor.model_validate({"fields": [node]})
 
     def test_descriptor_is_a_closed_shape(self) -> None:
         """The per-pipe descriptor rejects unknown members and accepts the empty form."""
@@ -254,26 +267,30 @@ class TestInputFormProtocolModels:
 
     def test_hints_content_leniency_is_the_sole_exception(self) -> None:
         """Unknown hint keys and unknown intent words are carried through untouched."""
-        node = _NODE_ADAPTER.validate_python(InputFormWireNodes.HINTS_CONTENT_LENIENT)
+        descriptor = PipeInputFormDescriptor.model_validate({"fields": [InputFormWireNodes.HINTS_CONTENT_LENIENT]})
+        node = descriptor.fields[0]
         assert isinstance(node, TextField)
         assert node.hints == {"emphasis": "strong", "intent": "a-word-from-a-later-version"}
         assert node.model_dump()["hints"] == InputFormWireNodes.HINTS_CONTENT_LENIENT["hints"]
 
     def test_absent_slots_stay_absent_and_falsy_slots_are_stated(self) -> None:
         """A plain dump owns the wire rule: no `null` for an inapplicable slot, and `false` is kept."""
-        price = _NODE_ADAPTER.validate_python(InputFormWireNodes.FALSY_SLOTS_STATED)
+        price_descriptor = PipeInputFormDescriptor.model_validate({"fields": [InputFormWireNodes.FALSY_SLOTS_STATED]})
+        price = price_descriptor.fields[0]
         assert isinstance(price, NumberField)
         assert price.model_dump() == {"kind": "number", "name": "price", "required": False, "integer": False}
         assert list(price.model_dump()) == ["kind", "name", "required", "integer"]
 
-        tags = _NODE_ADAPTER.validate_python(InputFormWireNodes.ITEM_WITHOUT_NAME)
+        tags_descriptor = PipeInputFormDescriptor.model_validate({"fields": [InputFormWireNodes.ITEM_WITHOUT_NAME]})
+        tags = tags_descriptor.fields[0]
         assert isinstance(tags, ListField)
         assert tags.item.name is None
         dumped = tags.model_dump()
         assert "name" not in dumped["item"]
         assert dumped == InputFormWireNodes.ITEM_WITHOUT_NAME
 
-        stars = _NODE_ADAPTER.validate_python(InputFormWireNodes.NUMBER_WITH_INTEGRAL_BOUNDS)
+        stars_descriptor = PipeInputFormDescriptor.model_validate({"fields": [InputFormWireNodes.NUMBER_WITH_INTEGRAL_BOUNDS]})
+        stars = stars_descriptor.fields[0]
         assert isinstance(stars, NumberField)
         assert stars.minimum == 1
         assert stars.maximum == 5

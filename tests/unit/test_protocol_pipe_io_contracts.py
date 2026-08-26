@@ -1,10 +1,12 @@
 """Parity and strictness tests for `mthds.protocol.pipe_io_contracts` against the engine-produced fixture.
 
 The fixture `tests/fixtures/protocol/pipe_io_contracts.json` is the reference engine's own emission,
-committed byte-for-byte here and in `mthds-js` (its README carries the provenance). Every entry must
-parse under the closed shapes — `extra="forbid"` on every model is what makes the parse a real
-check — and dump back to exactly the input: on this artifact `item_count` is always on the wire,
-`null` off the fixed arm, and a plain dump keeps it there.
+committed byte-for-byte here and in `mthds-js` (its README carries the provenance). It is parsed the
+way the artifact actually arrives: as a typed field declared on a model narrowing the validate
+report — pydantic parses the whole map from the plain annotation, no adapter machinery involved.
+Every entry must parse under the closed shapes — `extra="forbid"` on every model is what makes the
+parse a real check — and dump back to exactly the input: on this artifact `item_count` is always on
+the wire, `null` off the fixed arm, and a plain dump keeps it there.
 """
 
 import json
@@ -12,15 +14,28 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic import TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from mthds.protocol.pipe_io_contracts import IOMultiplicity, PipeInputContract, PipeIOContract, PipeIOContracts, PipeOutputContract, PresenceMarker
 from tests.unit.test_data import PipeIOContractWireNodes
 
+
+class NarrowedValidateReport(BaseModel):
+    """How the artifact arrives: a typed field on a model narrowing the validate report.
+
+    `pipelex-sdk-python` declares exactly this field (as `PipeIOContracts | None`) on its own report
+    narrowing at Stage 3.4; a plain field annotation is the whole parse path.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    pipe_io_contracts: PipeIOContracts
+
+
 _FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "protocol" / "pipe_io_contracts.json"
 _RAW: dict[str, Any] = json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
-_CONTRACTS_ADAPTER = TypeAdapter(PipeIOContracts)
-_CONTRACTS = _CONTRACTS_ADAPTER.validate_python(_RAW)
+_REPORT = NarrowedValidateReport.model_validate({"pipe_io_contracts": _RAW})
+_CONTRACTS = _REPORT.pipe_io_contracts
 
 
 class TestPipeIOContractsProtocolModels:
@@ -32,14 +47,14 @@ class TestPipeIOContractsProtocolModels:
         assert json.loads(contract.model_dump_json()) == _RAW[pipe_ref]
 
     def test_whole_artifact_round_trips(self) -> None:
-        """The map alias parses the whole payload, keyed by namespaced pipe ref, and dumps it back unchanged."""
+        """Parsed as the typed field it rides in on, the whole payload dumps back unchanged."""
         assert list(_CONTRACTS) == list(_RAW)
-        assert _CONTRACTS_ADAPTER.dump_python(_CONTRACTS, mode="json") == _RAW
-        assert json.loads(_CONTRACTS_ADAPTER.dump_json(_CONTRACTS)) == _RAW
+        assert _REPORT.model_dump(mode="json") == {"pipe_io_contracts": _RAW}
+        assert json.loads(_REPORT.model_dump_json()) == {"pipe_io_contracts": _RAW}
 
     def test_item_count_is_always_on_the_wire(self) -> None:
         """`item_count` rides every input and output contract, `null` off the fixed arm, even through a plain dump."""
-        dumped = _CONTRACTS_ADAPTER.dump_python(_CONTRACTS, mode="json")
+        dumped = _REPORT.model_dump(mode="json")["pipe_io_contracts"]
         for pipe_ref, entry in dumped.items():
             assert "item_count" in entry["output"], pipe_ref
             for input_name, input_contract in entry["inputs"].items():

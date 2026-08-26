@@ -182,5 +182,8 @@ PipeIOContracts: TypeAlias = dict[str, PipeIOContract]
 
 Every pipe in the resolved library has an entry, contract-only pipe signatures included; a bare or
 same-domain-implicit key never appears. The input-form descriptor is keyed by the same `pipe_ref`
-set. Parse a payload with `TypeAdapter(PipeIOContracts).validate_python(...)`.
+set. The artifact arrives as an extension field of the validate report, so a consumer parses it
+by declaring a typed field — `pipe_io_contracts: PipeIOContracts | None = None` on a model
+extending the report — and pydantic parses the whole map from that plain annotation; no adapter
+machinery is involved.
 """
