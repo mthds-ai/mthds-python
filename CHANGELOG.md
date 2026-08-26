@@ -1,13 +1,18 @@
 # Changelog
 
-## [Unreleased]
+## [v0.9.0] - 2026-08-26
 
 ### Added
 
-- **`mthds.protocol` types the two validate artifacts the standard owns since `mthds` v0.9.0.** `mthds/protocol/pipe_io_contracts.py` mirrors `docs/spec/pipe-io-contracts.md` — `PipeInputContract`, `PipeOutputContract`, `PipeIOContract`, the `PipeIOContracts` map alias, and the `PresenceMarker` / `IOMultiplicity` enums — and `mthds/protocol/input_form.py` mirrors `docs/spec/input-form-descriptor.md` (with the `hints` slot shaped by `docs/spec/intent-hints.md`) — `FieldKind`, one model per kind behind the `InputFormField` discriminated union, `PipeInputFormDescriptor`, and the `InputForm` map alias. Both artifacts are closed shapes (`extra="forbid"`): an unknown member is version drift and fails the parse, while the validate report itself stays extension-open — the artifacts ride it as the recommended extension fields `pipe_io_contracts` and `input_form`, reachable by declaring them as typed fields on a model that extends the report (`pipe_io_contracts: PipeIOContracts | None = None`, `input_form: InputForm | None = None`), which is how the SDKs narrow the same body. The pages' cross-field invariants are enforced at the parse alongside the shapes: a slot's `item_count` pairs with its `multiplicity`, a presence marker is never combined with multiplicity (a plural input reports `plain`, a plural output is never `optional`), and `presence` and `gating` are pipe-slot facts that a nested field or a list's item never carries. The models are pinned to the reference engine by a parity fixture under `tests/fixtures/protocol/` that `mthds-js` commits byte-for-byte, so the two clients mirror each other by measurement. This is new surface on the protocol package and warrants a **minor** bump.
+- **`mthds.protocol` types the two validate artifacts the standard owns since MTHDS v0.9.0.** Both ride the validation report as the recommended extension fields `pipe_io_contracts` and `input_form`, reachable by declaring them as typed fields on a model that extends the report (`pipe_io_contracts: PipeIOContracts | None = None`, `input_form: InputForm | None = None`) — the same narrowing the SDKs use, with no adapter machinery.
+  - **Pipe I/O contracts:** `mthds/protocol/pipe_io_contracts.py` mirrors `docs/spec/pipe-io-contracts.md` — `PipeInputContract`, `PipeOutputContract`, `PipeIOContract`, the `PipeIOContracts` map alias, and the `PresenceMarker` / `IOMultiplicity` enums.
+  - **Input-form descriptor:** `mthds/protocol/input_form.py` mirrors `docs/spec/input-form-descriptor.md`, with its `hints` slot shaped by `docs/spec/intent-hints.md` — `FieldKind`, one model per kind behind the `InputFormField` discriminated union, `PipeInputFormDescriptor`, and the `InputForm` map alias.
+- **Strict parsing, with the pages' cross-field invariants enforced at the parse.** Both artifacts are closed shapes (`extra="forbid"`), so an unknown member is version drift and fails the parse, while the validate report itself stays extension-open. Alongside the shapes: a slot's `item_count` pairs with its `multiplicity`, a presence marker is never combined with multiplicity (a plural input reports `plain`, a plural output is never `optional`), and `presence` and `gating` are pipe-slot facts that a nested field or a list's item never carries.
+- **A parity fixture pins the models to the reference engine.** `tests/fixtures/protocol/` is captured from the engine and committed byte-for-byte by `mthds-js`, so the two clients mirror each other by measurement rather than by intent. `tests/unit/test_protocol_input_form.py` and `tests/unit/test_protocol_pipe_io_contracts.py` cover the strictness, the closed shapes, and the parity.
 
 ### Changed
 
+- **`docs/runners.md` and the `ValidationReport` docstrings** now explain the two validate artifacts and show the typed-field narrowing that parses them off the report.
 - **Dev tooling: pylint's type-alias naming rule follows the class naming style** (`typealias-rgx` in `pyproject.toml`), so a wire-named alias such as `PipeIOContracts` passes `make check`. Nothing shipped changes.
 
 ## [v0.8.2] - 2026-08-21
