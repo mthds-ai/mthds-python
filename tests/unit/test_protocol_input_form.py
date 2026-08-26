@@ -253,6 +253,8 @@ class TestInputFormProtocolModels:
             pytest.param(InputFormWireNodes.NESTED_PRESENCE, id="presence on a nested field"),
             pytest.param(InputFormWireNodes.NESTED_GATING, id="gating on a nested field"),
             pytest.param(InputFormWireNodes.ITEM_WITH_PRESENCE, id="presence on a list's item"),
+            pytest.param(InputFormWireNodes.TOP_LEVEL_WITHOUT_PRESENCE, id="top-level field without presence"),
+            pytest.param(InputFormWireNodes.TOP_LEVEL_WITHOUT_GATING, id="top-level field without gating"),
         ],
     )
     def test_closed_shapes_reject(self, node: dict[str, Any]) -> None:
@@ -281,8 +283,8 @@ class TestInputFormProtocolModels:
         price_descriptor = PipeInputFormDescriptor.model_validate({"fields": [InputFormWireNodes.FALSY_SLOTS_STATED]})
         price = price_descriptor.fields[0]
         assert isinstance(price, NumberField)
-        assert price.model_dump() == {"kind": "number", "name": "price", "required": False, "integer": False}
-        assert list(price.model_dump()) == ["kind", "name", "required", "integer"]
+        assert price.model_dump() == {"kind": "number", "name": "price", "required": False, "presence": "optional", "gating": False, "integer": False}
+        assert list(price.model_dump()) == ["kind", "name", "required", "presence", "gating", "integer"]
 
         tags_descriptor = PipeInputFormDescriptor.model_validate({"fields": [InputFormWireNodes.ITEM_WITHOUT_NAME]})
         tags = tags_descriptor.fields[0]

@@ -128,13 +128,14 @@ class InputFormFieldBase(BaseModel):
     presence: PresenceMarker | None = None
     """Top-level fields only: the authored presence marker of the pipe's input slot, three-valued so
     that `!` is not flattened away. Nested fields carry no `presence` — it is a pipe-slot fact, and a
-    nested node carrying one is rejected at the parse."""
+    nested node carrying one is rejected at the parse, as is a top-level field missing one."""
 
     gating: bool | None = None
     """Top-level fields only: the run cannot start until the caller provides content for this slot.
     Stated rather than re-derived from `required` — a variable-length list is required yet never
     gates, since the empty list is a legitimate value; a fixed-count list does. Nested fields carry no
-    `gating`, and a nested node carrying one is rejected at the parse."""
+    `gating`, and a nested node carrying one is rejected at the parse, as is a top-level field
+    missing one."""
 
     default_value: Any = None
     """The value applied when the caller omits the field. Absent unless a default was authored — the
@@ -254,6 +255,18 @@ def _check_pipe_slot_facts_absent(*, node: InputFormFieldBase, position: str) ->
             raise ValueError(msg)
 
 
+def _check_pipe_slot_facts_stated(*, node: InputFormFieldBase, position: str) -> None:
+    """Enforce the placement rule's positive half: a top-level field states both pipe-slot facts.
+
+    Raised from the descriptor, so the error names the offending field itself — pydantic reports
+    the location of the container that recursed, not of the member that broke the rule.
+    """
+    for slot, value in (("presence", node.presence), ("gating", node.gating)):
+        if value is None:
+            msg = f"{position} states no '{slot}': '{slot}' is a pipe-slot fact every top-level field carries"
+            raise ValueError(msg)
+
+
 class ObjectField(InputFormFieldBase):
     """`object` — a structured concept, recursing through its resolved payload fields."""
 
@@ -340,6 +353,13 @@ class PipeInputFormDescriptor(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     fields: list[InputFormField]
+
+    @model_validator(mode="after")
+    def validate_top_level_placement(self) -> Self:
+        """A top-level field states both `presence` and `gating`: pipe-slot facts are stated, never re-derived."""
+        for field in self.fields:
+            _check_pipe_slot_facts_stated(node=field, position=f"Top-level field '{field.name}'")
+        return self
 
 
 InputForm: TypeAlias = dict[str, PipeInputFormDescriptor]

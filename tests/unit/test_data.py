@@ -125,6 +125,8 @@ class InputFormWireNodes:
         "required": True,
         "item": {"kind": "text", "required": True, "presence": "plain"},
     }
+    TOP_LEVEL_WITHOUT_PRESENCE: ClassVar[dict[str, Any]] = {"kind": "text", "name": "title", "required": True, "gating": True}
+    TOP_LEVEL_WITHOUT_GATING: ClassVar[dict[str, Any]] = {"kind": "text", "name": "title", "required": True, "presence": "plain"}
     DESCRIPTOR_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {"fields": [], "layout": "two-column"}
 
     # Accepted, and what the accepted dump must look like.
@@ -132,20 +134,33 @@ class InputFormWireNodes:
         "kind": "text",
         "name": "quirk",
         "required": False,
+        "presence": "optional",
+        "gating": False,
         "hints": {"emphasis": "strong", "intent": "a-word-from-a-later-version"},
     }
-    FALSY_SLOTS_STATED: ClassVar[dict[str, Any]] = {"kind": "number", "name": "price", "required": False, "integer": False}
+    FALSY_SLOTS_STATED: ClassVar[dict[str, Any]] = {
+        "kind": "number",
+        "name": "price",
+        "required": False,
+        "presence": "optional",
+        "gating": False,
+        "integer": False,
+    }
     ITEM_WITHOUT_NAME: ClassVar[dict[str, Any]] = {
         "kind": "list",
         "name": "tags",
         "concept_ref": "native.Text",
         "required": True,
+        "presence": "plain",
+        "gating": False,
         "item": {"kind": "prose", "concept_ref": "native.Text", "required": True},
     }
     NUMBER_WITH_INTEGRAL_BOUNDS: ClassVar[dict[str, Any]] = {
         "kind": "number",
         "name": "stars",
         "required": False,
+        "presence": "optional",
+        "gating": False,
         "integer": True,
         "minimum": 1,
         "maximum": 5,
