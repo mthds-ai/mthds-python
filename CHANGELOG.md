@@ -10,6 +10,10 @@
 
 - **Dev tooling: pylint's type-alias naming rule follows the class naming style** (`typealias-rgx` in `pyproject.toml`), so a wire-named alias such as `PipeIOContracts` passes `make check`. Nothing shipped changes.
 
+### Fixed
+
+- **CI: the publish workflow's Sigstore signing step works again.** `sigstore/gh-action-sigstore-python` moves from v3.0.0 to v3.5.0 (SHA-pinned, matching `pipelex`): the old version's bundled sigstore-python predates the Sigstore TUF trust-root rotation and fails deterministically with `root was signed by 0/3 keys`, which broke the GitHub-release half of the v0.9.0 publish (PyPI publication itself was unaffected). Nothing shipped changes.
+
 ## [v0.8.2] - 2026-08-21
 
 ### Changed
