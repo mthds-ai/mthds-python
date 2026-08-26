@@ -126,6 +126,8 @@ class TestPipeIOContractsProtocolModels:
             pytest.param(PipeIOContractWireNodes.INPUT_SINGLE_WITH_COUNT, id="single with a count"),
             pytest.param(PipeIOContractWireNodes.INPUT_FIXED_COUNT_OF_ONE, id="fixed with a count of one"),
             pytest.param(PipeIOContractWireNodes.INPUT_UNKNOWN_PRESENCE, id="presence outside the vocabulary"),
+            pytest.param(PipeIOContractWireNodes.INPUT_VARIABLE_OPTIONAL, id="variable marked optional"),
+            pytest.param(PipeIOContractWireNodes.INPUT_FIXED_FORCED, id="fixed marked forced"),
         ],
     )
     def test_input_contract_is_a_closed_shape(self, node: dict[str, Any]) -> None:
@@ -138,10 +140,11 @@ class TestPipeIOContractsProtocolModels:
         [
             pytest.param(PipeIOContractWireNodes.OUTPUT_UNKNOWN_MEMBER, id="schema on an output"),
             pytest.param(PipeIOContractWireNodes.OUTPUT_FIXED_WITHOUT_COUNT, id="fixed without a count"),
+            pytest.param(PipeIOContractWireNodes.OUTPUT_FIXED_OPTIONAL, id="fixed marked optional"),
         ],
     )
     def test_output_contract_is_a_closed_shape(self, node: dict[str, Any]) -> None:
-        """An output carries no schema and obeys the same item-count pair rule as an input."""
+        """An output carries no schema, obeys the same item-count pair rule as an input, and is plural or optional but never both."""
         with pytest.raises(ValidationError):
             PipeOutputContract.model_validate(node)
 
@@ -158,11 +161,11 @@ class TestPipeIOContractsProtocolModels:
             PipeIOContract.model_validate(node)
 
     def test_accepted_edges(self) -> None:
-        """An empty input map is a stated fact, and a fixed optional output carries its count and its flag."""
+        """An empty input map is a stated fact, and a single optional output carries its flag with a null count."""
         entry = PipeIOContract.model_validate(PipeIOContractWireNodes.ENTRY_WITHOUT_DECLARED_INPUTS)
         assert entry.inputs == {}
         assert entry.model_dump()["inputs"] == {}
-        output = PipeOutputContract.model_validate(PipeIOContractWireNodes.OUTPUT_FIXED_OPTIONAL)
-        assert output.multiplicity is IOMultiplicity.FIXED
-        assert output.item_count == 3
+        output = PipeOutputContract.model_validate(PipeIOContractWireNodes.OUTPUT_SINGLE_OPTIONAL)
+        assert output.multiplicity is IOMultiplicity.SINGLE
+        assert output.item_count is None
         assert output.optional is True

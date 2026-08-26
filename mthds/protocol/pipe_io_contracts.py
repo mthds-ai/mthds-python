@@ -56,6 +56,15 @@ class PresenceMarker(StrEnum):
             case PresenceMarker.PLAIN | PresenceMarker.FORCE:
                 return False
 
+    @property
+    def is_plain(self) -> bool:
+        """Whether the slot was authored with no marker at all — what a plural slot always reports."""
+        match self:
+            case PresenceMarker.PLAIN:
+                return True
+            case PresenceMarker.OPTIONAL | PresenceMarker.FORCE:
+                return False
+
 
 class IOMultiplicity(StrEnum):
     """How many items a slot takes or a pipe resolves to: one item, a variable-length list, or a fixed count.
@@ -131,6 +140,14 @@ class PipeInputContract(BaseModel):
         _check_item_count_pairing(multiplicity=self.multiplicity, item_count=self.item_count)
         return self
 
+    @model_validator(mode="after")
+    def validate_presence_pairing(self) -> Self:
+        """Markers may not be combined with multiplicity, so a plural slot always reports `plain`."""
+        if self.multiplicity.is_plural and not self.presence.is_plain:
+            msg = f"A '{self.multiplicity}' slot reports presence 'plain', got '{self.presence}': markers may not be combined with multiplicity"
+            raise ValueError(msg)
+        return self
+
 
 class PipeOutputContract(BaseModel):
     """What the pipe resolves to: the concept it produces, how many items that is, and whether it may be absent.
@@ -154,11 +171,20 @@ class PipeOutputContract(BaseModel):
 
     optional: bool
     """`True` when the output is declared optional (`?`): a **successful** run may leave it absent —
-    a recorded absence instead of a value — not that the run may fail."""
+    a recorded absence instead of a value — not that the run may fail. Never `True` on a plural output:
+    `?` may not be combined with multiplicity, and an absent plural is the empty list."""
 
     @model_validator(mode="after")
     def validate_item_count_pairing(self) -> Self:
         _check_item_count_pairing(multiplicity=self.multiplicity, item_count=self.item_count)
+        return self
+
+    @model_validator(mode="after")
+    def validate_optional_pairing(self) -> Self:
+        """`?` may not be combined with multiplicity: a plural output is never optional, it is the empty list."""
+        if self.multiplicity.is_plural and self.optional:
+            msg = f"A '{self.multiplicity}' output is never 'optional': an absent plural is the empty list, not a recorded absence"
+            raise ValueError(msg)
         return self
 
 

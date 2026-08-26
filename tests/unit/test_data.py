@@ -107,6 +107,24 @@ class InputFormWireNodes:
         "required": True,
         "fields": [{"kind": "text", "name": "title", "required": True, "placeholder": "Title"}],
     }
+    NESTED_PRESENCE: ClassVar[dict[str, Any]] = {
+        "kind": "object",
+        "name": "widget",
+        "required": True,
+        "fields": [{"kind": "text", "name": "title", "required": True, "presence": "plain"}],
+    }
+    NESTED_GATING: ClassVar[dict[str, Any]] = {
+        "kind": "object",
+        "name": "widget",
+        "required": True,
+        "fields": [{"kind": "text", "name": "title", "required": True, "gating": False}],
+    }
+    ITEM_WITH_PRESENCE: ClassVar[dict[str, Any]] = {
+        "kind": "list",
+        "name": "tags",
+        "required": True,
+        "item": {"kind": "text", "required": True, "presence": "plain"},
+    }
     DESCRIPTOR_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {"fields": [], "layout": "two-column"}
 
     # Accepted, and what the accepted dump must look like.
@@ -184,11 +202,26 @@ class PipeIOContractWireNodes:
         "item_count": None,
         "json_schema": _TEXT_SCHEMA,
     }
+    INPUT_VARIABLE_OPTIONAL: ClassVar[dict[str, Any]] = {
+        "concept_ref": "legal.Clause",
+        "presence": "optional",
+        "multiplicity": "variable",
+        "item_count": None,
+        "json_schema": {"type": "array", "items": _TEXT_SCHEMA},
+    }
+    INPUT_FIXED_FORCED: ClassVar[dict[str, Any]] = {
+        "concept_ref": "legal.Clause",
+        "presence": "force",
+        "multiplicity": "fixed",
+        "item_count": 3,
+        "json_schema": {"type": "array", "items": _TEXT_SCHEMA, "minItems": 3, "maxItems": 3},
+    }
     OUTPUT_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {**_OUTPUT, "json_schema": _TEXT_SCHEMA}
     OUTPUT_FIXED_WITHOUT_COUNT: ClassVar[dict[str, Any]] = {**_OUTPUT, "multiplicity": "fixed"}
+    OUTPUT_FIXED_OPTIONAL: ClassVar[dict[str, Any]] = {"concept_ref": "legal.Clause", "multiplicity": "fixed", "item_count": 3, "optional": True}
     ENTRY_WITHOUT_INPUTS: ClassVar[dict[str, Any]] = {"output": _OUTPUT}
     ENTRY_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {"inputs": {}, "output": _OUTPUT, "description": "Summarize a contract"}
 
     # Accepted.
     ENTRY_WITHOUT_DECLARED_INPUTS: ClassVar[dict[str, Any]] = {"inputs": {}, "output": _OUTPUT}
-    OUTPUT_FIXED_OPTIONAL: ClassVar[dict[str, Any]] = {"concept_ref": "legal.Clause", "multiplicity": "fixed", "item_count": 3, "optional": True}
+    OUTPUT_SINGLE_OPTIONAL: ClassVar[dict[str, Any]] = {"concept_ref": "legal.Clause", "multiplicity": "single", "item_count": None, "optional": True}

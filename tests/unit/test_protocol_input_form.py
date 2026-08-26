@@ -250,6 +250,9 @@ class TestInputFormProtocolModels:
             pytest.param(InputFormWireNodes.REQUIRED_WITH_DEFAULT, id="required with a default_value"),
             pytest.param(InputFormWireNodes.HINT_VALUE_NOT_A_STRING, id="hint value that is not a string"),
             pytest.param(InputFormWireNodes.NESTED_UNKNOWN_MEMBER, id="unknown member on a nested node"),
+            pytest.param(InputFormWireNodes.NESTED_PRESENCE, id="presence on a nested field"),
+            pytest.param(InputFormWireNodes.NESTED_GATING, id="gating on a nested field"),
+            pytest.param(InputFormWireNodes.ITEM_WITH_PRESENCE, id="presence on a list's item"),
         ],
     )
     def test_closed_shapes_reject(self, node: dict[str, Any]) -> None:

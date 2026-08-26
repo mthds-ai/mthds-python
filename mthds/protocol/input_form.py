@@ -127,12 +127,14 @@ class InputFormFieldBase(BaseModel):
 
     presence: PresenceMarker | None = None
     """Top-level fields only: the authored presence marker of the pipe's input slot, three-valued so
-    that `!` is not flattened away. Nested fields carry no `presence` — it is a pipe-slot fact."""
+    that `!` is not flattened away. Nested fields carry no `presence` — it is a pipe-slot fact, and a
+    nested node carrying one is rejected at the parse."""
 
     gating: bool | None = None
     """Top-level fields only: the run cannot start until the caller provides content for this slot.
     Stated rather than re-derived from `required` — a variable-length list is required yet never
-    gates, since the empty list is a legitimate value; a fixed-count list does."""
+    gates, since the empty list is a legitimate value; a fixed-count list does. Nested fields carry no
+    `gating`, and a nested node carrying one is rejected at the parse."""
 
     default_value: Any = None
     """The value applied when the caller omits the field. Absent unless a default was authored — the
@@ -240,6 +242,18 @@ class ImageField(InputFormFieldBase):
     kind: Literal[FieldKind.IMAGE] = FieldKind.IMAGE
 
 
+def _check_pipe_slot_facts_absent(*, node: InputFormFieldBase, position: str) -> None:
+    """Enforce the placement rule: `presence` and `gating` are pipe-slot facts, stated on top-level fields only.
+
+    Raised from the parent, so the error names the offending child itself — pydantic reports the
+    location of the node that recursed, not of the member that broke the rule.
+    """
+    for slot, value in (("presence", node.presence), ("gating", node.gating)):
+        if value is not None:
+            msg = f"{position} carries '{slot}': '{slot}' is a pipe-slot fact, stated on top-level fields only"
+            raise ValueError(msg)
+
+
 class ObjectField(InputFormFieldBase):
     """`object` — a structured concept, recursing through its resolved payload fields."""
 
@@ -247,6 +261,13 @@ class ObjectField(InputFormFieldBase):
     fields: list[InputFormField]
     """The concept's effective payload fields, in declared order. Required — empty for a concept
     whose structure declares no field."""
+
+    @model_validator(mode="after")
+    def validate_nested_placement(self) -> Self:
+        """A nested field carries neither `presence` nor `gating`: both are facts of the pipe's input slot."""
+        for nested in self.fields:
+            _check_pipe_slot_facts_absent(node=nested, position=f"Nested field '{nested.name}' of '{self.name}'")
+        return self
 
 
 class ListField(InputFormFieldBase):
@@ -272,6 +293,12 @@ class ListField(InputFormFieldBase):
         if self.item_count is not None and self.item_count < 2:
             msg = f"Field '{self.name}' states 'item_count' {self.item_count}; a fixed count is at least 2, and a count of one is single"
             raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_item_placement(self) -> Self:
+        """A list's `item` carries neither `presence` nor `gating`: both are facts of the pipe's input slot."""
+        _check_pipe_slot_facts_absent(node=self.item, position=f"The item of list '{self.name}'")
         return self
 
 
