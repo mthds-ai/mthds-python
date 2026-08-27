@@ -319,6 +319,7 @@ class TestInputFormProtocolModels:
             pytest.param(InputFormWireNodes.TOP_LEVEL_WITHOUT_GATING, id="top-level field without gating"),
             pytest.param(InputFormWireNodes.TOP_LEVEL_OPTIONAL_YET_REQUIRED, id="top-level optional yet required"),
             pytest.param(InputFormWireNodes.TOP_LEVEL_PLAIN_YET_NOT_REQUIRED, id="top-level plain yet not required"),
+            pytest.param(InputFormWireNodes.TOP_LEVEL_OPTIONAL_YET_GATING, id="top-level optional yet gating"),
             pytest.param(InputFormWireNodes.TITLE_EXPLICIT_NULL, id="explicit null title"),
             pytest.param(InputFormWireNodes.REFINES_EXPLICIT_NULL, id="explicit null refines"),
             pytest.param(InputFormWireNodes.ITEM_COUNT_NULL_ON_VARIABLE_LIST, id="explicit null item_count on a variable list"),

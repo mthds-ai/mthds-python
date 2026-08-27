@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Rejected `gating: true` on an optional top-level input-form field. The spec derives `gating: false` for an optional slot unconditionally — a slot the method says may be omitted can never block the run — so the pairing now fails the parse, mirroring the `mthds-js` type pin. Only this half of the gating derivation is enforced: on a non-optional field, `gating` stays a stated wire fact. **(Breaking)**
+
 ## [v0.10.0] - 2026-08-27
 
 ### Changed
