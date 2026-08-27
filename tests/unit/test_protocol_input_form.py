@@ -317,6 +317,13 @@ class TestInputFormProtocolModels:
             pytest.param(InputFormWireNodes.ITEM_WITH_PRESENCE, id="presence on a list's item"),
             pytest.param(InputFormWireNodes.TOP_LEVEL_WITHOUT_PRESENCE, id="top-level field without presence"),
             pytest.param(InputFormWireNodes.TOP_LEVEL_WITHOUT_GATING, id="top-level field without gating"),
+            pytest.param(InputFormWireNodes.TOP_LEVEL_OPTIONAL_YET_REQUIRED, id="top-level optional yet required"),
+            pytest.param(InputFormWireNodes.TOP_LEVEL_PLAIN_YET_NOT_REQUIRED, id="top-level plain yet not required"),
+            pytest.param(InputFormWireNodes.TITLE_EXPLICIT_NULL, id="explicit null title"),
+            pytest.param(InputFormWireNodes.REFINES_EXPLICIT_NULL, id="explicit null refines"),
+            pytest.param(InputFormWireNodes.ITEM_COUNT_NULL_ON_VARIABLE_LIST, id="explicit null item_count on a variable list"),
+            pytest.param(InputFormWireNodes.NESTED_TITLE_EXPLICIT_NULL, id="explicit null title on a nested field"),
+            pytest.param(InputFormWireNodes.ITEM_TITLE_EXPLICIT_NULL, id="explicit null title on a list's item"),
             pytest.param(InputFormWireNodes.ITEM_WITH_NAME, id="name on a list's item"),
             pytest.param(InputFormWireNodes.TOP_LEVEL_WITHOUT_NAME, id="top-level field without a name"),
             pytest.param(InputFormWireNodes.NESTED_WITHOUT_NAME, id="nested field without a name"),
@@ -342,6 +349,21 @@ class TestInputFormProtocolModels:
         assert isinstance(node, TextField)
         assert node.hints == {"emphasis": "strong", "intent": "a-word-from-a-later-version"}
         assert node.model_dump()["hints"] == InputFormWireNodes.HINTS_CONTENT_LENIENT["hints"]
+
+    def test_default_value_null_is_no_default(self) -> None:
+        """`default_value: null` is "no default" per the page, never a rejected null — the one carve-out from the explicit-null rule."""
+        descriptor = PipeInputFormDescriptor.model_validate({"fields": [InputFormWireNodes.DEFAULT_VALUE_EXPLICIT_NULL]})
+        motto = descriptor.fields[0]
+        assert isinstance(motto, TextField)
+        assert motto.default_value is None
+        assert "default_value" not in motto.model_dump()
+
+    def test_programmatic_construction_accepts_none_kwargs(self) -> None:
+        """`TextField(..., title=maybe_title)` with `None` stays the supported idiom: the explicit-null rule binds the wire, not the constructor."""
+        field = TextField(name="title", title=None, refines=None, required=True, presence=PresenceMarker.PLAIN, gating=True)
+        descriptor = PipeInputFormDescriptor(fields=[field])
+        assert descriptor.fields[0].title is None
+        assert descriptor.model_dump() == {"fields": [{"kind": "text", "name": "title", "required": True, "presence": "plain", "gating": True}]}
 
     def test_absent_slots_stay_absent_and_falsy_slots_are_stated(self) -> None:
         """A plain dump owns the wire rule: no `null` for an inapplicable slot, and `false` is kept."""
