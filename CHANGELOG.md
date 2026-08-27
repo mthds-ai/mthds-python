@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.10.0] - 2026-08-27
+
+### Changed
+
+- Enforced coherence between `required` and `presence` on top-level input-form fields. The parser now rejects contradictory states (e.g., `required: true` with `presence: "optional"`, or `required: false` with `plain`/`force`). **(Breaking)**
+- Explicit `null` values on input-form wire slots now fail parsing, enforcing the "absent, never `null`" rule for raw wire mappings. `default_value` is exempt, since `null` explicitly means "no default". Programmatic construction (e.g., `TextField(..., title=None)`) remains fully supported; validation only targets raw wire dictionaries. **(Breaking)**
+- Split the input-form descriptor's field union into distinct nameless (`InputFormItem`) and named (`InputFormField`) shapes to enforce rules structurally. A `list`'s `item` uses the nameless union (`TextItem`, `ObjectItem`, etc.) and fails parsing if a `name` is provided; standard fields use the named union (`TextField`, `ObjectField`, etc.), which requires a `name: str`. Base classes were renamed accordingly (e.g., `InputFormFieldBase` → `InputFormItemBase`, `TextValuedFieldBase` → `TextValuedItemBase`). **(Breaking)**
+- Updated `docs/runners.md` to document the structural differences and parsing rules between nameless list items and named fields.
+- Recaptured protocol parity fixtures using the updated engine (`pipelex` at `bdd853c41`), resolving all previously known divergences from the specification: list items correctly carry no `name`; description-only concepts no longer carry a fabricated `refines: ["native.Text"]`; `native.Date` and `native.Html` now land on the `object` arm, with `native.Html`'s `css_class` correctly marked optional.
+
+### Fixed
+
+- Fixed the Sigstore signing step in the GitHub publish workflow by upgrading `sigstore/gh-action-sigstore-python` from `v3.0.0` to `v3.5.0` (pinned via SHA), resolving deterministic failures caused by the Sigstore TUF trust-root rotation. This broke the GitHub-release half of the v0.9.0 publish; PyPI publication was unaffected.
+
 ## [v0.9.0] - 2026-08-26
 
 ### Added
