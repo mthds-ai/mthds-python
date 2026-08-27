@@ -141,6 +141,13 @@ class InputFormWireNodes:
         "presence": "plain",
         "gating": False,
     }
+    TOP_LEVEL_OPTIONAL_YET_GATING: ClassVar[dict[str, Any]] = {
+        "kind": "text",
+        "name": "title",
+        "required": False,
+        "presence": "optional",
+        "gating": True,
+    }
     TITLE_EXPLICIT_NULL: ClassVar[dict[str, Any]] = {
         "kind": "text",
         "name": "title",

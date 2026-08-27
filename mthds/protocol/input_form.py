@@ -151,9 +151,10 @@ class InputFormItemBase(BaseModel):
     gating: bool | None = None
     """Top-level fields only: the run cannot start until the caller provides content for this slot.
     Stated rather than re-derived from `required` — a variable-length list is required yet never
-    gates, since the empty list is a legitimate value; a fixed-count list does. Nested fields carry no
-    `gating`, and a nested node carrying one is rejected at the parse, as is a top-level field
-    missing one."""
+    gates, since the empty list is a legitimate value; a fixed-count list does. An optional slot
+    never gates, and a top-level field pairing `gating: true` with an optional marker is rejected
+    at the parse. Nested fields carry no `gating`, and a nested node carrying one is rejected at
+    the parse, as is a top-level field missing one."""
 
     default_value: Any = None
     """The value applied when the caller omits the field. Absent unless a default was authored — the
@@ -547,6 +548,24 @@ class PipeInputFormDescriptor(BaseModel):
                 msg = (
                     f"Top-level {field.node_label} states 'required: {str(field.required).lower()}' beside 'presence: {field.presence}': "
                     "on a top-level field, 'required' is derived as presence != 'optional'"
+                )
+                raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_optional_never_gates(self) -> Self:
+        """An optional slot never gates: the page derives `gating: false` for `Concept?` unconditionally, whatever the kind.
+
+        Only this half of the gating derivation is enforced. On a non-optional field the answer
+        also hangs on `kind` and `item_count`, and re-deriving it here is exactly what stating
+        `gating` on the wire exists to spare consumers — a later language-level list minimum may
+        change that half without touching this parser.
+        """
+        for field in self.fields:
+            if field.presence is not None and field.presence.is_optional and field.gating:
+                msg = (
+                    f"Top-level {field.node_label} states 'gating: true' beside 'presence: optional': "
+                    "an optional slot never gates — the run can always start without it"
                 )
                 raise ValueError(msg)
         return self
