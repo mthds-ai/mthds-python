@@ -127,6 +127,23 @@ class InputFormWireNodes:
     }
     TOP_LEVEL_WITHOUT_PRESENCE: ClassVar[dict[str, Any]] = {"kind": "text", "name": "title", "required": True, "gating": True}
     TOP_LEVEL_WITHOUT_GATING: ClassVar[dict[str, Any]] = {"kind": "text", "name": "title", "required": True, "presence": "plain"}
+    ITEM_WITH_NAME: ClassVar[dict[str, Any]] = {
+        "kind": "list",
+        "name": "tags",
+        "required": True,
+        "presence": "plain",
+        "gating": False,
+        "item": {"kind": "text", "name": "tags", "required": True},
+    }
+    TOP_LEVEL_WITHOUT_NAME: ClassVar[dict[str, Any]] = {"kind": "text", "required": True, "presence": "plain", "gating": True}
+    NESTED_WITHOUT_NAME: ClassVar[dict[str, Any]] = {
+        "kind": "object",
+        "name": "widget",
+        "required": True,
+        "presence": "plain",
+        "gating": True,
+        "fields": [{"kind": "text", "required": True}],
+    }
     DESCRIPTOR_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {"fields": [], "layout": "two-column"}
 
     # Accepted, and what the accepted dump must look like.

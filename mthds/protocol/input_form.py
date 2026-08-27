@@ -6,7 +6,9 @@
                            | EnumField | DocumentField | ImageField | ObjectField | ListField
                            | UnknownField                          (discriminated on `kind`)
                 ObjectField.fields : list[InputFormField]          (recursion through a structure)
-                ListField.item     : InputFormField                (recursion through an element)
+                ListField.item     : InputFormItem                 (recursion through an element)
+            InputFormItem  = TextItem | ProseItem | … | UnknownItem
+                             (the same closed union, one layer down: every slot but `name`)
 
 The descriptor is the presentation view of a method's inputs: for each pipe, an ordered list
 of field descriptors a renderer turns into a fill-in form with no schema heuristics, no
@@ -31,9 +33,23 @@ whole table by hand to catch that. A union of per-kind models, each `extra="forb
 the table the shape itself — a slot that does not belong to a kind is an unknown member of
 that kind's model, and a kind's required slots are simply required fields. It is also what
 the TypeScript mirror in `mthds-js` declares, so the two clients agree by construction.
-`InputFormField` is that union, `Annotated` with `Field(discriminator="kind")`; a consumer
-narrows a parsed node with `match node: case ListField(): ...` (or `isinstance`). A node is
-never parsed in isolation: the payload arrives as a typed field (see `InputForm` below).
+A consumer narrows a parsed node with `match node: case ListField(): ...` (or `isinstance`).
+A node is never parsed in isolation: the payload arrives as a typed field (see `InputForm`).
+
+Named field, nameless item — two layers, not one optional slot. The page gives `name` as
+applicable "on every node except a `list`'s `item`", and says why: an item "has no authored
+name and carries no `name` member at all — the index labels items, and a sentinel would be a
+value two producers could pick differently". Both halves of that rule are structural here,
+so neither needs a validator and neither can be stated only in prose. `InputFormItem` is the
+nameless union — the shape of a `list`'s `item`, whose per-kind models (`TextItem`,
+`ObjectItem`, …) declare no `name` at all, so a wire item carrying one is an unknown member
+of a closed shape. `InputFormField` is that same union one layer up, each per-kind model
+(`TextField`, `ObjectField`, …) being its item counterpart plus a required `name: str`, so a
+named position that omits it fails the parse and a consumer reading `field.name` gets a
+`str` rather than something to narrow. It is the pydantic spelling of the TypeScript mirror's
+`InputFormField = InputFormItem & { name: string }`. Which layer applies is decided by
+position, never by content: `PipeInputFormDescriptor.fields` and `ObjectField.fields` hold
+`InputFormField`, `ListField.item` holds `InputFormItem`.
 
 Absent, never `null`. A slot that does not apply to a node is absent from the wire, and
 applicable falsy values (`required: false`, `integer: false`) are stated. The models own
@@ -86,23 +102,19 @@ class FieldKind(StrEnum):
     UNKNOWN = "unknown"
 
 
-class InputFormFieldBase(BaseModel):
-    """The common slots every field descriptor carries whatever its kind — the base of the per-kind models.
+class InputFormItemBase(BaseModel):
+    """The common slots every field descriptor carries whatever its kind, and whatever its position — `name` excluded.
 
     Not a wire shape on its own: a node on the wire is always one of the per-kind models, and
-    `InputFormField` is their discriminated union. Each per-kind model declares its `kind` literal
-    first and its additional slots after these. Closed shape (`extra="forbid"`): an unknown member
-    is version drift, rejected at the parse. A slot that does not apply to a node is absent, never
-    `null`; the serializer below owns that rule, so a plain `model_dump()` reproduces the wire.
+    `InputFormItem` is their discriminated union. Each per-kind item model declares its `kind`
+    literal first and its additional slots after these; each per-kind *field* model is that item
+    model plus `name` (see `InputFormNamedNode`). Closed shape (`extra="forbid"`): an unknown
+    member is version drift, rejected at the parse. A slot that does not apply to a node is
+    absent, never `null`; the serializer below owns that rule, so a plain `model_dump()`
+    reproduces the wire.
     """
 
     model_config = ConfigDict(extra="forbid")
-
-    name: str | None = None
-    """The identifier as authored: the input slot name on a top-level field, the structure field
-    name on a nested one. On every node except a `list`'s `item`, which has no authored name and
-    carries no `name` member at all — the index labels items, and a sentinel would be a value two
-    producers could pick differently."""
 
     title: str | None = None
     """Human label; a renderer falls back to `name`. A generated or internal type name is not a
@@ -151,24 +163,39 @@ class InputFormFieldBase(BaseModel):
     keys and unknown intent words ride through, content-lenient. A node with no effective hints has
     no `hints` member. Non-normative: a renderer that ignores hints stays correct."""
 
+    @property
+    def node_label(self) -> str:
+        """How the node names itself when an error message has to point at it.
+
+        A `list`'s `item` has no authored name to give, so it says what it is instead; the named
+        layer overrides this with the name. Pydantic reports the location too — this is the half a
+        reader recognizes without counting indices.
+        """
+        return "a list item"
+
     @model_validator(mode="after")
     def validate_default_needs_optional(self) -> Self:
         """A descriptor never carries both `required: true` and a `default_value`."""
         if self.required and self.default_value is not None:
-            msg = f"Field '{self.name}' carries both 'required: true' and a 'default_value': two contradictory instructions on one field"
+            msg = f"{self.node_label} carries both 'required: true' and a 'default_value': two contradictory instructions on one node"
             raise ValueError(msg)
         return self
 
     @model_serializer(mode="wrap")
     def serialize_without_inapplicable_slots(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        """Drop the slots that do not apply (`None`), keep applicable falsy values, and lead with `kind`."""
+        """Drop the slots that do not apply (`None`), keep applicable falsy values, and lead with the identity slots.
+
+        `kind` and `name` come first on the wire the page shows, but a named model declares `name`
+        last — it is the layer added on top of the per-kind item model — so the order is restored
+        here rather than left to the declaration order two classes apart.
+        """
         dumped: dict[str, Any] = handler(self)
         wire = {slot: value for slot, value in dumped.items() if value is not None}
-        kind = wire.pop("kind", None)
-        return wire if kind is None else {"kind": kind, **wire}
+        leading = {slot: wire.pop(slot) for slot in ("kind", "name") if slot in wire}
+        return {**leading, **wire}
 
 
-class TextValuedFieldBase(InputFormFieldBase):
+class TextValuedItemBase(InputFormItemBase):
     """The constraint slots the text kinds (`text`, `prose`) share, stated where a producer holds them."""
 
     min_length: int | None = None
@@ -179,19 +206,19 @@ class TextValuedFieldBase(InputFormFieldBase):
     A `native.Time` slot and a `type = "time"` field are `text` with `format: "time"`."""
 
 
-class TextField(TextValuedFieldBase):
+class TextItem(TextValuedItemBase):
     """`text` — a short single-line string."""
 
     kind: Literal[FieldKind.TEXT] = FieldKind.TEXT
 
 
-class ProseField(TextValuedFieldBase):
+class ProseItem(TextValuedItemBase):
     """`prose` — flowing free text."""
 
     kind: Literal[FieldKind.PROSE] = FieldKind.PROSE
 
 
-class DateField(InputFormFieldBase):
+class DateItem(InputFormItemBase):
     """`date` — a calendar date, or a point in time."""
 
     kind: Literal[FieldKind.DATE] = FieldKind.DATE
@@ -199,7 +226,7 @@ class DateField(InputFormFieldBase):
     """`True` when the value carries a time of day, `False` for a bare calendar date. Required."""
 
 
-class NumberField(InputFormFieldBase):
+class NumberItem(InputFormItemBase):
     """`number` — an integer or a floating-point number, with its optional bounds."""
 
     kind: Literal[FieldKind.NUMBER] = FieldKind.NUMBER
@@ -212,13 +239,13 @@ class NumberField(InputFormFieldBase):
     exclusive_maximum: int | float | None = None
 
 
-class BooleanField(InputFormFieldBase):
+class BooleanItem(InputFormItemBase):
     """`boolean` — true or false."""
 
     kind: Literal[FieldKind.BOOLEAN] = FieldKind.BOOLEAN
 
 
-class EnumField(InputFormFieldBase):
+class EnumItem(InputFormItemBase):
     """`enum` — one of a fixed set of values."""
 
     kind: Literal[FieldKind.ENUM] = FieldKind.ENUM
@@ -227,7 +254,7 @@ class EnumField(InputFormFieldBase):
     no consumer has to read a single-value form."""
 
 
-class DocumentField(InputFormFieldBase):
+class DocumentItem(InputFormItemBase):
     """`document` — a document supplied as a file or a URL.
 
     No accept-list and no upload affordance: what the value is rides `concept_ref` and `refines`,
@@ -237,13 +264,13 @@ class DocumentField(InputFormFieldBase):
     kind: Literal[FieldKind.DOCUMENT] = FieldKind.DOCUMENT
 
 
-class ImageField(InputFormFieldBase):
+class ImageItem(InputFormItemBase):
     """`image` — an image, which a renderer may preview."""
 
     kind: Literal[FieldKind.IMAGE] = FieldKind.IMAGE
 
 
-def _check_pipe_slot_facts_absent(*, node: InputFormFieldBase, position: str) -> None:
+def _check_pipe_slot_facts_absent(*, node: InputFormItemBase, position: str) -> None:
     """Enforce the placement rule: `presence` and `gating` are pipe-slot facts, stated on top-level fields only.
 
     Raised from the parent, so the error names the offending child itself — pydantic reports the
@@ -255,7 +282,7 @@ def _check_pipe_slot_facts_absent(*, node: InputFormFieldBase, position: str) ->
             raise ValueError(msg)
 
 
-def _check_pipe_slot_facts_stated(*, node: InputFormFieldBase, position: str) -> None:
+def _check_pipe_slot_facts_stated(*, node: InputFormItemBase, position: str) -> None:
     """Enforce the placement rule's positive half: a top-level field states both pipe-slot facts.
 
     Raised from the descriptor, so the error names the offending field itself — pydantic reports
@@ -267,23 +294,24 @@ def _check_pipe_slot_facts_stated(*, node: InputFormFieldBase, position: str) ->
             raise ValueError(msg)
 
 
-class ObjectField(InputFormFieldBase):
+class ObjectItem(InputFormItemBase):
     """`object` — a structured concept, recursing through its resolved payload fields."""
 
     kind: Literal[FieldKind.OBJECT] = FieldKind.OBJECT
     fields: list[InputFormField]
     """The concept's effective payload fields, in declared order. Required — empty for a concept
-    whose structure declares no field."""
+    whose structure declares no field. A structure field is authored under a name, so these are
+    `InputFormField`s however the enclosing node was reached."""
 
     @model_validator(mode="after")
     def validate_nested_placement(self) -> Self:
         """A nested field carries neither `presence` nor `gating`: both are facts of the pipe's input slot."""
         for nested in self.fields:
-            _check_pipe_slot_facts_absent(node=nested, position=f"Nested field '{nested.name}' of '{self.name}'")
+            _check_pipe_slot_facts_absent(node=nested, position=f"Nested field '{nested.name}' of {self.node_label}")
         return self
 
 
-class ListField(InputFormFieldBase):
+class ListItem(InputFormItemBase):
     """`list` — an array of one element type, recursing through its `item`.
 
     An input slot authored `Concept[]` is a `list` with no `item_count`; one authored `Concept[N]`
@@ -293,8 +321,9 @@ class ListField(InputFormFieldBase):
     """
 
     kind: Literal[FieldKind.LIST] = FieldKind.LIST
-    item: InputFormField
-    """The element descriptor, rendered once per entry. Required; it carries no `name`."""
+    item: InputFormItem
+    """The element descriptor, rendered once per entry. Required, and nameless by shape: the
+    element is reached by index, so `InputFormItem` is the union with no `name` member to carry."""
 
     item_count: int | None = None
     """The fixed count as a structured fact — present exactly on a fixed `[N]` slot, absent
@@ -304,18 +333,18 @@ class ListField(InputFormFieldBase):
     def validate_item_count(self) -> Self:
         """A stated `item_count` is always greater than one: a count of one is single, not a list."""
         if self.item_count is not None and self.item_count < 2:
-            msg = f"Field '{self.name}' states 'item_count' {self.item_count}; a fixed count is at least 2, and a count of one is single"
+            msg = f"The list at {self.node_label} states 'item_count' {self.item_count}; a fixed count is at least 2, and a count of one is single"
             raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
     def validate_item_placement(self) -> Self:
         """A list's `item` carries neither `presence` nor `gating`: both are facts of the pipe's input slot."""
-        _check_pipe_slot_facts_absent(node=self.item, position=f"The item of list '{self.name}'")
+        _check_pipe_slot_facts_absent(node=self.item, position=f"The item of {self.node_label}")
         return self
 
 
-class UnknownField(InputFormFieldBase):
+class UnknownItem(InputFormItemBase):
     """`unknown` — not honestly describable as any other kind.
 
     The mandatory escape hatch that makes a total derivation truthful: a renderer falls back to raw
@@ -325,18 +354,103 @@ class UnknownField(InputFormFieldBase):
     kind: Literal[FieldKind.UNKNOWN] = FieldKind.UNKNOWN
 
 
+InputFormItem: TypeAlias = Annotated[
+    TextItem | ProseItem | DateItem | NumberItem | BooleanItem | EnumItem | DocumentItem | ImageItem | ObjectItem | ListItem | UnknownItem,
+    Field(discriminator="kind"),
+]
+"""One field descriptor without an authored identifier — the shape a `list`'s `item` carries.
+
+The page's rule, made structural: an item "has no authored name and carries no `name` member at
+all", because the index labels items and a sentinel would be a value two producers could pick
+differently. None of these models declares `name`, and all are closed shapes, so an item carrying
+one is an unknown member and fails the parse. Every other position holds an `InputFormField` —
+this same union plus the name.
+"""
+
+
+class InputFormNamedNode(BaseModel):
+    """The authored identifier — the one slot that separates a named position from a `list`'s `item`.
+
+    Mixed into each per-kind item model to form its `InputFormField` counterpart, which is the
+    pydantic spelling of the TypeScript mirror's `InputFormField = InputFormItem & { name: string }`.
+    Not a wire shape on its own, and never mixed into `ListItem.item`: that is the whole point of
+    keeping it a separate layer rather than an optional slot on the common base.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    """The identifier as authored: the input slot name on a top-level field, the structure field
+    name on a nested one. Required wherever it applies — the page states it for every node it
+    admits, so `str | None` would be a shape saying otherwise."""
+
+    @property
+    def node_label(self) -> str:
+        """How the node names itself when an error message has to point at it: by its name."""
+        return f"field '{self.name}'"
+
+
+class TextField(InputFormNamedNode, TextItem):
+    """`text` at a named position — a top-level field or a structure field."""
+
+
+class ProseField(InputFormNamedNode, ProseItem):
+    """`prose` at a named position."""
+
+
+class DateField(InputFormNamedNode, DateItem):
+    """`date` at a named position."""
+
+
+class NumberField(InputFormNamedNode, NumberItem):
+    """`number` at a named position."""
+
+
+class BooleanField(InputFormNamedNode, BooleanItem):
+    """`boolean` at a named position."""
+
+
+class EnumField(InputFormNamedNode, EnumItem):
+    """`enum` at a named position."""
+
+
+class DocumentField(InputFormNamedNode, DocumentItem):
+    """`document` at a named position."""
+
+
+class ImageField(InputFormNamedNode, ImageItem):
+    """`image` at a named position."""
+
+
+class ObjectField(InputFormNamedNode, ObjectItem):
+    """`object` at a named position, recursing through `fields` — themselves named."""
+
+
+class ListField(InputFormNamedNode, ListItem):
+    """`list` at a named position, recursing through a nameless `item`."""
+
+
+class UnknownField(InputFormNamedNode, UnknownItem):
+    """`unknown` at a named position."""
+
+
 InputFormField: TypeAlias = Annotated[
     TextField | ProseField | DateField | NumberField | BooleanField | EnumField | DocumentField | ImageField | ObjectField | ListField | UnknownField,
     Field(discriminator="kind"),
 ]
-"""One field descriptor: a recursive node, discriminated on `kind` — one per-kind model per kind of the closed union.
+"""One named field descriptor: a recursive node, discriminated on `kind` — one per-kind model per kind of the closed union.
 
-An `object` node recurses through `fields`, a `list` node through `item`. A node is reached by
+This is `InputFormItem` plus a required `name`, and it is what every position but a `list`'s
+`item` holds: `PipeInputFormDescriptor.fields` (the top-level fields, in authored input order) and
+`ObjectField.fields` (a structure's payload fields). An `object` node recurses through `fields`
+into more of these, a `list` node through `item` into an `InputFormItem`. A node is reached by
 parsing the payload it arrives in (see `InputForm`), never parsed in isolation; a consumer narrows
 a parsed node with `match` or `isinstance`.
 """
 
-# The two recursive kinds name `InputFormField` before the alias exists; resolve them now that it does.
+# The two recursive kinds name the union aliases before those exist; resolve them now that they do.
+ObjectItem.model_rebuild()
+ListItem.model_rebuild()
 ObjectField.model_rebuild()
 ListField.model_rebuild()
 
@@ -358,7 +472,7 @@ class PipeInputFormDescriptor(BaseModel):
     def validate_top_level_placement(self) -> Self:
         """A top-level field states both `presence` and `gating`: pipe-slot facts are stated, never re-derived."""
         for field in self.fields:
-            _check_pipe_slot_facts_stated(node=field, position=f"Top-level field '{field.name}'")
+            _check_pipe_slot_facts_stated(node=field, position=f"Top-level {field.node_label}")
         return self
 
 

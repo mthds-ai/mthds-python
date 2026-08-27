@@ -1292,14 +1292,21 @@
               "type": "string"
             },
             "css_class": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
               "description": "The CSS class of the content",
-              "title": "Css Class",
-              "type": "string"
+              "title": "Css Class"
             }
           },
           "required": [
-            "inner_html",
-            "css_class"
+            "inner_html"
           ],
           "title": "native.Html",
           "type": "object"

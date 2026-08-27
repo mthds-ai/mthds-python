@@ -5,9 +5,6 @@
         "kind": "prose",
         "name": "plain",
         "concept_ref": "input_semantics_hinted.Essay",
-        "refines": [
-          "native.Text"
-        ],
         "description": "HINTED_concept_Essay: description-only concept carrying a concept-level hint",
         "required": true,
         "presence": "plain",
@@ -20,9 +17,6 @@
         "kind": "prose",
         "name": "expanded_plain",
         "concept_ref": "input_semantics_hinted.Essay",
-        "refines": [
-          "native.Text"
-        ],
         "description": "HINTED_concept_Essay: description-only concept carrying a concept-level hint",
         "required": true,
         "presence": "plain",
@@ -92,9 +86,6 @@
         "kind": "list",
         "name": "hinted_marked",
         "concept_ref": "input_semantics_hinted.Badge",
-        "refines": [
-          "native.Text"
-        ],
         "description": "HINTED_concept_Badge: base of a hinted refinement chain",
         "required": true,
         "presence": "plain",
@@ -104,11 +95,7 @@
         },
         "item": {
           "kind": "text",
-          "name": "hinted_marked",
           "concept_ref": "input_semantics_hinted.Badge",
-          "refines": [
-            "native.Text"
-          ],
           "description": "HINTED_concept_Badge: base of a hinted refinement chain",
           "required": true,
           "hints": {
@@ -218,7 +205,6 @@
             ],
             "item": {
               "kind": "text",
-              "name": "tags",
               "required": true
             }
           },
@@ -229,7 +215,6 @@
             "required": false,
             "item": {
               "kind": "number",
-              "name": "ratings",
               "required": true,
               "integer": true
             }
@@ -241,7 +226,6 @@
             "required": false,
             "item": {
               "kind": "unknown",
-              "name": "matrix",
               "required": true
             }
           },
@@ -253,7 +237,6 @@
             "required": false,
             "item": {
               "kind": "object",
-              "name": "gadgets",
               "concept_ref": "input_semantics_probe.Gadget",
               "description": "PROBE_desc_concept_Gadget: mid-level structure nested inside Widget",
               "required": true,
@@ -416,9 +399,6 @@
         "kind": "prose",
         "name": "note",
         "concept_ref": "input_semantics_probe.PlainNote",
-        "refines": [
-          "native.Text"
-        ],
         "description": "PROBE_desc_concept_PlainNote: description-only concept (basic blueprint)",
         "required": true,
         "presence": "plain",
@@ -486,7 +466,6 @@
                 "required": false,
                 "item": {
                   "kind": "image",
-                  "name": "images",
                   "concept_ref": "native.Image",
                   "description": "An image",
                   "required": true
@@ -520,14 +499,29 @@
         "integer": false
       },
       {
-        "kind": "date",
+        "kind": "object",
         "name": "date_in",
         "concept_ref": "native.Date",
         "description": "A calendar date, optionally with a time of day — as precise as its source states.",
         "required": true,
         "presence": "plain",
         "gating": true,
-        "datetime": false
+        "fields": [
+          {
+            "kind": "date",
+            "name": "date",
+            "description": "The calendar date, in ISO 8601 (e.g. 2026-07-07). Always required.",
+            "required": true,
+            "datetime": false
+          },
+          {
+            "kind": "text",
+            "name": "time",
+            "description": "The time of day, in ISO 8601 (e.g. 15:40:00, or 15:40:00+02:00 with a UTC offset). Include it only when the source states a time — never invent a time. Keep the UTC offset exactly when the source states one.",
+            "required": false,
+            "format": "time"
+          }
+        ]
       },
       {
         "kind": "text",
@@ -540,13 +534,27 @@
         "format": "time"
       },
       {
-        "kind": "prose",
+        "kind": "object",
         "name": "html_in",
         "concept_ref": "native.Html",
         "description": "HTML content",
         "required": true,
         "presence": "plain",
-        "gating": true
+        "gating": true,
+        "fields": [
+          {
+            "kind": "text",
+            "name": "inner_html",
+            "description": "The inner HTML of the content",
+            "required": true
+          },
+          {
+            "kind": "text",
+            "name": "css_class",
+            "description": "The CSS class of the content",
+            "required": false
+          }
+        ]
       },
       {
         "kind": "boolean",
@@ -659,7 +667,6 @@
             ],
             "item": {
               "kind": "text",
-              "name": "tags",
               "required": true
             }
           },
@@ -670,7 +677,6 @@
             "required": false,
             "item": {
               "kind": "number",
-              "name": "ratings",
               "required": true,
               "integer": true
             }
@@ -682,7 +688,6 @@
             "required": false,
             "item": {
               "kind": "unknown",
-              "name": "matrix",
               "required": true
             }
           },
@@ -694,7 +699,6 @@
             "required": false,
             "item": {
               "kind": "object",
-              "name": "gadgets",
               "concept_ref": "input_semantics_probe.Gadget",
               "description": "PROBE_desc_concept_Gadget: mid-level structure nested inside Widget",
               "required": true,
@@ -831,7 +835,6 @@
         "gating": false,
         "item": {
           "kind": "object",
-          "name": "many",
           "concept_ref": "input_semantics_probe.Widget",
           "description": "PROBE_desc_concept_Widget: the full-matrix structure under audit",
           "required": true,
@@ -925,7 +928,6 @@
               ],
               "item": {
                 "kind": "text",
-                "name": "tags",
                 "required": true
               }
             },
@@ -936,7 +938,6 @@
               "required": false,
               "item": {
                 "kind": "number",
-                "name": "ratings",
                 "required": true,
                 "integer": true
               }
@@ -948,7 +949,6 @@
               "required": false,
               "item": {
                 "kind": "unknown",
-                "name": "matrix",
                 "required": true
               }
             },
@@ -960,7 +960,6 @@
               "required": false,
               "item": {
                 "kind": "object",
-                "name": "gadgets",
                 "concept_ref": "input_semantics_probe.Gadget",
                 "description": "PROBE_desc_concept_Gadget: mid-level structure nested inside Widget",
                 "required": true,
@@ -1098,7 +1097,6 @@
         "gating": true,
         "item": {
           "kind": "object",
-          "name": "two",
           "concept_ref": "input_semantics_probe.Gadget",
           "description": "PROBE_desc_concept_Gadget: mid-level structure nested inside Widget",
           "required": true,
@@ -1207,9 +1205,6 @@
         "kind": "prose",
         "name": "stringnote",
         "concept_ref": "input_semantics_probe.StringNote",
-        "refines": [
-          "native.Text"
-        ],
         "description": "PROBE_desc_concept_StringNote: a concept declared as a bare string",
         "required": true,
         "presence": "plain",
