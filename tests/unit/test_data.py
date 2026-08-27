@@ -127,6 +127,61 @@ class InputFormWireNodes:
     }
     TOP_LEVEL_WITHOUT_PRESENCE: ClassVar[dict[str, Any]] = {"kind": "text", "name": "title", "required": True, "gating": True}
     TOP_LEVEL_WITHOUT_GATING: ClassVar[dict[str, Any]] = {"kind": "text", "name": "title", "required": True, "presence": "plain"}
+    TOP_LEVEL_OPTIONAL_YET_REQUIRED: ClassVar[dict[str, Any]] = {
+        "kind": "text",
+        "name": "title",
+        "required": True,
+        "presence": "optional",
+        "gating": False,
+    }
+    TOP_LEVEL_PLAIN_YET_NOT_REQUIRED: ClassVar[dict[str, Any]] = {
+        "kind": "text",
+        "name": "title",
+        "required": False,
+        "presence": "plain",
+        "gating": False,
+    }
+    TITLE_EXPLICIT_NULL: ClassVar[dict[str, Any]] = {
+        "kind": "text",
+        "name": "title",
+        "title": None,
+        "required": True,
+        "presence": "plain",
+        "gating": True,
+    }
+    REFINES_EXPLICIT_NULL: ClassVar[dict[str, Any]] = {
+        "kind": "text",
+        "name": "title",
+        "refines": None,
+        "required": True,
+        "presence": "plain",
+        "gating": True,
+    }
+    ITEM_COUNT_NULL_ON_VARIABLE_LIST: ClassVar[dict[str, Any]] = {
+        "kind": "list",
+        "name": "tags",
+        "required": True,
+        "presence": "plain",
+        "gating": False,
+        "item": {"kind": "text", "required": True},
+        "item_count": None,
+    }
+    NESTED_TITLE_EXPLICIT_NULL: ClassVar[dict[str, Any]] = {
+        "kind": "object",
+        "name": "widget",
+        "required": True,
+        "presence": "plain",
+        "gating": True,
+        "fields": [{"kind": "text", "name": "note", "title": None, "required": True}],
+    }
+    ITEM_TITLE_EXPLICIT_NULL: ClassVar[dict[str, Any]] = {
+        "kind": "list",
+        "name": "tags",
+        "required": True,
+        "presence": "plain",
+        "gating": False,
+        "item": {"kind": "text", "title": None, "required": True},
+    }
     ITEM_WITH_NAME: ClassVar[dict[str, Any]] = {
         "kind": "list",
         "name": "tags",
@@ -181,6 +236,14 @@ class InputFormWireNodes:
         "integer": True,
         "minimum": 1,
         "maximum": 5,
+    }
+    DEFAULT_VALUE_EXPLICIT_NULL: ClassVar[dict[str, Any]] = {
+        "kind": "text",
+        "name": "motto",
+        "required": False,
+        "presence": "optional",
+        "gating": False,
+        "default_value": None,
     }
     EMPTY_FORM: ClassVar[dict[str, Any]] = {"fields": []}
 

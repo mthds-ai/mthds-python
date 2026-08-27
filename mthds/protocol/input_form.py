@@ -58,6 +58,11 @@ so a plain `model_dump()` reproduces the wire without the caller reaching for
 `exclude_none` — which would also strip the contract's `item_count: null`, which must stay.
 The contrast is deliberate on both sides: the descriptor's `ListField.item_count` is present
 exactly on a fixed `[N]` slot and absent otherwise, where the contract carries `null`.
+The rule binds the intake too: a wire node spelling absence as an explicit `null` (`title: null`,
+`item_count: null` on a variable list) is non-canonical and fails the parse, with `default_value`
+the one carve-out — its `null` IS "no default" per the page. Programmatic construction is exempt:
+`TextField(..., title=maybe_title)` with `None` stays the natural idiom for an engine, and the
+check binds raw wire mappings alone (see `PipeInputFormDescriptor.reject_explicit_wire_nulls`).
 
 Closed shapes. Every object the page defines — a per-pipe descriptor, a field descriptor —
 is a closed shape (`extra="forbid"`): a member this version of the standard does not define
@@ -73,7 +78,7 @@ the standard, as a minor version.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Self, TypeAlias
+from typing import Annotated, Any, Literal, Self, TypeAlias, cast
 
 from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
@@ -133,7 +138,8 @@ class InputFormItemBase(BaseModel):
     """Helper text, from the authored concept or field description."""
 
     required: bool
-    """On a top-level field, the caller must supply the slot (`presence != "optional"`); on a nested
+    """On a top-level field, the caller must supply the slot — derived as `presence != "optional"`,
+    and a top-level field stating the pair incoherently is rejected at the parse; on a nested
     field, the field must be present within its concept's payload. The two levels never interact.
     Drives layout — whether the *user* must put content in before the run may start is `gating`."""
 
@@ -280,6 +286,41 @@ def _check_pipe_slot_facts_absent(*, node: InputFormItemBase, position: str) -> 
         if value is not None:
             msg = f"{position} carries '{slot}': '{slot}' is a pipe-slot fact, stated on top-level fields only"
             raise ValueError(msg)
+
+
+def _raw_node_label(*, node: dict[str, Any], fallback: str) -> str:
+    """How a raw wire mapping names itself before the parse gives it a model: by its stated name, else by position."""
+    name = node.get("name")
+    if isinstance(name, str):
+        return f"field '{name}'"
+    return fallback
+
+
+def _check_no_explicit_nulls(*, node: dict[str, Any], position: str) -> None:
+    """Reject an explicit `null` in a raw wire node: a slot that does not apply is absent, never `null`.
+
+    `default_value` is the one carve-out — its `null` IS "no default" per the page, opaque authored
+    content rather than a non-canonical spelling of absence. Recurses through the two structural
+    slots (`fields`, `item`); everything else a node carries is scalar or opaque content. Non-dict
+    members are left to the parse itself.
+    """
+    for slot, value in node.items():
+        if value is None and slot != "default_value":
+            msg = f"{position} carries '{slot}: null': a slot that does not apply to a node is absent from the wire, never null"
+            raise ValueError(msg)
+    raw_members = node.get("fields")
+    if isinstance(raw_members, list):
+        for raw_member in cast("list[Any]", raw_members):
+            if isinstance(raw_member, dict):
+                nested = cast("dict[str, Any]", raw_member)
+                nested_position = (
+                    f"Nested {_raw_node_label(node=nested, fallback='field')} of {_raw_node_label(node=node, fallback='an object node')}"
+                )
+                _check_no_explicit_nulls(node=nested, position=nested_position)
+    raw_item = node.get("item")
+    if isinstance(raw_item, dict):
+        item = cast("dict[str, Any]", raw_item)
+        _check_no_explicit_nulls(node=item, position=f"The item of {_raw_node_label(node=node, fallback='a list node')}")
 
 
 def _check_pipe_slot_facts_stated(*, node: InputFormItemBase, position: str) -> None:
@@ -468,11 +509,46 @@ class PipeInputFormDescriptor(BaseModel):
 
     fields: list[InputFormField]
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_explicit_wire_nulls(cls, data: Any) -> Any:
+        """A wire payload never spells absence as `null`: an explicit `null` on any slot but `default_value` fails the parse.
+
+        Stated here, on the container every wire node arrives through, rather than on the node
+        base: a node-level `mode="before"` validator cannot tell a raw wire mapping from the
+        keyword arguments of a programmatic construction, and an engine building nodes with
+        `title=None` and friends is the supported idiom. At this level the two are
+        distinguishable — wire nodes arrive as raw mappings, programmatic ones as already-built
+        models — so only the mappings are walked.
+        """
+        if not isinstance(data, dict):
+            return data
+        raw_form = cast("dict[str, Any]", data)
+        raw_fields = raw_form.get("fields")
+        if isinstance(raw_fields, list):
+            for raw_field in cast("list[Any]", raw_fields):
+                if isinstance(raw_field, dict):
+                    raw_node = cast("dict[str, Any]", raw_field)
+                    _check_no_explicit_nulls(node=raw_node, position=f"Top-level {_raw_node_label(node=raw_node, fallback='field')}")
+        return raw_form
+
     @model_validator(mode="after")
     def validate_top_level_placement(self) -> Self:
         """A top-level field states both `presence` and `gating`: pipe-slot facts are stated, never re-derived."""
         for field in self.fields:
             _check_pipe_slot_facts_stated(node=field, position=f"Top-level {field.node_label}")
+        return self
+
+    @model_validator(mode="after")
+    def validate_required_restates_presence(self) -> Self:
+        """A top-level field's `required` agrees with its marker: `required == (presence != "optional")`, exactly as the page derives it."""
+        for field in self.fields:
+            if field.presence is not None and field.required is field.presence.is_optional:
+                msg = (
+                    f"Top-level {field.node_label} states 'required: {str(field.required).lower()}' beside 'presence: {field.presence}': "
+                    "on a top-level field, 'required' is derived as presence != 'optional'"
+                )
+                raise ValueError(msg)
         return self
 
 
