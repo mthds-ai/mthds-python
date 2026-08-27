@@ -1,10 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [v0.11.0] - 2026-08-27
 
 ### Changed
 
-- Rejected `gating: true` on an optional top-level input-form field. The spec derives `gating: false` for an optional slot unconditionally — a slot the method says may be omitted can never block the run — so the pairing now fails the parse, mirroring the `mthds-js` type pin. Only this half of the gating derivation is enforced: on a non-optional field, `gating` stays a stated wire fact. **(Breaking)**
+- The parser now rejects top-level input-form fields that combine `gating: true` with an `optional` presence marker, raising a `ValueError` during parsing. Since an optional slot can be omitted, it can never block a run; this aligns the Python implementation with the specification and the `mthds-js` type pin. Only this negative half of the gating derivation is enforced — on a non-optional field, `gating` stays a stated wire fact. Documentation for `InputFormItemBase` and test coverage (including the `TOP_LEVEL_OPTIONAL_YET_GATING` fixture) were updated accordingly. (Breaking)
 
 ## [v0.10.0] - 2026-08-27
 
