@@ -1,10 +1,11 @@
 """Parity and strictness tests for `mthds.protocol.input_form` against the engine-produced fixture.
 
 The fixture `tests/fixtures/protocol/input_form.json` is the reference engine's own emission,
-committed byte-for-byte here and in `mthds-js` (its README carries the provenance and the known
-engine drift). It is parsed the way the artifact actually arrives: as a typed field declared on a
-model narrowing the validate report — pydantic parses the map and the discriminated union from the
-plain annotation, no adapter machinery involved. Every entry must parse under the closed shapes —
+committed byte-for-byte here and in `mthds-js` (its README carries the provenance, and records
+that this capture has no known divergence from the pages the models mirror). It is parsed the way
+the artifact actually arrives: as a typed field declared on a model narrowing the validate report —
+pydantic parses the map and the discriminated union from the plain annotation, no adapter machinery
+involved. Every entry must parse under the closed shapes —
 `extra="forbid"` on every model is what makes the parse a real check — and dump back to exactly
 the input: absent slots stay absent, never `null`, and applicable falsy values are kept.
 """
@@ -27,10 +28,13 @@ from mthds.protocol.input_form import (
     ListField,
     NumberField,
     ObjectField,
+    ObjectItem,
     PipeInputFormDescriptor,
     ProseField,
     TextField,
+    TextItem,
     UnknownField,
+    UnknownItem,
 )
 from mthds.protocol.pipe_io_contracts import PresenceMarker
 from tests.unit.test_data import InputFormWireNodes
@@ -85,7 +89,8 @@ class TestInputFormProtocolModels:
         assert many.gating is False
         assert many.item_count is None
         assert "item_count" not in many.model_dump()
-        assert isinstance(many.item, ObjectField)
+        assert isinstance(many.item, ObjectItem)
+        assert not hasattr(many.item, "name")
         assert many.item.concept_ref == "input_semantics_probe.Widget"
         assert many.item.concept_ref == many.concept_ref
 
@@ -146,17 +151,17 @@ class TestInputFormProtocolModels:
 
         tags = by_name["tags"]
         assert isinstance(tags, ListField)
-        assert isinstance(tags.item, TextField)
+        assert isinstance(tags.item, TextItem)
         assert tags.default_value == ["PROBE_tag_a", "PROBE_tag_b"]
         assert tags.item_count is None
         matrix = by_name["matrix"]
         assert isinstance(matrix, ListField)
-        assert isinstance(matrix.item, UnknownField)
+        assert isinstance(matrix.item, UnknownItem)
 
         gadgets = by_name["gadgets"]
         assert isinstance(gadgets, ListField)
         assert gadgets.concept_ref == "input_semantics_probe.Gadget"
-        assert isinstance(gadgets.item, ObjectField)
+        assert isinstance(gadgets.item, ObjectItem)
         assert [field.name for field in gadgets.item.fields] == ["name", "trinket"]
         trinket = gadgets.item.fields[1]
         assert isinstance(trinket, ObjectField)
@@ -210,6 +215,63 @@ class TestInputFormProtocolModels:
         assert isinstance(special, ObjectField)
         assert special.refines == ["input_semantics_probe.BaseEntity"]
 
+    def test_a_pinned_native_structure_lands_on_the_object_arm(self) -> None:
+        """A native carrying a pinned structure is an `object` recursing through it, never a scalar standing in for it."""
+        natives = {field.name: field for field in _FORM["input_semantics_probe.probe_native_inputs"].fields}
+
+        date_in = natives["date_in"]
+        assert isinstance(date_in, ObjectField)
+        assert date_in.concept_ref == "native.Date"
+        date_fields = {field.name: field for field in date_in.fields}
+        assert list(date_fields) == ["date", "time"]
+        assert isinstance(date_fields["date"], DateField)
+        assert date_fields["date"].datetime is False
+        assert date_fields["date"].required is True
+        assert isinstance(date_fields["time"], TextField)
+        assert date_fields["time"].format == "time"
+        assert date_fields["time"].required is False
+
+        html_in = natives["html_in"]
+        assert isinstance(html_in, ObjectField)
+        assert html_in.concept_ref == "native.Html"
+        html_fields = {field.name: field for field in html_in.fields}
+        assert list(html_fields) == ["inner_html", "css_class"]
+        assert isinstance(html_fields["inner_html"], TextField)
+        assert html_fields["inner_html"].required is True
+        assert isinstance(html_fields["css_class"], TextField)
+        assert html_fields["css_class"].required is False
+
+    def test_every_node_but_a_list_item_is_named(self) -> None:
+        """The whole capture agrees with the shape: a name everywhere the page admits one, and none on a list's item.
+
+        The models make both halves structural, so a conforming payload cannot say otherwise — this
+        walks the engine's own emission to state that the engine agrees, which is the parity the
+        fixture exists for. Both arms are asserted non-empty so a payload without lists, or without
+        fields, could not satisfy this vacuously.
+        """
+        named: list[Any] = []
+        items: list[dict[str, Any]] = []
+
+        def walk(node: dict[str, Any], *, is_item: bool) -> None:
+            if is_item:
+                items.append(node)
+            else:
+                named.append(node.get("name"))
+            for nested in node.get("fields", []):
+                walk(nested, is_item=False)
+            item = node.get("item")
+            if item is not None:
+                walk(item, is_item=True)
+
+        for descriptor in _RAW.values():
+            for field in descriptor["fields"]:
+                walk(field, is_item=False)
+
+        assert named, "the capture states no named node at all"
+        assert items, "the capture states no list item at all, so the nameless half proves nothing"
+        assert all(isinstance(name, str) and name for name in named)
+        assert all("name" not in item for item in items)
+
     def test_hints_ride_every_site_and_stay_content_lenient(self) -> None:
         """The effective hints ride the node (and both halves of a plural node); unknown keys are preserved."""
         hinted = {field.name: field for field in _FORM["input_semantics_hinted.hinted_slots"].fields}
@@ -231,7 +293,7 @@ class TestInputFormProtocolModels:
         badges = hinted["hinted_marked"]
         assert isinstance(badges, ListField)
         assert badges.hints == {"intent": "label"}
-        assert isinstance(badges.item, TextField)
+        assert isinstance(badges.item, TextItem)
         assert badges.item.hints == {"intent": "label"}
         assert badges.gating is False
 
@@ -255,6 +317,9 @@ class TestInputFormProtocolModels:
             pytest.param(InputFormWireNodes.ITEM_WITH_PRESENCE, id="presence on a list's item"),
             pytest.param(InputFormWireNodes.TOP_LEVEL_WITHOUT_PRESENCE, id="top-level field without presence"),
             pytest.param(InputFormWireNodes.TOP_LEVEL_WITHOUT_GATING, id="top-level field without gating"),
+            pytest.param(InputFormWireNodes.ITEM_WITH_NAME, id="name on a list's item"),
+            pytest.param(InputFormWireNodes.TOP_LEVEL_WITHOUT_NAME, id="top-level field without a name"),
+            pytest.param(InputFormWireNodes.NESTED_WITHOUT_NAME, id="nested field without a name"),
         ],
     )
     def test_closed_shapes_reject(self, node: dict[str, Any]) -> None:
@@ -289,7 +354,7 @@ class TestInputFormProtocolModels:
         tags_descriptor = PipeInputFormDescriptor.model_validate({"fields": [InputFormWireNodes.ITEM_WITHOUT_NAME]})
         tags = tags_descriptor.fields[0]
         assert isinstance(tags, ListField)
-        assert tags.item.name is None
+        assert not hasattr(tags.item, "name")
         dumped = tags.model_dump()
         assert "name" not in dumped["item"]
         assert dumped == InputFormWireNodes.ITEM_WITHOUT_NAME
