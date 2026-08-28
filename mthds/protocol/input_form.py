@@ -189,12 +189,23 @@ class InputFormItemBase(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def serialize_without_inapplicable_slots(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+    def serialize_without_inapplicable_slots(self, handler: SerializerFunctionWrapHandler):
         """Drop the slots that do not apply (`None`), keep applicable falsy values, and lead with the identity slots.
 
         `kind` and `name` come first on the wire the page shows, but a named model declares `name`
         last — it is the layer added on top of the per-kind item model — so the order is restored
         here rather than left to the declaration order two classes apart.
+
+        The return is deliberately unannotated, and stays that way. Pydantic turns a serializer's
+        return annotation into the model's serialization JSON Schema and prefers it over the schema
+        it would generate, so a `-> dict[str, Any]` here publishes every per-kind model as an
+        opaque `{"type": "object", "additionalProperties": true}` — erasing the properties, the
+        `kind` const each discriminator arm is matched on, and the closed shape, for every consumer
+        that embeds these models in a response model (FastAPI, and the OpenAPI artifact it emits).
+        `return_type=Any` on the decorator is worse still: it publishes `{}`. With no annotation
+        pydantic builds no serializer return schema and falls through to the models' own, which is
+        what `test_serialization_schema_states_the_per_kind_shape` pins. The dumped mapping is
+        `dict[str, Any]` all the same, and the type checkers infer it from the body.
         """
         dumped: dict[str, Any] = handler(self)
         wire = {slot: value for slot, value in dumped.items() if value is not None}
