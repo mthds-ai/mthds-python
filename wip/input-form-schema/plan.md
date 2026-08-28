@@ -1,5 +1,5 @@
 ---
-status: active
+status: landed
 item: L-260828-b40047
 ---
 
@@ -49,4 +49,13 @@ Nothing hard. `pipelex-api` item L-260828-f7bff1 takes the `pipelex` bump that c
 
 ## Landing record
 
-To fill when the item closes, since none of it can be re-derived later: the commit the fix landed in, the `mthds` version that first published it, and the `pipelex-api` bump that picked it up.
+**The fix landed** in commit `979d90c`, merged to `dev` as `8feec62` by [PR #52](https://github.com/mthds-ai/mthds-python/pull/52) on 2026-08-28, which closed L-260828-b40047. Every check was green — lint and tests on Python 3.11 through 3.14, `uv-lock-check`, and the Greptile and cubic reviews.
+
+The plan was followed as written, with two things worth recording because neither can be re-derived:
+
+- **No `noqa` was needed on the unannotated serializer.** The plan predicted this from reading the configuration; it is now confirmed by a clean `make cc` — ruff's ignore list already carries the `missing-return-type-*` rules, pyright infers the return from the body, and mypy runs without `disallow_incomplete_defs`. An added `# noqa: ANN201` would itself have been flagged as unused, so the fallback `__get_pydantic_json_schema__` hook was never needed.
+- **The serialization schema of a recursive model roots at a `$ref`.** `ObjectField`, `ListField`, `ObjectItem` and `ListItem` return `{"$defs": {…}, "$ref": "#/$defs/<Model>"}` rather than an inline object, so the per-model test dereferences the root before asserting on it. A test written against the inline shape alone would have passed vacuously on those four.
+
+**The `mthds` version that first published it** is not yet decided: the changelog entry sits under `## [Unreleased]` and `pyproject.toml` was deliberately left alone, since cutting the version is the release play's job. There is no open `release` item for `mthds-python` — the fix reaches PyPI, and therefore any consumer, only once one is filed and run.
+
+**The `pipelex-api` bump that picked it up** is likewise pending, and is tracked as its own item rather than here: L-260828-f7bff1 (owner `pipelex-api`, blocked by L-260828-f4e88c) regenerates that repo's OpenAPI artifact at the `pipelex` bump carrying #1154. Its artifact regains the field-level detail on the first bump whose resolved `mthds` carries this fix — that is, on a published version, not on this merge.
