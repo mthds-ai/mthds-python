@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- The input-form models now publish their real JSON Schema in serialization mode. The wrap serializer shared by every field descriptor carried a `-> dict[str, Any]` return annotation, and pydantic turns such an annotation into the model's serialization schema in preference to the one it would generate — so `TextField.model_json_schema(mode="serialization")` and every one of its siblings came back as an opaque `{"type": "object", "additionalProperties": true}`, with no properties, no `kind` const and no closed shape. That is the mode a server generating response-model schemas asks for, so a FastAPI consumer embedding `PipeInputFormDescriptor` published a `kind`-discriminated union whose arms described nothing. Dropping the annotation restores the per-kind shapes; the models themselves never loosened, and parsing, dumping and slot ordering are unchanged.
+
 ## [v0.11.0] - 2026-08-27
 
 ### Changed

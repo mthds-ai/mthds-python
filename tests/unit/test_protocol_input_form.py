@@ -12,7 +12,7 @@ the input: absent slots stay absent, never `null`, and applicable falsy values a
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast, get_args
 
 import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -25,6 +25,8 @@ from mthds.protocol.input_form import (
     FieldKind,
     ImageField,
     InputForm,
+    InputFormField,
+    InputFormItem,
     ListField,
     NumberField,
     ObjectField,
@@ -50,6 +52,25 @@ class NarrowedValidateReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     input_form: InputForm
+
+
+def _union_members(alias: Any) -> list[type[BaseModel]]:
+    """The per-kind models behind an annotated discriminated union alias, in declaration order."""
+    union, _discriminator = get_args(alias)
+    return list(cast("tuple[type[BaseModel], ...]", get_args(union)))
+
+
+def _dereference(*, definitions: dict[str, Any], ref: str) -> dict[str, Any]:
+    """The `$defs` entry a local `$ref` points at."""
+    return cast("dict[str, Any]", definitions[ref.rsplit("/", maxsplit=1)[-1]])
+
+
+def _resolve_schema_root(*, schema: dict[str, Any]) -> dict[str, Any]:
+    """The object a model's JSON Schema describes: inline, or behind the `$ref` a recursive model roots at."""
+    ref = schema.get("$ref")
+    if ref is None:
+        return schema
+    return _dereference(definitions=schema["$defs"], ref=cast("str", ref))
 
 
 _FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "protocol" / "input_form.json"
@@ -388,3 +409,50 @@ class TestInputFormProtocolModels:
         assert stars.minimum == 1
         assert stars.maximum == 5
         assert stars.model_dump(mode="json") == InputFormWireNodes.NUMBER_WITH_INTEGRAL_BOUNDS
+
+    @pytest.mark.parametrize(
+        "model",
+        [pytest.param(model, id=model.__name__) for model in _union_members(InputFormField) + _union_members(InputFormItem)],
+    )
+    def test_serialization_schema_states_the_per_kind_shape(self, model: type[BaseModel]) -> None:
+        """Every per-kind model describes itself in serialization mode exactly as in validation mode.
+
+        The mode matters because a server generating response-model schemas (FastAPI, and the
+        OpenAPI artifact it publishes) asks for the serialization one. A common wrap serializer
+        with a return annotation would hand that generator the annotation instead of the model,
+        erasing every per-kind shape behind an opaque object.
+        """
+        serialization = model.model_json_schema(mode="serialization")
+        assert serialization == model.model_json_schema(mode="validation")
+        root = _resolve_schema_root(schema=serialization)
+        assert set(root["properties"]) == set(model.model_fields)
+        assert root["additionalProperties"] is False
+        assert root["properties"]["kind"]["const"] == model.model_fields["kind"].default
+
+    def test_descriptor_serialization_schema_publishes_every_arm(self) -> None:
+        """The descriptor's serialization schema is the shape a FastAPI response model embeds — arms included.
+
+        Each `$ref` under `fields` resolves to a closed named shape whose `kind` const matches the
+        key the discriminator mapped it under, and a `list` arm's `item` carries the same union one
+        layer down, nameless.
+        """
+        schema = PipeInputFormDescriptor.model_json_schema(mode="serialization")
+        definitions: dict[str, Any] = schema["$defs"]
+        field_arms: dict[str, Any] = schema["properties"]["fields"]["items"]
+        assert field_arms["discriminator"]["propertyName"] == "kind"
+        field_mapping: dict[str, str] = field_arms["discriminator"]["mapping"]
+        assert sorted(arm["$ref"] for arm in field_arms["oneOf"]) == sorted(field_mapping.values())
+        assert sorted(field_mapping) == sorted(FieldKind)
+        for kind, ref in field_mapping.items():
+            arm = _dereference(definitions=definitions, ref=ref)
+            assert arm["properties"]["kind"]["const"] == kind
+            assert arm["additionalProperties"] is False
+            assert "name" in arm["properties"]
+
+        item_arms: dict[str, Any] = definitions["ListField"]["properties"]["item"]
+        item_mapping: dict[str, str] = item_arms["discriminator"]["mapping"]
+        assert sorted(item_mapping) == sorted(FieldKind)
+        for kind, ref in item_mapping.items():
+            item_arm = _dereference(definitions=definitions, ref=ref)
+            assert item_arm["properties"]["kind"]["const"] == kind
+            assert "name" not in item_arm["properties"]
