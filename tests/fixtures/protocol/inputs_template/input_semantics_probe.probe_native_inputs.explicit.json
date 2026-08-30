@@ -21,7 +21,9 @@
     "concept": "native.Page",
     "content": {
       "text_and_images": {
-        "text": "text_value",
+        "text": {
+          "text": "text_value"
+        },
         "images": [
           {
             "url": "https://mock.invalid/url"

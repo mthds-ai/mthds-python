@@ -20,8 +20,10 @@ url = "https://mock.invalid/url"
 concept = "native.Page"
 
 [page_in.content.text_and_images]
-text = "text_value"
 raw_html = "raw_html_value"
+
+[page_in.content.text_and_images.text]
+text = "text_value"
 
 [[page_in.content.text_and_images.images]]
 url = "https://mock.invalid/url"

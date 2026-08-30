@@ -203,6 +203,27 @@
       ]
     },
     {
+      "divergence_id": "object-native-keeps-envelope",
+      "reason": "A native whose pinned definition carries an optional field beside its required one — native.Date — renders as an object once the optional field is included, and the shaper's bare-value arm dispatches a native on its scalar kind, so the object form is only re-shapable inside its {concept, content} envelope. The projection keeps that envelope; the engine unwraps to a bare scalar, which it can only do because it drops the optional field. A consequence of optional-field-included.",
+      "ledger_item": null,
+      "occurrences": 1,
+      "examples": [
+        {
+          "pipe_ref": "input_semantics_probe.probe_native_inputs",
+          "shape": "compact",
+          "path": "date_in",
+          "engine": "2026-01-01",
+          "expected": {
+            "concept": "native.Date",
+            "content": {
+              "date": "2026-01-01",
+              "time": "12:00:00"
+            }
+          }
+        }
+      ]
+    },
+    {
       "divergence_id": "optional-field-included",
       "reason": "The engine passes include_optional=False at the top of an input's own structure class and not through the recursion, so it hides an optional field at depth one and shows one nested deeper. The projection renders every field the descriptor states, at every depth.",
       "ledger_item": "L-260830-d51440",
@@ -228,42 +249,6 @@
           "path": "hinted.plain",
           "engine": null,
           "expected": "plain_value"
-        }
-      ]
-    },
-    {
-      "divergence_id": "scalar-vs-structured-native",
-      "reason": "A native whose pinned definition carries an optional field beside its required one — native.Date — no longer collapses to a single-key content once the optional field is rendered, so it stays an object where the engine unwrapped it to a bare scalar. A consequence of optional-field-included.",
-      "ledger_item": null,
-      "occurrences": 3,
-      "examples": [
-        {
-          "pipe_ref": "input_semantics_probe.probe_native_inputs",
-          "shape": "compact",
-          "path": "page_in.content.text_and_images.text",
-          "engine": {
-            "text": "text_value"
-          },
-          "expected": "text_value"
-        },
-        {
-          "pipe_ref": "input_semantics_probe.probe_native_inputs",
-          "shape": "compact",
-          "path": "date_in",
-          "engine": "2026-01-01",
-          "expected": {
-            "date": "2026-01-01",
-            "time": "12:00:00"
-          }
-        },
-        {
-          "pipe_ref": "input_semantics_probe.probe_native_inputs",
-          "shape": "explicit",
-          "path": "page_in.content.text_and_images.text",
-          "engine": {
-            "text": "text_value"
-          },
-          "expected": "text_value"
         }
       ]
     },

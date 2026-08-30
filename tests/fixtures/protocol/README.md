@@ -35,9 +35,11 @@ The expectation is not the engine's output. It is authored by a reference projec
 - `file-leaf-not-expanded` — a `document`/`image` node is a leaf carrying only its URL; the engine expands the runtime content class and asks for a width, a mime type and a caption.
 - `fixed-count-honoured` — a `Concept[N]` slot renders N elements; the engine emits one, which the runtime's own input shaper then rejects, so its template does not run.
 - `text-named-url` — a text field merely **named** `url` takes a text placeholder; the engine picks a placeholder by field name.
-- `scalar-vs-structured-native` — a native carrying an optional field beside its required one stays an object; the engine unwrapped it to a bare scalar. A consequence of the first entry.
+- `object-native-keeps-envelope` — a native that renders as an object once its optional field is included keeps its `{concept, content}` envelope, because the shaper dispatches a native's bare value on its scalar kind and would reject the bare object. The engine unwraps to a scalar, which it can only do because it drops the optional field. A consequence of the first entry.
 
-Each entry carries the workspace-ledger item tracking the engine fix, or `null` where the difference is one of vantage rather than a defect — the file-leaf entry is the descriptor's vantage, and the scalar-vs-native one is a consequence of the optional-field entry rather than its own bug. Where a class is retired, the corpus is regenerated and its entry disappears from the manifest on its own.
+Each entry carries the workspace-ledger item tracking the engine fix, or `null` where the difference is one of vantage rather than a defect — the file-leaf entry is the descriptor's vantage, and the object-native one is a consequence of the optional-field entry rather than its own bug.
+
+The compact templates are held to a second bar that is easy to lose sight of behind the byte parity: they must still **run**. A compact template is what someone fills in and hands back, so every slot of it has to survive the runtime's own input shaper. That is what separates a deliberate divergence from a projection bug — the file-leaf entry pins `{"url": ...}` because the shaper accepts exactly that wrapper, and the object-native entry keeps the envelope for the same reason. Where a class is retired, the corpus is regenerated and its entry disappears from the manifest on its own.
 
 ## Known engine drift in the descriptor and contract payloads
 

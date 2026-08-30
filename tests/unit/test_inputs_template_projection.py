@@ -47,10 +47,20 @@ _PROJECTION_ITEM = "L-260830-e7c5b5"
 _MANIFEST: dict[str, Any] = json.loads((_TEMPLATES_DIR / _MANIFEST_FILE_NAME).read_text(encoding="utf-8"))
 _INPUT_FORM: dict[str, Any] = json.loads((_CORPUS_DIR / "input_form.json").read_text(encoding="utf-8"))
 
+# The axes are read from the manifest but not trusted from it. Every case below is a product of
+# these two lists, so a regeneration that dropped a shape or a format would quietly shrink the suite
+# instead of failing it — the parity check would stop covering TOML and still report green. Pinning
+# them here means the corpus can grow a pipe without touching this file, but never lose an axis.
+_EXPECTED_SHAPES = ["compact", "explicit"]
+_EXPECTED_FORMATS = ["json", "toml"]
+
 _PIPE_REFS: list[str] = _MANIFEST["pipes"]
 _SHAPES: list[str] = _MANIFEST["shapes"]
 _FORMATS: list[str] = _MANIFEST["formats"]
 _DIVERGENCES: list[dict[str, Any]] = _MANIFEST["divergences"]
+
+assert sorted(_SHAPES) == sorted(_EXPECTED_SHAPES), f"the manifest lost a shape: {_SHAPES}"
+assert sorted(_FORMATS) == sorted(_EXPECTED_FORMATS), f"the manifest lost a format: {_FORMATS}"
 
 _CASES = [(pipe_ref, shape, file_format) for pipe_ref in _PIPE_REFS for shape in _SHAPES for file_format in _FORMATS]
 
