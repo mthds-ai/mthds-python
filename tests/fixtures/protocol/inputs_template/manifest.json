@@ -1,0 +1,285 @@
+{
+  "bundles": [
+    "hinted_bundle.mthds",
+    "probe_bundle.mthds",
+    "scaffold_bundle.mthds"
+  ],
+  "pipes": [
+    "input_semantics_hinted.hinted_slots",
+    "input_semantics_probe.probe_markers",
+    "input_semantics_probe.probe_native_inputs",
+    "input_semantics_probe.probe_refined",
+    "input_semantics_probe.probe_single",
+    "input_semantics_scaffold.scaffold_fixed_batch",
+    "input_semantics_scaffold.scaffold_nesting"
+  ],
+  "shapes": [
+    "compact",
+    "explicit"
+  ],
+  "formats": [
+    "json",
+    "toml"
+  ],
+  "divergences": [
+    {
+      "divergence_id": "file-leaf-not-expanded",
+      "reason": "The descriptor states a file-ish node as a leaf whose only fill-in value is a URL, while the engine expands the runtime content class and asks whoever fills the template in for a width, a mime type and a caption.",
+      "ledger_item": null,
+      "occurrences": 6,
+      "examples": [
+        {
+          "pipe_ref": "input_semantics_probe.probe_native_inputs",
+          "shape": "compact",
+          "path": "page_in.content.text_and_images.images.0",
+          "engine": {
+            "url": "https://mock.invalid/url",
+            "public_url": "https://mock.invalid/public_url",
+            "source_prompt": "source_prompt_value",
+            "source_negative_prompt": "source_negative_prompt_value",
+            "caption": "caption_value",
+            "mime_type": "mime_type_value",
+            "width": 0,
+            "height": 0,
+            "filename": "filename_value"
+          },
+          "expected": {
+            "url": "https://mock.invalid/url"
+          }
+        },
+        {
+          "pipe_ref": "input_semantics_probe.probe_native_inputs",
+          "shape": "explicit",
+          "path": "page_in.content.text_and_images.images.0",
+          "engine": {
+            "url": "https://mock.invalid/url",
+            "public_url": "https://mock.invalid/public_url",
+            "source_prompt": "source_prompt_value",
+            "source_negative_prompt": "source_negative_prompt_value",
+            "caption": "caption_value",
+            "mime_type": "mime_type_value",
+            "width": 0,
+            "height": 0,
+            "filename": "filename_value"
+          },
+          "expected": {
+            "url": "https://mock.invalid/url"
+          }
+        },
+        {
+          "pipe_ref": "input_semantics_scaffold.scaffold_nesting",
+          "shape": "compact",
+          "path": "dossier.stamp",
+          "engine": {
+            "url": "https://mock.invalid/url",
+            "public_url": "https://mock.invalid/public_url",
+            "source_prompt": "source_prompt_value",
+            "source_negative_prompt": "source_negative_prompt_value",
+            "caption": "caption_value",
+            "mime_type": "mime_type_value",
+            "width": 0,
+            "height": 0,
+            "filename": "filename_value"
+          },
+          "expected": {
+            "url": "https://mock.invalid/url"
+          }
+        }
+      ]
+    },
+    {
+      "divergence_id": "fixed-count-honoured",
+      "reason": "A Concept[N] slot renders N elements. The engine emits one whatever the count, and InputShaper then rejects that template with MultiplicityCountMismatchError, so the scaffold does not run.",
+      "ledger_item": "L-260830-f3de29",
+      "occurrences": 4,
+      "examples": [
+        {
+          "pipe_ref": "input_semantics_probe.probe_markers",
+          "shape": "compact",
+          "path": "two",
+          "engine": [
+            {
+              "name": "name_value"
+            }
+          ],
+          "expected": [
+            {
+              "name": "name_value",
+              "trinket": {
+                "label": "label_value"
+              }
+            },
+            {
+              "name": "name_value",
+              "trinket": {
+                "label": "label_value"
+              }
+            }
+          ]
+        },
+        {
+          "pipe_ref": "input_semantics_probe.probe_markers",
+          "shape": "explicit",
+          "path": "two.content",
+          "engine": [
+            {
+              "name": "name_value"
+            }
+          ],
+          "expected": [
+            {
+              "name": "name_value",
+              "trinket": {
+                "label": "label_value"
+              }
+            },
+            {
+              "name": "name_value",
+              "trinket": {
+                "label": "label_value"
+              }
+            }
+          ]
+        },
+        {
+          "pipe_ref": "input_semantics_scaffold.scaffold_fixed_batch",
+          "shape": "compact",
+          "path": "dossiers",
+          "engine": [
+            {
+              "title": "title_value",
+              "stamp": {
+                "url": "https://mock.invalid/url",
+                "public_url": "https://mock.invalid/public_url",
+                "source_prompt": "source_prompt_value",
+                "source_negative_prompt": "source_negative_prompt_value",
+                "caption": "caption_value",
+                "mime_type": "mime_type_value",
+                "width": 0,
+                "height": 0,
+                "filename": "filename_value"
+              }
+            }
+          ],
+          "expected": [
+            {
+              "title": "title_value",
+              "stamp": {
+                "url": "https://mock.invalid/url"
+              },
+              "cover": {
+                "url": "https://mock.invalid/url"
+              },
+              "attachment": {
+                "url": "https://mock.invalid/url"
+              },
+              "bookmark": {
+                "url": "url_value",
+                "homepage_url": "homepage_url_value",
+                "label": "label_value",
+                "shelf_note": "shelf_note_value"
+              }
+            },
+            {
+              "title": "title_value",
+              "stamp": {
+                "url": "https://mock.invalid/url"
+              },
+              "cover": {
+                "url": "https://mock.invalid/url"
+              },
+              "attachment": {
+                "url": "https://mock.invalid/url"
+              },
+              "bookmark": {
+                "url": "url_value",
+                "homepage_url": "homepage_url_value",
+                "label": "label_value",
+                "shelf_note": "shelf_note_value"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "divergence_id": "object-native-keeps-envelope",
+      "reason": "A native whose pinned definition carries an optional field beside its required one — native.Date — renders as an object once the optional field is included, and the shaper's bare-value arm dispatches a native on its scalar kind, so the object form is only re-shapable inside its {concept, content} envelope. The projection keeps that envelope; the engine unwraps to a bare scalar, which it can only do because it drops the optional field. A consequence of optional-field-included.",
+      "ledger_item": null,
+      "occurrences": 1,
+      "examples": [
+        {
+          "pipe_ref": "input_semantics_probe.probe_native_inputs",
+          "shape": "compact",
+          "path": "date_in",
+          "engine": "2026-01-01",
+          "expected": {
+            "concept": "native.Date",
+            "content": {
+              "date": "2026-01-01",
+              "time": "12:00:00"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "divergence_id": "optional-field-included",
+      "reason": "The engine passes include_optional=False at the top of an input's own structure class and not through the recursion, so it hides an optional field at depth one and shows one nested deeper. The projection renders every field the descriptor states, at every depth.",
+      "ledger_item": "L-260830-d51440",
+      "occurrences": 163,
+      "examples": [
+        {
+          "pipe_ref": "input_semantics_hinted.hinted_slots",
+          "shape": "compact",
+          "path": "hinted.headline",
+          "engine": null,
+          "expected": "headline_value"
+        },
+        {
+          "pipe_ref": "input_semantics_hinted.hinted_slots",
+          "shape": "compact",
+          "path": "hinted.stars",
+          "engine": null,
+          "expected": 0
+        },
+        {
+          "pipe_ref": "input_semantics_hinted.hinted_slots",
+          "shape": "compact",
+          "path": "hinted.plain",
+          "engine": null,
+          "expected": "plain_value"
+        }
+      ]
+    },
+    {
+      "divergence_id": "text-named-url",
+      "reason": "The engine picks a placeholder by field name, so a text field merely named url or ending in _url renders as a URL. The projection reads the descriptor's kind instead.",
+      "ledger_item": "L-260830-dc48bf",
+      "occurrences": 4,
+      "examples": [
+        {
+          "pipe_ref": "input_semantics_scaffold.scaffold_nesting",
+          "shape": "compact",
+          "path": "bookmark.url",
+          "engine": "https://mock.invalid/url",
+          "expected": "url_value"
+        },
+        {
+          "pipe_ref": "input_semantics_scaffold.scaffold_nesting",
+          "shape": "explicit",
+          "path": "bookmark.content.url",
+          "engine": "https://mock.invalid/url",
+          "expected": "url_value"
+        },
+        {
+          "pipe_ref": "input_semantics_scaffold.scaffold_fixed_batch",
+          "shape": "compact",
+          "path": "bookmarks.0.url",
+          "engine": "https://mock.invalid/url",
+          "expected": "url_value"
+        }
+      ]
+    }
+  ]
+}

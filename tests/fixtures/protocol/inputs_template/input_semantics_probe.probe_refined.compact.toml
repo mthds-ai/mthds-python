@@ -1,0 +1,10 @@
+# concept: input_semantics_probe.RefinedDoc
+refdoc = "https://mock.invalid/url"
+# concept: input_semantics_probe.SpecialEntity
+special = {ident = "ident_value"}
+# concept: input_semantics_probe.ExtraSpecialEntity
+extra = {ident = "ident_value"}
+# concept: input_semantics_probe.ClassBacked
+classbacked = "text_value"
+# concept: input_semantics_probe.StringNote
+stringnote = "text_value"

@@ -1,0 +1,32 @@
+{
+  "refdoc": {
+    "concept": "input_semantics_probe.RefinedDoc",
+    "content": {
+      "url": "https://mock.invalid/url"
+    }
+  },
+  "special": {
+    "concept": "input_semantics_probe.SpecialEntity",
+    "content": {
+      "ident": "ident_value"
+    }
+  },
+  "extra": {
+    "concept": "input_semantics_probe.ExtraSpecialEntity",
+    "content": {
+      "ident": "ident_value"
+    }
+  },
+  "classbacked": {
+    "concept": "input_semantics_probe.ClassBacked",
+    "content": {
+      "text": "text_value"
+    }
+  },
+  "stringnote": {
+    "concept": "input_semantics_probe.StringNote",
+    "content": {
+      "text": "text_value"
+    }
+  }
+}

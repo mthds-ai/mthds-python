@@ -1,0 +1,11 @@
+{
+  "refdoc": "https://mock.invalid/url",
+  "special": {
+    "ident": "ident_value"
+  },
+  "extra": {
+    "ident": "ident_value"
+  },
+  "classbacked": "text_value",
+  "stringnote": "text_value"
+}

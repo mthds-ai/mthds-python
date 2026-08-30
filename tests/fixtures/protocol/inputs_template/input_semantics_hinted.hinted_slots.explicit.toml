@@ -1,0 +1,27 @@
+[plain]
+concept = "input_semantics_hinted.Essay"
+
+[plain.content]
+text = "text_value"
+
+[expanded_plain]
+concept = "input_semantics_hinted.Essay"
+
+[expanded_plain.content]
+text = "text_value"
+
+[hinted]
+concept = "input_semantics_hinted.Review"
+
+[hinted.content]
+headline = "headline_value"
+body = "body_value"
+stars = 0
+plain = "plain_value"
+quirk = "quirk_value"
+
+[hinted_marked]
+concept = "input_semantics_hinted.Badge"
+
+[[hinted_marked.content]]
+text = "text_value"

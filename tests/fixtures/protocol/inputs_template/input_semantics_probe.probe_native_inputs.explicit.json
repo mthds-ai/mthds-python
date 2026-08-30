@@ -1,0 +1,71 @@
+{
+  "text_in": {
+    "concept": "native.Text",
+    "content": {
+      "text": "text_value"
+    }
+  },
+  "image_in": {
+    "concept": "native.Image",
+    "content": {
+      "url": "https://mock.invalid/url"
+    }
+  },
+  "document_in": {
+    "concept": "native.Document",
+    "content": {
+      "url": "https://mock.invalid/url"
+    }
+  },
+  "page_in": {
+    "concept": "native.Page",
+    "content": {
+      "text_and_images": {
+        "text": {
+          "text": "text_value"
+        },
+        "images": [
+          {
+            "url": "https://mock.invalid/url"
+          }
+        ],
+        "raw_html": "raw_html_value"
+      },
+      "page_view": {
+        "url": "https://mock.invalid/url"
+      }
+    }
+  },
+  "number_in": {
+    "concept": "native.Number",
+    "content": {
+      "number": 1
+    }
+  },
+  "date_in": {
+    "concept": "native.Date",
+    "content": {
+      "date": "2026-01-01",
+      "time": "12:00:00"
+    }
+  },
+  "time_in": {
+    "concept": "native.Time",
+    "content": {
+      "time": "12:00:00"
+    }
+  },
+  "html_in": {
+    "concept": "native.Html",
+    "content": {
+      "inner_html": "inner_html_value",
+      "css_class": "css_class_value"
+    }
+  },
+  "yesno_in": {
+    "concept": "native.YesNo",
+    "content": {
+      "yes_no": false
+    }
+  }
+}

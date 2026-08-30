@@ -1211,5 +1211,238 @@
         "gating": true
       }
     ]
+  },
+  "input_semantics_scaffold.scaffold_nesting": {
+    "fields": [
+      {
+        "kind": "object",
+        "name": "bookmark",
+        "concept_ref": "input_semantics_scaffold.Bookmark",
+        "description": "SCAFFOLD_desc_concept_Bookmark: a shelf reference whose text fields are named like links",
+        "required": true,
+        "presence": "plain",
+        "gating": true,
+        "fields": [
+          {
+            "kind": "text",
+            "name": "url",
+            "description": "SCAFFOLD_desc_field_url: a required text field merely NAMED url",
+            "required": true
+          },
+          {
+            "kind": "text",
+            "name": "homepage_url",
+            "description": "SCAFFOLD_desc_field_homepage_url: an optional text field whose name ENDS in _url",
+            "required": false
+          },
+          {
+            "kind": "text",
+            "name": "label",
+            "description": "SCAFFOLD_desc_field_label: ordinary required text beside them",
+            "required": true
+          },
+          {
+            "kind": "text",
+            "name": "shelf_note",
+            "description": "SCAFFOLD_desc_field_shelf_note: ordinary optional text beside them",
+            "required": false
+          }
+        ]
+      },
+      {
+        "kind": "object",
+        "name": "dossier",
+        "concept_ref": "input_semantics_scaffold.Dossier",
+        "description": "SCAFFOLD_desc_concept_Dossier: an archive folder holding required and optional attachments",
+        "required": true,
+        "presence": "plain",
+        "gating": true,
+        "fields": [
+          {
+            "kind": "text",
+            "name": "title",
+            "description": "SCAFFOLD_desc_field_title: required text heading the folder",
+            "required": true
+          },
+          {
+            "kind": "image",
+            "name": "stamp",
+            "concept_ref": "native.Image",
+            "description": "SCAFFOLD_desc_field_stamp: a REQUIRED nested image",
+            "required": true
+          },
+          {
+            "kind": "image",
+            "name": "cover",
+            "concept_ref": "native.Image",
+            "description": "SCAFFOLD_desc_field_cover: an OPTIONAL nested image",
+            "required": false
+          },
+          {
+            "kind": "document",
+            "name": "attachment",
+            "concept_ref": "native.Document",
+            "description": "SCAFFOLD_desc_field_attachment: an OPTIONAL nested document",
+            "required": false
+          },
+          {
+            "kind": "object",
+            "name": "bookmark",
+            "concept_ref": "input_semantics_scaffold.Bookmark",
+            "description": "SCAFFOLD_desc_field_bookmark: the url-named fields one level deeper",
+            "required": false,
+            "fields": [
+              {
+                "kind": "text",
+                "name": "url",
+                "description": "SCAFFOLD_desc_field_url: a required text field merely NAMED url",
+                "required": true
+              },
+              {
+                "kind": "text",
+                "name": "homepage_url",
+                "description": "SCAFFOLD_desc_field_homepage_url: an optional text field whose name ENDS in _url",
+                "required": false
+              },
+              {
+                "kind": "text",
+                "name": "label",
+                "description": "SCAFFOLD_desc_field_label: ordinary required text beside them",
+                "required": true
+              },
+              {
+                "kind": "text",
+                "name": "shelf_note",
+                "description": "SCAFFOLD_desc_field_shelf_note: ordinary optional text beside them",
+                "required": false
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "input_semantics_scaffold.scaffold_fixed_batch": {
+    "fields": [
+      {
+        "kind": "list",
+        "name": "dossiers",
+        "concept_ref": "input_semantics_scaffold.Dossier",
+        "description": "SCAFFOLD_desc_concept_Dossier: an archive folder holding required and optional attachments",
+        "required": true,
+        "presence": "plain",
+        "gating": true,
+        "item": {
+          "kind": "object",
+          "concept_ref": "input_semantics_scaffold.Dossier",
+          "description": "SCAFFOLD_desc_concept_Dossier: an archive folder holding required and optional attachments",
+          "required": true,
+          "fields": [
+            {
+              "kind": "text",
+              "name": "title",
+              "description": "SCAFFOLD_desc_field_title: required text heading the folder",
+              "required": true
+            },
+            {
+              "kind": "image",
+              "name": "stamp",
+              "concept_ref": "native.Image",
+              "description": "SCAFFOLD_desc_field_stamp: a REQUIRED nested image",
+              "required": true
+            },
+            {
+              "kind": "image",
+              "name": "cover",
+              "concept_ref": "native.Image",
+              "description": "SCAFFOLD_desc_field_cover: an OPTIONAL nested image",
+              "required": false
+            },
+            {
+              "kind": "document",
+              "name": "attachment",
+              "concept_ref": "native.Document",
+              "description": "SCAFFOLD_desc_field_attachment: an OPTIONAL nested document",
+              "required": false
+            },
+            {
+              "kind": "object",
+              "name": "bookmark",
+              "concept_ref": "input_semantics_scaffold.Bookmark",
+              "description": "SCAFFOLD_desc_field_bookmark: the url-named fields one level deeper",
+              "required": false,
+              "fields": [
+                {
+                  "kind": "text",
+                  "name": "url",
+                  "description": "SCAFFOLD_desc_field_url: a required text field merely NAMED url",
+                  "required": true
+                },
+                {
+                  "kind": "text",
+                  "name": "homepage_url",
+                  "description": "SCAFFOLD_desc_field_homepage_url: an optional text field whose name ENDS in _url",
+                  "required": false
+                },
+                {
+                  "kind": "text",
+                  "name": "label",
+                  "description": "SCAFFOLD_desc_field_label: ordinary required text beside them",
+                  "required": true
+                },
+                {
+                  "kind": "text",
+                  "name": "shelf_note",
+                  "description": "SCAFFOLD_desc_field_shelf_note: ordinary optional text beside them",
+                  "required": false
+                }
+              ]
+            }
+          ]
+        },
+        "item_count": 2
+      },
+      {
+        "kind": "list",
+        "name": "bookmarks",
+        "concept_ref": "input_semantics_scaffold.Bookmark",
+        "description": "SCAFFOLD_desc_concept_Bookmark: a shelf reference whose text fields are named like links",
+        "required": true,
+        "presence": "plain",
+        "gating": false,
+        "item": {
+          "kind": "object",
+          "concept_ref": "input_semantics_scaffold.Bookmark",
+          "description": "SCAFFOLD_desc_concept_Bookmark: a shelf reference whose text fields are named like links",
+          "required": true,
+          "fields": [
+            {
+              "kind": "text",
+              "name": "url",
+              "description": "SCAFFOLD_desc_field_url: a required text field merely NAMED url",
+              "required": true
+            },
+            {
+              "kind": "text",
+              "name": "homepage_url",
+              "description": "SCAFFOLD_desc_field_homepage_url: an optional text field whose name ENDS in _url",
+              "required": false
+            },
+            {
+              "kind": "text",
+              "name": "label",
+              "description": "SCAFFOLD_desc_field_label: ordinary required text beside them",
+              "required": true
+            },
+            {
+              "kind": "text",
+              "name": "shelf_note",
+              "description": "SCAFFOLD_desc_field_shelf_note: ordinary optional text beside them",
+              "required": false
+            }
+          ]
+        }
+      }
+    ]
   }
 }

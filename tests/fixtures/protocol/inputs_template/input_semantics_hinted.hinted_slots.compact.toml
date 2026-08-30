@@ -1,0 +1,8 @@
+# concept: input_semantics_hinted.Essay
+plain = "text_value"
+# concept: input_semantics_hinted.Essay
+expanded_plain = "text_value"
+# concept: input_semantics_hinted.Review
+hinted = {headline = "headline_value", body = "body_value", stars = 0, plain = "plain_value", quirk = "quirk_value"}
+# concept: input_semantics_hinted.Badge[]
+hinted_marked = ["text_value"]
