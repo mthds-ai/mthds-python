@@ -1,0 +1,32 @@
+{
+  "plain": {
+    "concept": "input_semantics_hinted.Essay",
+    "content": {
+      "text": "text_value"
+    }
+  },
+  "expanded_plain": {
+    "concept": "input_semantics_hinted.Essay",
+    "content": {
+      "text": "text_value"
+    }
+  },
+  "hinted": {
+    "concept": "input_semantics_hinted.Review",
+    "content": {
+      "headline": "headline_value",
+      "body": "body_value",
+      "stars": 0,
+      "plain": "plain_value",
+      "quirk": "quirk_value"
+    }
+  },
+  "hinted_marked": {
+    "concept": "input_semantics_hinted.Badge",
+    "content": [
+      {
+        "text": "text_value"
+      }
+    ]
+  }
+}

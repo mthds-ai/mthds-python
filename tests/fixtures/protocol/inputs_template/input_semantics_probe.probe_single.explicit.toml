@@ -1,0 +1,59 @@
+[widget]
+concept = "input_semantics_probe.Widget"
+
+[widget.content]
+shorthand_note = "shorthand_note_value"
+title = "title_value"
+subtitle = "subtitle_value"
+summary = "summary_value"
+motto = "motto_value"
+count = 0
+enabled = false
+price = 0.0
+released_on = "2026-01-01"
+launched_at = "2026-01-01T12:00:00"
+daily_at = "12:00:00"
+tags = ["tags_item_value"]
+ratings = [0]
+tone = "PROBE_choice_formal"
+only_choice = "PROBE_choice_single"
+typed_choice = "PROBE_choice_typed_a"
+constrained_count = 0
+
+[[widget.content.matrix]]
+
+[[widget.content.gadgets]]
+name = "name_value"
+
+[widget.content.gadgets.trinket]
+label = "label_value"
+
+[widget.content.attributes]
+
+[widget.content.scores]
+
+[widget.content.milestones]
+
+[widget.content.main_gadget]
+name = "name_value"
+
+[widget.content.main_gadget.trinket]
+label = "label_value"
+
+[widget.content.icon]
+url = "https://mock.invalid/url"
+
+[gadget_q]
+concept = "input_semantics_probe.Gadget"
+
+[gadget_q.content]
+name = "name_value"
+
+[gadget_q.content.trinket]
+label = "label_value"
+
+[note]
+concept = "input_semantics_probe.PlainNote"
+
+[note.content]
+text = "text_value"

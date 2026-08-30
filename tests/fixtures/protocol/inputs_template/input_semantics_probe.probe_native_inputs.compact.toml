@@ -1,0 +1,18 @@
+# concept: native.Text
+text_in = "text_value"
+# concept: native.Image
+image_in = "https://mock.invalid/url"
+# concept: native.Document
+document_in = "https://mock.invalid/url"
+# concept: native.Page
+page_in = {concept = "native.Page", content = {text_and_images = {text = "text_value", images = [{url = "https://mock.invalid/url"}], raw_html = "raw_html_value"}, page_view = {url = "https://mock.invalid/url"}}}
+# concept: native.Number
+number_in = 1
+# concept: native.Date
+date_in = {date = "2026-01-01", time = "12:00:00"}
+# concept: native.Time
+time_in = "12:00:00"
+# concept: native.Html
+html_in = {concept = "native.Html", content = {inner_html = "inner_html_value", css_class = "css_class_value"}}
+# concept: native.YesNo
+yesno_in = false

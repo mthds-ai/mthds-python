@@ -1,0 +1,36 @@
+{
+  "text_in": "text_value",
+  "image_in": "https://mock.invalid/url",
+  "document_in": "https://mock.invalid/url",
+  "page_in": {
+    "concept": "native.Page",
+    "content": {
+      "text_and_images": {
+        "text": "text_value",
+        "images": [
+          {
+            "url": "https://mock.invalid/url"
+          }
+        ],
+        "raw_html": "raw_html_value"
+      },
+      "page_view": {
+        "url": "https://mock.invalid/url"
+      }
+    }
+  },
+  "number_in": 1,
+  "date_in": {
+    "date": "2026-01-01",
+    "time": "12:00:00"
+  },
+  "time_in": "12:00:00",
+  "html_in": {
+    "concept": "native.Html",
+    "content": {
+      "inner_html": "inner_html_value",
+      "css_class": "css_class_value"
+    }
+  },
+  "yesno_in": false
+}

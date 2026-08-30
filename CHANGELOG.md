@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **The shared projection fixture corpus.** `tests/fixtures/protocol/inputs_template/` pairs each captured pipe's input-form descriptor with the fill-in inputs template a client-side projection must produce from it — the compact and explicit shapes, as JSON and as TOML — and `tests/unit/test_inputs_template_projection.py` holds the corpus to four properties: the whole closed `FieldKind` vocabulary is exercised, every pipe is present in both shapes and both formats, each deliberate departure from the reference engine's own renderer is still visible in the committed bytes, and (skip-gated until `mthds.protocol.inputs_template` lands) the projection reproduces every file byte for byte. The corpus is committed identically in `mthds-js`, which runs the twin of that suite, and `conformance` compares the two mirrors file by file — that byte identity is the point, since the two projections are written in different languages and must agree exactly, TOML comment lines included. The descriptor and contract captures are regenerated from the same command and gain a third bundle covering a text field merely named `url` beside a real file position, optional file fields nested inside a structure, and both a fixed `[N]` and a variable `[]` slot over a structured concept.
+
 ## [v0.11.1] - 2026-08-28
 
 ### Fixed

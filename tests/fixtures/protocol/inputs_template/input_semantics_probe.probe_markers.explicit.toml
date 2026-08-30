@@ -1,0 +1,110 @@
+[opt]
+concept = "input_semantics_probe.Widget"
+
+[opt.content]
+shorthand_note = "shorthand_note_value"
+title = "title_value"
+subtitle = "subtitle_value"
+summary = "summary_value"
+motto = "motto_value"
+count = 0
+enabled = false
+price = 0.0
+released_on = "2026-01-01"
+launched_at = "2026-01-01T12:00:00"
+daily_at = "12:00:00"
+tags = ["tags_item_value"]
+ratings = [0]
+tone = "PROBE_choice_formal"
+only_choice = "PROBE_choice_single"
+typed_choice = "PROBE_choice_typed_a"
+constrained_count = 0
+
+[[opt.content.matrix]]
+
+[[opt.content.gadgets]]
+name = "name_value"
+
+[opt.content.gadgets.trinket]
+label = "label_value"
+
+[opt.content.attributes]
+
+[opt.content.scores]
+
+[opt.content.milestones]
+
+[opt.content.main_gadget]
+name = "name_value"
+
+[opt.content.main_gadget.trinket]
+label = "label_value"
+
+[opt.content.icon]
+url = "https://mock.invalid/url"
+
+[many]
+concept = "input_semantics_probe.Widget"
+
+[[many.content]]
+shorthand_note = "shorthand_note_value"
+title = "title_value"
+subtitle = "subtitle_value"
+summary = "summary_value"
+motto = "motto_value"
+count = 0
+enabled = false
+price = 0.0
+released_on = "2026-01-01"
+launched_at = "2026-01-01T12:00:00"
+daily_at = "12:00:00"
+tags = ["tags_item_value"]
+ratings = [0]
+tone = "PROBE_choice_formal"
+only_choice = "PROBE_choice_single"
+typed_choice = "PROBE_choice_typed_a"
+constrained_count = 0
+
+[[many.content.matrix]]
+
+[[many.content.gadgets]]
+name = "name_value"
+
+[many.content.gadgets.trinket]
+label = "label_value"
+
+[many.content.attributes]
+
+[many.content.scores]
+
+[many.content.milestones]
+
+[many.content.main_gadget]
+name = "name_value"
+
+[many.content.main_gadget.trinket]
+label = "label_value"
+
+[many.content.icon]
+url = "https://mock.invalid/url"
+
+[two]
+concept = "input_semantics_probe.Gadget"
+
+[[two.content]]
+name = "name_value"
+
+[two.content.trinket]
+label = "label_value"
+
+[[two.content]]
+name = "name_value"
+
+[two.content.trinket]
+label = "label_value"
+
+[forced]
+concept = "native.Text"
+
+[forced.content]
+text = "text_value"

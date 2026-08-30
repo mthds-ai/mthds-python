@@ -1,0 +1,47 @@
+[dossiers]
+concept = "input_semantics_scaffold.Dossier"
+
+[[dossiers.content]]
+title = "title_value"
+
+[dossiers.content.stamp]
+url = "https://mock.invalid/url"
+
+[dossiers.content.cover]
+url = "https://mock.invalid/url"
+
+[dossiers.content.attachment]
+url = "https://mock.invalid/url"
+
+[dossiers.content.bookmark]
+url = "url_value"
+homepage_url = "homepage_url_value"
+label = "label_value"
+shelf_note = "shelf_note_value"
+
+[[dossiers.content]]
+title = "title_value"
+
+[dossiers.content.stamp]
+url = "https://mock.invalid/url"
+
+[dossiers.content.cover]
+url = "https://mock.invalid/url"
+
+[dossiers.content.attachment]
+url = "https://mock.invalid/url"
+
+[dossiers.content.bookmark]
+url = "url_value"
+homepage_url = "homepage_url_value"
+label = "label_value"
+shelf_note = "shelf_note_value"
+
+[bookmarks]
+concept = "input_semantics_scaffold.Bookmark"
+
+[[bookmarks.content]]
+url = "url_value"
+homepage_url = "homepage_url_value"
+label = "label_value"
+shelf_note = "shelf_note_value"

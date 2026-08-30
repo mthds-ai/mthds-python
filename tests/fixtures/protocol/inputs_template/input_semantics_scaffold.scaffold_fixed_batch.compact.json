@@ -1,0 +1,48 @@
+{
+  "dossiers": [
+    {
+      "title": "title_value",
+      "stamp": {
+        "url": "https://mock.invalid/url"
+      },
+      "cover": {
+        "url": "https://mock.invalid/url"
+      },
+      "attachment": {
+        "url": "https://mock.invalid/url"
+      },
+      "bookmark": {
+        "url": "url_value",
+        "homepage_url": "homepage_url_value",
+        "label": "label_value",
+        "shelf_note": "shelf_note_value"
+      }
+    },
+    {
+      "title": "title_value",
+      "stamp": {
+        "url": "https://mock.invalid/url"
+      },
+      "cover": {
+        "url": "https://mock.invalid/url"
+      },
+      "attachment": {
+        "url": "https://mock.invalid/url"
+      },
+      "bookmark": {
+        "url": "url_value",
+        "homepage_url": "homepage_url_value",
+        "label": "label_value",
+        "shelf_note": "shelf_note_value"
+      }
+    }
+  ],
+  "bookmarks": [
+    {
+      "url": "url_value",
+      "homepage_url": "homepage_url_value",
+      "label": "label_value",
+      "shelf_note": "shelf_note_value"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+[refdoc]
+concept = "input_semantics_probe.RefinedDoc"
+
+[refdoc.content]
+url = "https://mock.invalid/url"
+
+[special]
+concept = "input_semantics_probe.SpecialEntity"
+
+[special.content]
+ident = "ident_value"
+
+[extra]
+concept = "input_semantics_probe.ExtraSpecialEntity"
+
+[extra.content]
+ident = "ident_value"
+
+[classbacked]
+concept = "input_semantics_probe.ClassBacked"
+
+[classbacked.content]
+text = "text_value"
+
+[stringnote]
+concept = "input_semantics_probe.StringNote"
+
+[stringnote.content]
+text = "text_value"
