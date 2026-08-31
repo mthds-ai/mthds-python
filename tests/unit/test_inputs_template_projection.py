@@ -7,7 +7,7 @@ retirement set out to remove is simply rebuilt one layer up. ``tests/fixtures/pr
 inputs_template/`` holds the expected bytes; `mthds-js` commits the identical tree and runs the twin
 of this module. The corpus README carries the provenance and the regeneration command.
 
-Four jobs, three of which run today:
+Five jobs, four of which run today:
 
 1. **Byte parity** — every corpus file reproduced exactly by the projection. Skipped until the
    projection exists (`L-260830-e7c5b5`); it is the whole point of the corpus, and the reason the
@@ -21,11 +21,16 @@ Four jobs, three of which run today:
    inputs-template renderer in declared places. Each declared class must still be visible in the
    committed bytes, so an engine fix retires its entry deliberately instead of leaving the manifest
    claiming a difference that has gone.
+5. **Unshapeable-record integrity** — the generator round-trips every projected template through the
+   runtime's own input shaper and records each refusal. The verdict itself cannot be re-derived here
+   (there is no shaper on this side of the mirror), so what this checks is that the record keys
+   resolve against the rest of the manifest and each entry names the gap that retires it.
 """
 
 import importlib
 import importlib.util
 import json
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -58,6 +63,10 @@ _PIPE_REFS: list[str] = _MANIFEST["pipes"]
 _SHAPES: list[str] = _MANIFEST["shapes"]
 _FORMATS: list[str] = _MANIFEST["formats"]
 _DIVERGENCES: list[dict[str, Any]] = _MANIFEST["divergences"]
+_UNSHAPEABLE: list[dict[str, Any]] = _MANIFEST["unshapeable"]
+
+# A workspace-ledger id, the form every entry must name its tracking gap in.
+_LEDGER_ITEM_PATTERN = re.compile(r"^L-\d{6}-[0-9a-f]{6}$")
 
 assert sorted(_SHAPES) == sorted(_EXPECTED_SHAPES), f"the manifest lost a shape: {_SHAPES}"
 assert sorted(_FORMATS) == sorted(_EXPECTED_FORMATS), f"the manifest lost a format: {_FORMATS}"
@@ -87,6 +96,11 @@ def _walk_nodes(*, node: InputFormItem) -> Iterator[InputFormItem]:
             yield from _walk_nodes(node=node.item)
         case _:
             return
+
+
+def _unshapeable_id(entry: dict[str, Any]) -> str:
+    """The `(pipe_ref, shape)` key of one unshapeable entry, which is also its test id."""
+    return f"{entry['pipe_ref']}.{entry['shape']}"
 
 
 def _value_at_path(*, root: Any, path: str) -> Any:
@@ -150,6 +164,38 @@ class TestDeclaredDivergences:
             # the engine emitted, or the class has lapsed and its entry should go.
             assert _value_at_path(root=template, path=example["path"]) == example["expected"]
             assert example["expected"] != example["engine"]
+
+
+class TestTheUnshapeableRecord:
+    """The templates this capture pins that the runtime's own input shaper refuses to take back.
+
+    A template's whole purpose is to be filled in and handed back, so the generator hands every
+    projected template to ``InputShaper.shape`` at capture time and writes down each refusal. There
+    is no shaper on this side of the mirror, so the verdict is taken on the generator's authority;
+    what is checkable here is that the record stays about *this* corpus across a regeneration.
+    """
+
+    @pytest.mark.parametrize("entry", _UNSHAPEABLE, ids=_unshapeable_id)
+    def test_an_entry_is_keyed_to_a_pipe_and_a_shape_the_corpus_holds(self, entry: dict[str, Any]):
+        assert entry["pipe_ref"] in _PIPE_REFS
+        assert entry["shape"] in _SHAPES
+
+    def test_it_names_one_entry_per_pipe_and_shape(self):
+        keys = [_unshapeable_id(entry) for entry in _UNSHAPEABLE]
+        assert sorted(set(keys)) == sorted(keys)
+
+    @pytest.mark.parametrize("entry", _UNSHAPEABLE, ids=_unshapeable_id)
+    def test_an_entry_states_the_refusal_and_the_gap_that_retires_it(self, entry: dict[str, Any]):
+        # The error type is what the runtime raised; the ledger item is the fix whose landing makes
+        # the entry disappear from a regenerated manifest. An entry with neither is a refusal nobody
+        # is tracking, which is the thing this record exists to prevent.
+        assert entry["error_type"]
+        assert _LEDGER_ITEM_PATTERN.match(entry["ledger_item"])
+
+    def test_it_is_an_exception_list_not_the_whole_corpus(self):
+        # Every (pipe, shape) unshapeable would mean the corpus pins bytes the runtime refuses
+        # outright — a broken capture wearing a complete declaration.
+        assert len(_UNSHAPEABLE) < len(_PIPE_REFS) * len(_SHAPES)
 
 
 @pytest.mark.skipif(

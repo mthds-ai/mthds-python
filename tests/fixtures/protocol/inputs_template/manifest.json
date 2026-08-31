@@ -281,5 +281,31 @@
         }
       ]
     }
+  ],
+  "unshapeable": [
+    {
+      "pipe_ref": "input_semantics_probe.probe_markers",
+      "shape": "compact",
+      "error_type": "StructureValidationError",
+      "ledger_item": "L-260830-191719"
+    },
+    {
+      "pipe_ref": "input_semantics_probe.probe_markers",
+      "shape": "explicit",
+      "error_type": "ValidationError",
+      "ledger_item": "L-260830-191719"
+    },
+    {
+      "pipe_ref": "input_semantics_probe.probe_single",
+      "shape": "compact",
+      "error_type": "StructureValidationError",
+      "ledger_item": "L-260830-191719"
+    },
+    {
+      "pipe_ref": "input_semantics_probe.probe_single",
+      "shape": "explicit",
+      "error_type": "ValidationError",
+      "ledger_item": "L-260830-191719"
+    }
   ]
 }
