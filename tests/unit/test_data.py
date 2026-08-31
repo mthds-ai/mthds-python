@@ -2,7 +2,16 @@
 
 from typing import Any, ClassVar
 
-from mthds.protocol.input_form import InputFormField, ListField, TextField, TextItem
+from mthds.protocol.input_form import (
+    DateField,
+    ImageItem,
+    InputFormField,
+    ListField,
+    ObjectField,
+    ObjectItem,
+    TextField,
+    TextItem,
+)
 from mthds.protocol.pipe_io_contracts import PresenceMarker
 
 
@@ -420,6 +429,14 @@ class TomlEmitterCases:
 
     UNSPELLABLE_VALUES: ClassVar[list[Any]] = [object(), {1, 2}, b"bytes"]
 
+    # A comment is the one text that reaches the document unquoted, so a line terminator inside it
+    # ends the comment instead of corrupting it, and turns what follows into live TOML.
+    UNSPELLABLE_COMMENTS: ClassVar[list[str]] = [
+        "concept: native.Text\nrogue = 1",
+        "concept: native.Text\rrogue = 1",
+        "concept: native.Text\x00",
+    ]
+
 
 class SlotSignatureCases:
     """One top-level slot per io-ref notation the compact TOML `# concept: …` comment has to rebuild."""
@@ -466,3 +483,84 @@ class SlotSignatureCases:
             "input_semantics.Thing[2]",
         ),
     ]
+
+
+class CompactSlotCases:
+    """Top-level slots the shared fixture corpus holds no example of, each a slot a method may author.
+
+    The corpus captures no plural native slot at all, and the envelope rule is decided per element:
+    what an input shaper is handed at a plural slot is one element at a time. `native.Date` is the
+    case that makes it visible — the optional `time` beside its required `date` makes its payload an
+    object, which is why a single one keeps its `{concept, content}` envelope.
+    """
+
+    DATE_PAYLOAD: ClassVar[list[InputFormField]] = [
+        DateField(name="date", required=True, datetime=False),
+        TextField(name="time", required=False, format="time"),
+    ]
+
+    ENVELOPE_RETENTION: ClassVar[list[tuple[str, InputFormField, bool]]] = [
+        (
+            "a single object-shaped native keeps its envelope: a bare date object is not re-shapable",
+            ObjectField(name="date_in", concept_ref="native.Date", required=True, presence=PresenceMarker.PLAIN, gating=True, fields=DATE_PAYLOAD),
+            True,
+        ),
+        (
+            "a list of that same native keeps it too — the question is the element's, never the list's",
+            ListField(
+                name="dates_in",
+                concept_ref="native.Date",
+                required=True,
+                presence=PresenceMarker.PLAIN,
+                gating=False,
+                item=ObjectItem(concept_ref="native.Date", required=True, fields=DATE_PAYLOAD),
+            ),
+            True,
+        ),
+        (
+            "a list of an out-of-matrix native keeps it, exactly as the single does",
+            ListField(
+                name="htmls_in",
+                concept_ref="native.Html",
+                required=True,
+                presence=PresenceMarker.PLAIN,
+                gating=False,
+                item=ObjectItem(concept_ref="native.Html", required=True, fields=[TextField(name="inner_html", required=True)]),
+            ),
+            True,
+        ),
+        (
+            "a list of a scalar native does not: a bare URL per element is what a shaper takes back",
+            ListField(
+                name="images_in",
+                concept_ref="native.Image",
+                required=True,
+                presence=PresenceMarker.PLAIN,
+                gating=False,
+                item=ImageItem(concept_ref="native.Image", required=True),
+            ),
+            False,
+        ),
+        (
+            "a list over an authored concept does not: it names no native to be unbuildable as",
+            ListField(
+                name="gadgets_in",
+                concept_ref="probe.Gadget",
+                required=True,
+                presence=PresenceMarker.PLAIN,
+                gating=False,
+                item=ObjectItem(concept_ref="probe.Gadget", required=True, fields=[TextField(name="label", required=True)]),
+            ),
+            False,
+        ),
+    ]
+
+    FIXED_COUNT_SLOT: ClassVar[ListField] = ListField(
+        name="two",
+        concept_ref="probe.Gadget",
+        required=True,
+        presence=PresenceMarker.PLAIN,
+        gating=True,
+        item_count=2,
+        item=ObjectItem(concept_ref="probe.Gadget", required=True, fields=[TextField(name="label", required=True)]),
+    )

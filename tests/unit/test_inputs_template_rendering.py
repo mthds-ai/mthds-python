@@ -5,11 +5,20 @@ the behaviour on a form the capture holds no example of — a pipe that declares
 or the entry point's own contract on the format it is asked for. Those are stated here.
 """
 
+from typing import Any
+
 import pytest
 
 from mthds.protocol.input_form import InputFormField, PipeInputFormDescriptor
-from mthds.protocol.inputs_template import InputsTemplateFormat, format_slot_signature, project_inputs_template, render_inputs_template
-from tests.unit.test_data import SlotSignatureCases
+from mthds.protocol.inputs_template import (
+    ENVELOPE_CONTENT_KEY,
+    InputsTemplateFormat,
+    format_slot_signature,
+    keeps_envelope,
+    project_inputs_template,
+    render_inputs_template,
+)
+from tests.unit.test_data import CompactSlotCases, SlotSignatureCases
 
 EMPTY_DESCRIPTOR = PipeInputFormDescriptor(fields=[])
 
@@ -44,3 +53,26 @@ class TestInputsTemplateRendering:
         # And the case is a slot a real payload could carry: without this, the notation is pinned
         # against field combinations the standard's own parse rejects.
         assert PipeInputFormDescriptor(fields=[field]).fields == [field], topic
+
+    @pytest.mark.parametrize(("topic", "field", "expected"), CompactSlotCases.ENVELOPE_RETENTION)
+    def test_a_plural_slot_keeps_its_envelope_on_the_same_terms_as_the_single_one(self, topic: str, field: InputFormField, expected: bool):
+        # What a shaper is handed at a plural slot is one element at a time, so the envelope question
+        # is the element's. The corpus captures no plural native slot at all, which is why the rule is
+        # stated here: without it `native.Date[]` unwraps to a bare array of the very objects a single
+        # `native.Date` keeps its envelope to avoid, and the template no longer runs.
+        assert keeps_envelope(node=field) is expected, topic
+        compact = project_inputs_template(descriptor=PipeInputFormDescriptor(fields=[field]), explicit=False)
+        assert (ENVELOPE_CONTENT_KEY in compact[field.name]) is expected, topic
+
+    @pytest.mark.parametrize("explicit", [False, True])
+    def test_each_element_of_a_fixed_count_slot_is_its_own_value(self, explicit: bool):
+        # A `Concept[N]` slot renders N elements that are identical in content, and a template is a
+        # thing somebody fills IN: were they one repeated object, typing into the first entry of the
+        # returned mapping would type into every other one.
+        template = project_inputs_template(descriptor=PipeInputFormDescriptor(fields=[CompactSlotCases.FIXED_COUNT_SLOT]), explicit=explicit)
+        slot: Any = template[CompactSlotCases.FIXED_COUNT_SLOT.name]
+        elements: list[dict[str, Any]] = slot[ENVELOPE_CONTENT_KEY] if explicit else slot
+        assert elements[0] == elements[1]
+        assert elements[0] is not elements[1]
+        elements[0]["label"] = "filled in by the caller"
+        assert elements[1]["label"] != elements[0]["label"]

@@ -226,6 +226,12 @@ def keeps_envelope(*, node: InputFormItem) -> bool:
     bare-value arm dispatches a native on its scalar kind, so it rejects the object outright.
     `native.Date` is the second case — it is a scalar a shaper knows, until the optional `time`
     beside its required `date` makes the rendered form an object.
+
+    **A list is decided by its element, on both paths.** What a shaper is handed at a plural slot is
+    one element at a time, so the question is the element's, never the list's. The membership test
+    already reads it — a `list` node's `concept_ref` names the ELEMENT concept — and the kind test
+    has to be asked of the `item` for the same reason, or `native.Date[]` unwraps to a bare array of
+    the very objects a single `native.Date` keeps its envelope to avoid.
     """
     code = native_code(node=node)
     if code is None:
@@ -235,6 +241,8 @@ def keeps_envelope(*, node: InputFormItem) -> bool:
     match node.kind:
         case FieldKind.OBJECT:
             return True
+        case FieldKind.LIST:
+            return keeps_envelope(node=node.item)
         case (
             FieldKind.TEXT
             | FieldKind.PROSE
@@ -244,7 +252,6 @@ def keeps_envelope(*, node: InputFormItem) -> bool:
             | FieldKind.ENUM
             | FieldKind.DOCUMENT
             | FieldKind.IMAGE
-            | FieldKind.LIST
             | FieldKind.UNKNOWN
         ):
             return False
@@ -308,7 +315,12 @@ def _leaf_placeholder(*, node: InputFormItem, name: str) -> Any:
 
 
 def _item_repetitions(*, item_count: int | None) -> int:
-    """How many elements a list renders: its declared count, or one example for a variable list."""
+    """How many elements a list renders: its declared count, or one example for a variable list.
+
+    Each repetition is projected afresh at the three sites that call this, never one value repeated:
+    the elements of a fixed `Concept[N]` slot are identical in content and must be distinct objects,
+    or filling the first entry of the returned `dict` fills every other one with it.
+    """
     if item_count is None:
         return 1
     return item_count
@@ -338,8 +350,7 @@ def project_value(*, node: InputFormItem, name: str) -> Any:
         case FieldKind.OBJECT:
             return {member.name: project_value(node=member, name=member.name) for member in node.fields}
         case FieldKind.LIST:
-            item_value = project_value(node=node.item, name=f"{name}_item")
-            return [item_value for _ in range(_item_repetitions(item_count=node.item_count))]
+            return [project_value(node=node.item, name=f"{name}_item") for _ in range(_item_repetitions(item_count=node.item_count))]
         case FieldKind.UNKNOWN:
             return {}
 
@@ -351,8 +362,7 @@ def _slot_content(*, node: InputFormItem, name: str) -> Any:
         return {content_key: _leaf_placeholder(node=node, name=content_key)}
     match node.kind:
         case FieldKind.LIST:
-            item_content = _slot_content(node=node.item, name=f"{name}_item")
-            return [item_content for _ in range(_item_repetitions(item_count=node.item_count))]
+            return [_slot_content(node=node.item, name=f"{name}_item") for _ in range(_item_repetitions(item_count=node.item_count))]
         case (
             FieldKind.OBJECT
             | FieldKind.UNKNOWN
@@ -386,8 +396,7 @@ def _compact_slot(*, field: InputFormField) -> Any:
         return {ENVELOPE_CONCEPT_KEY: field.concept_ref, ENVELOPE_CONTENT_KEY: _slot_content(node=field, name=field.name)}
     match field.kind:
         case FieldKind.LIST:
-            item_value = _compact_value(node=field.item, name=f"{field.name}_item")
-            return [item_value for _ in range(_item_repetitions(item_count=field.item_count))]
+            return [_compact_value(node=field.item, name=f"{field.name}_item") for _ in range(_item_repetitions(item_count=field.item_count))]
         case (
             FieldKind.OBJECT
             | FieldKind.UNKNOWN

@@ -47,6 +47,15 @@ class TestTomlEmitter:
         with pytest.raises(TomlEmissionError):
             render_inline_layout(template={"slot": value}, comments={})
 
+    @pytest.mark.parametrize("comment_text", TomlEmitterCases.UNSPELLABLE_COMMENTS)
+    def test_a_comment_that_would_not_stay_one_line_is_refused_rather_than_written(self, comment_text: str):
+        # The comment is the one text that reaches the document unquoted, and it is built from the
+        # descriptor's `concept_ref` — an unconstrained string from whatever producer emitted the
+        # artifact. A line terminator in it does not corrupt the comment: it ends it, and what
+        # follows parses as a line of the template in its own right.
+        with pytest.raises(TomlEmissionError):
+            render_inline_layout(template={"slot": "value"}, comments={"slot": comment_text})
+
     @pytest.mark.parametrize(("topic", "template", "expected"), TomlEmitterCases.TABLE_LAYOUT)
     def test_the_table_layout_emits_toml_that_parses_back_to_what_went_in(self, topic: str, template: dict[str, Any], expected: str):
         # The expected bytes are what the twin is held to; that they are also *valid TOML carrying

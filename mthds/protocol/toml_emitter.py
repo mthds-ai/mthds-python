@@ -29,6 +29,13 @@ The rules the table layout follows, which is the part a library would otherwise 
   element always states its header, even when every one of its own members is a table.
 - Exactly one blank line before every header, and none before the first line of the document.
 
+A comment is one line by construction, and the emitter refuses one that is not. It is the only text
+that reaches the document unquoted — every key is spelled as a key and every value as a value — so a
+line terminator inside it would not corrupt the comment but end it, and turn whatever followed into
+live TOML. The comment text is built from `concept_ref`, which the descriptor models carry as an
+unconstrained `str` from whatever producer emitted the artifact, so the emitter states the rule here
+rather than trusting the producer for it.
+
 TOML has no null. A `None` is written as an empty string rather than dropped, so the key stays
 visible to whoever fills the template in — an omitted key reads as a field the method never declared.
 
@@ -65,6 +72,10 @@ _CONTROL_CHARACTERS = frozenset(chr(code_point) for code_point in range(0x20)) |
 _TRUE = "true"
 _FALSE = "false"
 
+# A comment runs to the end of its line and admits no control character but a tab, so these are the
+# characters a comment cannot carry: the line terminators end it, and the rest TOML does not allow.
+_COMMENT_FORBIDDEN_CHARACTERS = _CONTROL_CHARACTERS - {"\t"}
+
 
 class TomlEmissionError(ValueError):
     """A value the emitter has no TOML spelling for reached it.
@@ -94,18 +105,37 @@ def render_inline_layout(*, template: dict[str, Any], comments: dict[str, str]) 
     Args:
         template: The template, one entry per declared input slot, in authored order.
         comments: Per-key comment text, without its leading `# `. A key with no entry takes no
-            comment line.
+            comment line, and one carrying a line terminator or any other control character is
+            refused rather than written into the document.
 
     Returns:
         The TOML text, ending in exactly one newline; the empty string for an empty template.
+
+    Raises:
+        TomlEmissionError: A comment carries a character a TOML comment cannot hold.
     """
     lines: list[str] = []
     for key, value in _substitute_nulls(value=template).items():
         comment_text = comments.get(key)
         if comment_text:
-            lines.append(f"# {comment_text}")
+            lines.append(f"# {_checked_comment(text=comment_text, key=key)}")
         lines.append(f"{_render_key(key=key)} = {_render_inline_value(value=value)}")
     return _join(lines=lines)
+
+
+def _checked_comment(*, text: str, key: str) -> str:
+    """The comment text, refused when it carries a character a TOML comment cannot hold.
+
+    A comment is unquoted and runs to the end of its line, so a line terminator inside it does not
+    corrupt the comment — it ends it, and what follows becomes a line of the document in its own
+    right. Refusing is what the emitter does with a value it has no spelling for, and this is the
+    same fact about the same document.
+    """
+    offending = next((character for character in text if character in _COMMENT_FORBIDDEN_CHARACTERS), None)
+    if offending is not None:
+        msg = f"The comment on key '{key}' carries '\\u{ord(offending):04x}', which a TOML comment cannot hold"
+        raise TomlEmissionError(msg)
+    return text
 
 
 def _join(*, lines: list[str]) -> str:

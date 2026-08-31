@@ -18,7 +18,7 @@ as_json = render_inputs_template(descriptor=descriptor, explicit=True, output_fo
 
 The difference between them is what a runtime's input shaper can take back:
 
-- **compact** (`explicit=False`) — the light form a smart-inputs run accepts directly: a bare string for a text slot, a bare URL for a file-ish one, the content mapping for a structured one. A slot whose bare value the shaper could *not* rebuild keeps its `{concept, content}` envelope, because a template that does not run is not a template.
+- **compact** (`explicit=False`) — the light form a smart-inputs run accepts directly: a bare string for a text slot, a bare URL for a file-ish one, the content mapping for a structured one. A slot whose bare value the shaper could *not* rebuild keeps its `{concept, content}` envelope, because a template that does not run is not a template. **A plural slot is decided by its element**, since what a shaper is handed at one is a single element at a time: `native.Date[]` keeps the envelope for the same reason a single `native.Date` does, and `native.Image[]` drops it for the same reason a single `native.Image` does.
 - **explicit** (`explicit=True`) — every slot keeps the ceremonial `{concept, content}` envelope, whatever it holds.
 
 In TOML the compact shape carries a `# concept: …` line above each key, in io-ref notation — `native.Text`, `native.Text!`, `native.Text?`, `legal.Clause[]`, `legal.Clause[2]`. That notation is rebuilt from the descriptor alone by `format_slot_signature`, from the concept reference, the `list` node's own `item_count` and the authored presence marker; JSON has no comments, which is one reason the explicit shape stays around.
@@ -45,7 +45,8 @@ TOML is the half where that is not free, so the TOML text comes from `mthds.prot
 - a table whose members are **all** tables states no header of its own, and its children carry the whole dotted path (`[page_in.content.text_and_images]`); an empty table is not one of those, since it has no child to carry its path;
 - a non-empty list of mappings is an array of tables, one `[[dotted.path]]` header per element, and an element always states its header;
 - exactly one blank line before every header, and none before the first line of the document;
-- TOML has no null, so a `None` becomes an empty string rather than being dropped — the key stays visible to whoever is filling the template in.
+- TOML has no null, so a `None` becomes an empty string rather than being dropped — the key stays visible to whoever is filling the template in;
+- a comment is one line, and one that carries a line terminator (or any other control character) is refused rather than written — a comment is the only text that reaches the document unquoted, so a newline inside it would not corrupt the comment but *end* it, turning whatever followed into a live key of the template. The text is built from `concept_ref`, which the descriptor models carry as an unconstrained `str` from whatever producer emitted the artifact.
 
 `tests/unit/test_toml_emitter.py` states each of those rules as bytes, on its own, so the rule that broke is named by the test that failed — and so the TypeScript twin has an executable statement of the contract rather than a paragraph of prose.
 
