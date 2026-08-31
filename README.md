@@ -19,6 +19,7 @@ pip install mthds
 - **Package management** (`mthds.package`) — read, lock, and resolve `METHODS.toml` manifests.
 
 See [docs/runners.md](./docs/runners.md) for the protocol + runners reference.
+See [docs/inputs-template.md](./docs/inputs-template.md) for the inputs-template projection.
 
 ## Quick start
 

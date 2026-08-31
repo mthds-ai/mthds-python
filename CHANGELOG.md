@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.12.0] - 2026-09-01
+
+### Added
+
+- **Client-side inputs-template projection** — Added `mthds.protocol.inputs_template`, which generates a fill-in inputs template directly from a pipe's input-form descriptor, letting clients offer templates for methods not on disk (e.g., via `method_ref` or `method_id`) without a server round-trip. It renders in both **compact** (lightweight, for smart-inputs) and **explicit** (`{concept, content}` envelopes) shapes, outputs JSON and TOML, and walks the descriptor rather than runtime content classes (enums take the first choice, fixed `Concept[N]` slots render exactly N elements). Ships with `docs/inputs-template.md` and unit suites (`test_inputs_template_projection.py`, `test_inputs_template_rendering.py`).
+- **Deterministic TOML emitter** — Added `mthds.protocol.toml_emitter`, a custom serializer guaranteeing byte-for-byte identical output—including `# concept:` comments and blank-line layout—with the TypeScript twin in the `mthds` npm package, which standard TOML libraries cannot ensure. Covered by `test_toml_emitter.py`.
+- **Shared projection fixture corpus** — Added a cross-language fixture corpus (`tests/fixtures/protocol/inputs_template/`) with a `manifest.json` that enforces strict byte parity between the Python and TypeScript projections, ensures full coverage of the closed `FieldKind` vocabulary, tracks deliberate divergences from the reference engine's renderer, and maintains an `unshapeable` record of templates the runtime's input shaper currently refuses.
+
+### Changed
+
+- Updated `README.md` and `docs/runners.md` to reference the new client-side inputs-template projection.
+
 ## [v0.11.1] - 2026-08-28
 
 ### Fixed

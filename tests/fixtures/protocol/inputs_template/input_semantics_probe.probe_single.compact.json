@@ -1,0 +1,55 @@
+{
+  "widget": {
+    "shorthand_note": "shorthand_note_value",
+    "title": "title_value",
+    "subtitle": "subtitle_value",
+    "summary": "summary_value",
+    "motto": "motto_value",
+    "count": 0,
+    "enabled": false,
+    "price": 0.0,
+    "released_on": "2026-01-01",
+    "launched_at": "2026-01-01T12:00:00",
+    "daily_at": "12:00:00",
+    "tags": [
+      "tags_item_value"
+    ],
+    "ratings": [
+      0
+    ],
+    "matrix": [
+      {}
+    ],
+    "gadgets": [
+      {
+        "name": "name_value",
+        "trinket": {
+          "label": "label_value"
+        }
+      }
+    ],
+    "attributes": {},
+    "scores": {},
+    "milestones": {},
+    "main_gadget": {
+      "name": "name_value",
+      "trinket": {
+        "label": "label_value"
+      }
+    },
+    "icon": {
+      "url": "https://mock.invalid/url"
+    },
+    "tone": "PROBE_choice_formal",
+    "only_choice": "PROBE_choice_single",
+    "typed_choice": "PROBE_choice_typed_a",
+    "constrained_count": 0
+  },
+  "gadget_q": {
+    "name": "name_value",
+    "trinket": {
+      "label": "label_value"
+    }
+  },
+  "note": "text_value"
+}

@@ -1,0 +1,32 @@
+{
+  "bookmark": {
+    "concept": "input_semantics_scaffold.Bookmark",
+    "content": {
+      "url": "url_value",
+      "homepage_url": "homepage_url_value",
+      "label": "label_value",
+      "shelf_note": "shelf_note_value"
+    }
+  },
+  "dossier": {
+    "concept": "input_semantics_scaffold.Dossier",
+    "content": {
+      "title": "title_value",
+      "stamp": {
+        "url": "https://mock.invalid/url"
+      },
+      "cover": {
+        "url": "https://mock.invalid/url"
+      },
+      "attachment": {
+        "url": "https://mock.invalid/url"
+      },
+      "bookmark": {
+        "url": "url_value",
+        "homepage_url": "homepage_url_value",
+        "label": "label_value",
+        "shelf_note": "shelf_note_value"
+      }
+    }
+  }
+}
