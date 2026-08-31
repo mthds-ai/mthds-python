@@ -1,0 +1,5 @@
+[note]
+concept = "native.Text"
+
+[note.content]
+text = "text_value"
