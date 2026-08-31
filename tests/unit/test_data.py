@@ -2,6 +2,9 @@
 
 from typing import Any, ClassVar
 
+from mthds.protocol.input_form import InputFormField, ListField, TextField, TextItem
+from mthds.protocol.pipe_io_contracts import PresenceMarker
+
 
 class ExecuteWireResponses:
     """Captured `/v1/execute` 200 bodies in the wire forms a compliant runner may return."""
@@ -327,3 +330,139 @@ class PipeIOContractWireNodes:
     # Accepted.
     ENTRY_WITHOUT_DECLARED_INPUTS: ClassVar[dict[str, Any]] = {"inputs": {}, "output": _OUTPUT}
     OUTPUT_SINGLE_OPTIONAL: ClassVar[dict[str, Any]] = {"concept_ref": "legal.Clause", "multiplicity": "single", "item_count": None, "optional": True}
+
+
+class TomlEmitterCases:
+    """One case per rule the deterministic TOML emitter states, as `(topic, input…, expected bytes)`."""
+
+    TABLE_LAYOUT: ClassVar[list[tuple[str, dict[str, Any], str]]] = [
+        (
+            "scalars come before tables, each half in authored order, one blank line before every header",
+            {"alpha": "a", "obj": {"beta": 1, "nested": {"gamma": True}}, "zeta": 2},
+            'alpha = "a"\nzeta = 2\n\n[obj]\nbeta = 1\n\n[obj.nested]\ngamma = true\n',
+        ),
+        (
+            "a table whose members are all tables states no header: its children carry the dotted path",
+            {"outer": {"inner": {"leaf": 1}}},
+            "[outer.inner]\nleaf = 1\n",
+        ),
+        (
+            "an empty table is not a super table — it has no child to carry its path, so it states its header",
+            {"first": {"alpha": 1}, "empty": {}},
+            "[first]\nalpha = 1\n\n[empty]\n",
+        ),
+        (
+            "a non-empty list of mappings is an array of tables: one header per element",
+            {"items": [{"alpha": 1}, {"alpha": 2}]},
+            "[[items]]\nalpha = 1\n\n[[items]]\nalpha = 2\n",
+        ),
+        (
+            (
+                "an array-of-tables element always states its header, even with nothing but tables inside — "
+                "and takes its blank line, where tomlkit, which rendered the corpus, omits it (L-260831-4031a7)"
+            ),
+            {"outer": [{"inner": {"leaf": 1}}]},
+            "[[outer]]\n\n[outer.inner]\nleaf = 1\n",
+        ),
+        (
+            "a list of scalars, an empty list and a mixed list are inline arrays, not arrays of tables",
+            {"tags": ["one", "two"], "none": [], "mixed": [{"alpha": 1}, 2]},
+            'tags = ["one", "two"]\nnone = []\nmixed = [{alpha = 1}, 2]\n',
+        ),
+        (
+            "TOML has no null: a None keeps its key and takes an empty string, at every depth",
+            {"missing": None, "obj": {"also": None}},
+            'missing = ""\n\n[obj]\nalso = ""\n',
+        ),
+        (
+            "a key TOML cannot spell bare is quoted, in a header path as much as on a line",
+            {"a.b": 1, "with space": {"": 2}, "ok-1": 3},
+            '"a.b" = 1\nok-1 = 3\n\n["with space"]\n"" = 2\n',
+        ),
+        (
+            "a basic string takes the compact escapes, and any other control character its code point",
+            {"text": 'quote " slash \\ break \n tab \t control \x01 accent é'},
+            'text = "quote \\" slash \\\\ break \\n tab \\t control \\u0001 accent é"\n',
+        ),
+        (
+            "numbers and booleans keep their own spelling: an integer bare, a float with its point",
+            {"count": 0, "price": 0.0, "ratio": 1.5, "negative": -7, "enabled": False, "disabled": True},
+            "count = 0\nprice = 0.0\nratio = 1.5\nnegative = -7\nenabled = false\ndisabled = true\n",
+        ),
+    ]
+
+    INLINE_LAYOUT: ClassVar[list[tuple[str, dict[str, Any], dict[str, str], str]]] = [
+        (
+            "every value stays at the top level, and a key with a comment takes it on the line above",
+            {"note": "text_value", "widget": {"label": "x"}},
+            {"note": "concept: native.Text"},
+            '# concept: native.Text\nnote = "text_value"\nwidget = {label = "x"}\n',
+        ),
+        (
+            "structure nests as inline tables and inline arrays, however deep, and empty ones stay visible",
+            {"deep": {"inner": {"items": [{}, {"alpha": 1}]}}, "empty": {}},
+            {},
+            "deep = {inner = {items = [{}, {alpha = 1}]}}\nempty = {}\n",
+        ),
+        (
+            "a comment for a key the template does not hold is ignored, and an empty one takes no line",
+            {"alpha": 1},
+            {"alpha": "", "beta": "concept: never.Rendered"},
+            "alpha = 1\n",
+        ),
+        (
+            "authored order is what survives — the reason a compact template is laid out inline at all",
+            {"structured": {"alpha": 1}, "scalar": "z"},
+            {},
+            'structured = {alpha = 1}\nscalar = "z"\n',
+        ),
+    ]
+
+    UNSPELLABLE_VALUES: ClassVar[list[Any]] = [object(), {1, 2}, b"bytes"]
+
+
+class SlotSignatureCases:
+    """One top-level slot per io-ref notation the compact TOML `# concept: …` comment has to rebuild."""
+
+    SIGNATURES: ClassVar[list[tuple[str, InputFormField, str]]] = [
+        (
+            "an unmarked single slot is its bare concept reference",
+            TextField(name="note", concept_ref="native.Text", required=True, presence=PresenceMarker.PLAIN, gating=True),
+            "native.Text",
+        ),
+        (
+            "the force assertion is kept, not flattened into the plain marker it requires the same of",
+            TextField(name="forced", concept_ref="native.Text", required=True, presence=PresenceMarker.FORCE, gating=True),
+            "native.Text!",
+        ),
+        (
+            "an optional slot carries its marker, and never gates",
+            TextField(name="maybe", concept_ref="native.Text", required=False, presence=PresenceMarker.OPTIONAL, gating=False),
+            "native.Text?",
+        ),
+        (
+            "a variable-length list takes empty brackets — the element concept is what is named",
+            ListField(
+                name="many",
+                concept_ref="input_semantics.Thing",
+                required=True,
+                presence=PresenceMarker.PLAIN,
+                gating=False,
+                item=TextItem(concept_ref="input_semantics.Thing", required=True),
+            ),
+            "input_semantics.Thing[]",
+        ),
+        (
+            "a fixed-count list states its count, which is the count the projection renders",
+            ListField(
+                name="two",
+                concept_ref="input_semantics.Thing",
+                required=True,
+                presence=PresenceMarker.PLAIN,
+                gating=True,
+                item=TextItem(concept_ref="input_semantics.Thing", required=True),
+                item_count=2,
+            ),
+            "input_semantics.Thing[2]",
+        ),
+    ]
