@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **The projection fixture corpus covers the natives whose payload shape the descriptor states openly.** A new capture from `pipelex` `dev` adds `input_semantics_scaffold.scaffold_open_natives`, a pipe putting `native.JSON`, `native.Dynamic` and `native.Composite` each at a slot position — the one place the corpus never reached. `Dynamic` and `Composite` are structureless by design, so their node is `unknown` and both renderers agree on the empty mapping; `JSON` is not, because its pinned blueprint carries a required `json_obj`, which makes the dict inside it the corpus's first **required** unknown node. That position is what the capture declares as a new divergence class, `unknown-empty-object`: the projection renders the empty object, because the descriptor withholds the payload shape there and inventing one would stop it projecting the descriptor, while the reference engine reflects the runtime content class and fills the dict with a sample key/value pair whoever fills the template in has to delete. The empty object round-trips through the input shaper cleanly, so the class records a difference of vantage rather than a defect and carries no ledger item. `input_form.json`, `pipe_io_contracts.json` and `inputs_template/manifest.json` move with it, and `mthds-js` commits the identical bytes.
+
 ## [v0.12.0] - 2026-09-01
 
 ### Added

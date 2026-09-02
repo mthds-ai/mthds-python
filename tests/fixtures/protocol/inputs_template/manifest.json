@@ -11,7 +11,8 @@
     "input_semantics_probe.probe_refined",
     "input_semantics_probe.probe_single",
     "input_semantics_scaffold.scaffold_fixed_batch",
-    "input_semantics_scaffold.scaffold_nesting"
+    "input_semantics_scaffold.scaffold_nesting",
+    "input_semantics_scaffold.scaffold_open_natives"
   ],
   "shapes": [
     "compact",
@@ -278,6 +279,32 @@
           "path": "bookmarks.0.url",
           "engine": "https://mock.invalid/url",
           "expected": "url_value"
+        }
+      ]
+    },
+    {
+      "divergence_id": "unknown-empty-object",
+      "reason": "An unknown node renders as the empty object, because the descriptor withholds the payload shape at that position and a projection that invented one would stop projecting the descriptor. The engine reflects the runtime content class instead and fills a required dict with a sample key/value pair whoever fills the template in has to delete. The empty object is re-shapable: the round-trip takes it back.",
+      "ledger_item": null,
+      "occurrences": 2,
+      "examples": [
+        {
+          "pipe_ref": "input_semantics_scaffold.scaffold_open_natives",
+          "shape": "compact",
+          "path": "json_in.content.json_obj",
+          "engine": {
+            "json_obj_key": "json_obj_value"
+          },
+          "expected": {}
+        },
+        {
+          "pipe_ref": "input_semantics_scaffold.scaffold_open_natives",
+          "shape": "explicit",
+          "path": "json_in.content.json_obj",
+          "engine": {
+            "json_obj_key": "json_obj_value"
+          },
+          "expected": {}
         }
       ]
     }

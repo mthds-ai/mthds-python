@@ -36,6 +36,7 @@ The expectation is not the engine's output. It is authored by a reference projec
 - `fixed-count-honoured` — a `Concept[N]` slot renders N elements; the engine emits one, which the runtime's own input shaper then rejects, so its template does not run.
 - `text-named-url` — a text field merely **named** `url` takes a text placeholder; the engine picks a placeholder by field name.
 - `object-native-keeps-envelope` — a native that renders as an object once its optional field is included keeps its `{concept, content}` envelope, because the shaper dispatches a native's bare value on its scalar kind and would reject the bare object. The engine unwraps to a scalar, which it can only do because it drops the optional field. A consequence of the first entry.
+- `unknown-empty-object` — an `unknown` node renders as the empty object, because the descriptor withholds the payload shape at that position and a projection that invented one would have stopped projecting the descriptor. The engine reflects the runtime content class instead and fills a required dict with a sample key/value pair whoever fills the template in then has to delete. The empty object round-trips through the shaper cleanly, so leaving it empty costs nothing.
 
 Each entry carries the workspace-ledger item tracking the engine fix, or `null` where the difference is one of vantage rather than a defect — the file-leaf entry is the descriptor's vantage, and the object-native one is a consequence of the optional-field entry rather than its own bug.
 

@@ -1444,5 +1444,44 @@
         }
       }
     ]
+  },
+  "input_semantics_scaffold.scaffold_open_natives": {
+    "fields": [
+      {
+        "kind": "object",
+        "name": "json_in",
+        "concept_ref": "native.JSON",
+        "description": "A JSON object",
+        "required": true,
+        "presence": "plain",
+        "gating": true,
+        "fields": [
+          {
+            "kind": "unknown",
+            "name": "json_obj",
+            "description": "The JSON object",
+            "required": true
+          }
+        ]
+      },
+      {
+        "kind": "unknown",
+        "name": "dynamic_in",
+        "concept_ref": "native.Dynamic",
+        "description": "A dynamic concept",
+        "required": true,
+        "presence": "plain",
+        "gating": true
+      },
+      {
+        "kind": "unknown",
+        "name": "composite_in",
+        "concept_ref": "native.Composite",
+        "description": "A named composition of contents",
+        "required": true,
+        "presence": "plain",
+        "gating": true
+      }
+    ]
   }
 }
