@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **The projection fixture corpus covers the natives whose payload shape the descriptor states openly.** A new capture from `pipelex` `dev` adds `input_semantics_scaffold.scaffold_open_natives`, a pipe putting `native.JSON`, `native.Dynamic` and `native.Composite` each at a slot position — the one place the corpus never reached. `Dynamic` and `Composite` are structureless by design, so their node is `unknown` and both renderers agree on the empty mapping; `JSON` is not, because its pinned blueprint carries a required `json_obj`, which puts an unknown node at a **required object-field** position for the first time in the corpus — the required unknown nodes it already held sit at list-item positions, where no divergence was declared. That position is what the capture declares as a new divergence class, `unknown-empty-object`: the projection renders the empty object, because the descriptor withholds the payload shape there and inventing one would stop it projecting the descriptor, while the reference engine reflects the runtime content class and fills the dict with a sample key/value pair whoever fills the template in has to delete. The empty object round-trips through the input shaper cleanly, so the class records a difference of vantage rather than a defect and carries no ledger item. `input_form.json`, `pipe_io_contracts.json` and `inputs_template/manifest.json` move with it, and `mthds-js` commits the identical bytes.
+
+- **The corpus suite notices a capture that arrives half-formed.** Two properties the record always had were never asserted, so either could break with the suite still green. The README beside the corpus explains each divergence class in prose, and that was the half nothing enforced: the manifest is checked hard, so a class that stops occurring has to be retired deliberately, but a retired class could leave its bullet behind describing a difference that no longer exists — and the suite, parametrised over the manifest's own list, would simply shrink rather than fail. `test_inputs_template_projection.py` now holds the README's bullet list to the manifest's declarations in both directions, the twin of the check `mthds-js` carries. It also asserts that `input_form.json` and `pipe_io_contracts.json` name the same pipes: they are one capture taken in one command, but nothing outside the contracts file's own parse test read it, so one half could lose a pipe the other still held.
+
 ## [v0.12.0] - 2026-09-01
 
 ### Added

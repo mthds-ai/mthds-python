@@ -3387,5 +3387,62 @@
       "item_count": null,
       "optional": false
     }
+  },
+  "input_semantics_scaffold.scaffold_open_natives": {
+    "inputs": {
+      "json_in": {
+        "concept_ref": "native.JSON",
+        "presence": "plain",
+        "multiplicity": "single",
+        "item_count": null,
+        "json_schema": {
+          "properties": {
+            "json_obj": {
+              "additionalProperties": true,
+              "description": "The JSON object",
+              "title": "Json Obj",
+              "type": "object"
+            }
+          },
+          "required": [
+            "json_obj"
+          ],
+          "title": "native.JSON",
+          "type": "object",
+          "description": "A JSON object"
+        }
+      },
+      "dynamic_in": {
+        "concept_ref": "native.Dynamic",
+        "presence": "plain",
+        "multiplicity": "single",
+        "item_count": null,
+        "json_schema": {
+          "properties": {},
+          "title": "native.Dynamic",
+          "type": "object",
+          "description": "A dynamic concept"
+        }
+      },
+      "composite_in": {
+        "concept_ref": "native.Composite",
+        "presence": "plain",
+        "multiplicity": "single",
+        "item_count": null,
+        "json_schema": {
+          "additionalProperties": true,
+          "description": "A named composition of contents",
+          "properties": {},
+          "title": "native.Composite",
+          "type": "object"
+        }
+      }
+    },
+    "output": {
+      "concept_ref": "native.Text",
+      "multiplicity": "single",
+      "item_count": null,
+      "optional": false
+    }
   }
 }
