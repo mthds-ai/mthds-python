@@ -51,6 +51,7 @@ _PROJECTION_ITEM = "L-260830-e7c5b5"
 
 _MANIFEST: dict[str, Any] = json.loads((_TEMPLATES_DIR / _MANIFEST_FILE_NAME).read_text(encoding="utf-8"))
 _INPUT_FORM: dict[str, Any] = json.loads((_CORPUS_DIR / "input_form.json").read_text(encoding="utf-8"))
+_PIPE_IO_CONTRACTS: dict[str, Any] = json.loads((_CORPUS_DIR / "pipe_io_contracts.json").read_text(encoding="utf-8"))
 
 # The axes are read from the manifest but not trusted from it. Every case below is a product of
 # these two lists, so a regeneration that dropped a shape or a format would quietly shrink the suite
@@ -64,6 +65,9 @@ _SHAPES: list[str] = _MANIFEST["shapes"]
 _FORMATS: list[str] = _MANIFEST["formats"]
 _DIVERGENCES: list[dict[str, Any]] = _MANIFEST["divergences"]
 _UNSHAPEABLE: list[dict[str, Any]] = _MANIFEST["unshapeable"]
+
+# One bullet of the README's divergence list: the id in backticks, then the em dash its prose follows.
+_README_DIVERGENCE_BULLET = re.compile(r"^- `([a-z0-9-]+)` — ", re.MULTILINE)
 
 # A workspace-ledger id, the form every entry must name its tracking gap in.
 _LEDGER_ITEM_PATTERN = re.compile(r"^L-\d{6}-[0-9a-f]{6}$")
@@ -139,6 +143,12 @@ class TestTheCorpus:
     def test_it_describes_exactly_the_pipes_the_descriptor_capture_holds(self):
         assert set(_PIPE_REFS) == set(_INPUT_FORM)
 
+    def test_the_two_payload_files_name_the_same_pipes(self):
+        # `input_form.json` and `pipe_io_contracts.json` are one capture taken in one command, so a
+        # pipe present in either must be present in both. Nothing else here reads the contracts file,
+        # which is what let one half lose a pipe with the whole suite still green.
+        assert set(_PIPE_IO_CONTRACTS) == set(_INPUT_FORM)
+
     @pytest.mark.parametrize(("pipe_ref", "shape", "file_format"), _CASES)
     def test_no_template_is_empty(self, pipe_ref: str, shape: str, file_format: str):
         assert _read_template(pipe_ref=pipe_ref, shape=shape, file_format=file_format).strip()
@@ -149,6 +159,17 @@ class TestDeclaredDivergences:
 
     def test_at_least_one_is_declared(self):
         assert _DIVERGENCES
+
+    def test_every_declared_class_is_documented_in_the_readme_and_no_other(self):
+        # The README beside the corpus explains each class in prose, and that is the half of the record
+        # nothing enforced: the manifest is checked hard, so a class that stops occurring has to be
+        # retired deliberately, but a retired class could leave its bullet behind describing a difference
+        # that no longer exists — and the suite, parametrised over the manifest's own list, would simply
+        # shrink rather than fail. The equality runs both ways, so neither half can move alone.
+        readme = (_CORPUS_DIR / "README.md").read_text(encoding="utf-8")
+        documented = set(_README_DIVERGENCE_BULLET.findall(readme))
+        declared = {str(divergence["divergence_id"]) for divergence in _DIVERGENCES}
+        assert documented == declared
 
     @pytest.mark.parametrize("divergence", _DIVERGENCES, ids=lambda divergence: str(divergence["divergence_id"]))
     def test_a_divergence_states_why_it_exists_and_where(self, divergence: dict[str, Any]):
