@@ -138,13 +138,14 @@ class TestPipeIOContractsProtocolModels:
     @pytest.mark.parametrize(
         "node",
         [
-            pytest.param(PipeIOContractWireNodes.OUTPUT_UNKNOWN_MEMBER, id="schema on an output"),
+            pytest.param(PipeIOContractWireNodes.OUTPUT_UNKNOWN_MEMBER, id="presence on an output"),
+            pytest.param(PipeIOContractWireNodes.OUTPUT_WITHOUT_SCHEMA, id="output without a payload schema"),
             pytest.param(PipeIOContractWireNodes.OUTPUT_FIXED_WITHOUT_COUNT, id="fixed without a count"),
             pytest.param(PipeIOContractWireNodes.OUTPUT_FIXED_OPTIONAL, id="fixed marked optional"),
         ],
     )
     def test_output_contract_is_a_closed_shape(self, node: dict[str, Any]) -> None:
-        """An output carries no schema, obeys the same item-count pair rule as an input, and is plural or optional but never both."""
+        """An output states its payload schema, carries no input-slot member, and is plural or optional but never both."""
         with pytest.raises(ValidationError):
             PipeOutputContract.model_validate(node)
 

@@ -271,7 +271,13 @@ class PipeIOContractWireNodes:
     """Hand-written contract entries probing the closed shapes of `mthds.protocol.pipe_io_contracts`."""
 
     _TEXT_SCHEMA: ClassVar[dict[str, Any]] = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
-    _OUTPUT: ClassVar[dict[str, Any]] = {"concept_ref": "legal.Summary", "multiplicity": "single", "item_count": None, "optional": False}
+    _OUTPUT: ClassVar[dict[str, Any]] = {
+        "concept_ref": "legal.Summary",
+        "multiplicity": "single",
+        "item_count": None,
+        "optional": False,
+        "json_schema": _TEXT_SCHEMA,
+    }
 
     # Rejected at the parse.
     INPUT_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {
@@ -330,15 +336,35 @@ class PipeIOContractWireNodes:
         "item_count": 3,
         "json_schema": {"type": "array", "items": _TEXT_SCHEMA, "minItems": 3, "maxItems": 3},
     }
-    OUTPUT_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {**_OUTPUT, "json_schema": _TEXT_SCHEMA}
+    OUTPUT_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {**_OUTPUT, "presence": "plain"}
+    """`presence` on an output. The marker is an INPUT-slot fact — `!` may not appear on an output
+    and `?` is what `optional` states — so this is the member the output shape most plausibly grows
+    by mistake, which is why it is the one the closed-shape case uses."""
+
+    OUTPUT_WITHOUT_SCHEMA: ClassVar[dict[str, Any]] = {k: v for k, v in _OUTPUT.items() if k != "json_schema"}
+    """An output stating no payload schema. Omitted members fail the parse like unknown ones do:
+    the schema is required precisely so a consumer never has to infer a payload's shape from the
+    payload."""
     OUTPUT_FIXED_WITHOUT_COUNT: ClassVar[dict[str, Any]] = {**_OUTPUT, "multiplicity": "fixed"}
-    OUTPUT_FIXED_OPTIONAL: ClassVar[dict[str, Any]] = {"concept_ref": "legal.Clause", "multiplicity": "fixed", "item_count": 3, "optional": True}
+    OUTPUT_FIXED_OPTIONAL: ClassVar[dict[str, Any]] = {
+        "concept_ref": "legal.Clause",
+        "multiplicity": "fixed",
+        "item_count": 3,
+        "optional": True,
+        "json_schema": _TEXT_SCHEMA,
+    }
     ENTRY_WITHOUT_INPUTS: ClassVar[dict[str, Any]] = {"output": _OUTPUT}
     ENTRY_UNKNOWN_MEMBER: ClassVar[dict[str, Any]] = {"inputs": {}, "output": _OUTPUT, "description": "Summarize a contract"}
 
     # Accepted.
     ENTRY_WITHOUT_DECLARED_INPUTS: ClassVar[dict[str, Any]] = {"inputs": {}, "output": _OUTPUT}
-    OUTPUT_SINGLE_OPTIONAL: ClassVar[dict[str, Any]] = {"concept_ref": "legal.Clause", "multiplicity": "single", "item_count": None, "optional": True}
+    OUTPUT_SINGLE_OPTIONAL: ClassVar[dict[str, Any]] = {
+        "concept_ref": "legal.Clause",
+        "multiplicity": "single",
+        "item_count": None,
+        "optional": True,
+        "json_schema": _TEXT_SCHEMA,
+    }
 
 
 class TomlEmitterCases:

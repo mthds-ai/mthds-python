@@ -2,10 +2,18 @@
   "bundles": [
     "hinted_bundle.mthds",
     "probe_bundle.mthds",
-    "scaffold_bundle.mthds"
+    "scaffold_bundle.mthds",
+    "output_bundle.mthds"
   ],
   "pipes": [
     "input_semantics_hinted.hinted_slots",
+    "input_semantics_output.output_fixed_plural",
+    "input_semantics_output.output_native_image",
+    "input_semantics_output.output_native_text",
+    "input_semantics_output.output_nested",
+    "input_semantics_output.output_optional",
+    "input_semantics_output.output_plural",
+    "input_semantics_output.output_structured",
     "input_semantics_probe.probe_markers",
     "input_semantics_probe.probe_native_inputs",
     "input_semantics_probe.probe_refined",
