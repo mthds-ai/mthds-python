@@ -1,0 +1,14 @@
+[json_in]
+concept = "native.JSON"
+
+[json_in.content.json_obj]
+
+[dynamic_in]
+concept = "native.Dynamic"
+
+[dynamic_in.content]
+
+[composite_in]
+concept = "native.Composite"
+
+[composite_in.content]

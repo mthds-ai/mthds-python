@@ -1,0 +1,5 @@
+[subject]
+concept = "native.Text"
+
+[subject.content]
+text = "text_value"

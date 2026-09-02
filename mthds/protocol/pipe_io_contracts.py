@@ -7,8 +7,15 @@
 A pipe I/O contract states, for one pipe, exactly what a caller must supply and what the
 pipe resolves to: for each declared input, the concept it expects, its authored presence
 marker, how many items it takes and the JSON Schema its content must satisfy; for the
-output, the concept it produces and how many items that is. It is a projection of the
-resolved library, not a second declaration of it.
+output, the concept it produces, how many items that is, whether it may be absent, and the
+JSON Schema of the payload it resolves to. It is a projection of the resolved library, not
+a second declaration of it.
+
+The two schemas answer different questions, and conflating them is the one mistake this
+artifact invites. An input's `json_schema` describes what a caller **sends**, so a plural
+slot's is a bare array. An output's describes what **comes back**, which is the concept's
+content model, so a plural output's is that model's list envelope rather than a bare array.
+Both are declared facts, knowable before any run happens; neither is the run's result.
 
 The artifact is a **recommended extension field** of the `POST /validate` valid report,
 where it rides the field name `pipe_io_contracts` (`ValidationReport.model_extra`). It is
@@ -150,13 +157,22 @@ class PipeInputContract(BaseModel):
 
 
 class PipeOutputContract(BaseModel):
-    """What the pipe resolves to: the concept it produces, how many items that is, and whether it may be absent.
+    """What the pipe resolves to: the concept it produces, how many items that is, whether it may be absent, and the shape of its payload.
 
-    Deliberately asymmetric with the input side: an output carries a two-valued `optional` where
-    an input carries a three-valued `presence`, because `!` MUST NOT appear on an output — a force
-    marker is a use-site assertion about an input, so a three-valued output slot would have an arm
-    nothing can ever produce. No output member carries a schema: the payload a run produces is the
-    run's own result. Closed shape (`extra="forbid"`).
+    Deliberately asymmetric with the input side in exactly one place, and no longer in a second.
+    An output carries a two-valued `optional` where an input carries a three-valued `presence`,
+    because `!` MUST NOT appear on an output — a force marker is a use-site assertion about an
+    input, so a three-valued output slot would have an arm nothing can ever produce. That
+    asymmetry is a language fact and it stays.
+
+    The schema asymmetry was not. An output used to carry none, on the reasoning that "the payload
+    a run produces is the run's own result" — which answers *what did this run produce?*, correctly
+    not a contract's business, rather than the question a consumer actually asks: *what shape will
+    it be?* That is declared in the `.mthds` source and knowable before any run happens, exactly as
+    it is on the input side. Withholding it left every consumer inferring a payload's shape by
+    inspecting it, which is guessing at the standard rather than reading it.
+
+    Closed shape (`extra="forbid"`).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -173,6 +189,24 @@ class PipeOutputContract(BaseModel):
     """`True` when the output is declared optional (`?`): a **successful** run may leave it absent —
     a recorded absence instead of a value — not that the run may fail. Never `True` on a plural output:
     `?` may not be combined with multiplicity, and an absent plural is the empty list."""
+
+    json_schema: dict[str, Any]
+    """The JSON Schema of the payload the pipe resolves to — the concept's CONTENT MODEL, not a
+    caller's argument, which is where this member's rule departs from its input twin.
+
+    A `native.Text` output resolves to that concept's content model, so its schema is the object
+    declaring `text`; a `Concept[]` output resolves to the list content model, so its schema is the
+    object declaring the element array. Stating a bare array here — the input side's plural rule —
+    would describe a payload no runtime produces.
+
+    Two rules and nothing else. On the fixed arm the element array carries `minItems` and `maxItems`
+    equal to `item_count`. And `optional: true` already states that the output may be absent, so the
+    schema describes the shape **when present** — never a null arm.
+
+    Read together with the output-form descriptor (`mthds.protocol.output_form`), which states the
+    node's `kind`: neither is sufficient alone. The descriptor says what the field IS, the schema
+    names the property its payload sits under, and a renderer that has one but not the other is back
+    to inferring the other from the value."""
 
     @model_validator(mode="after")
     def validate_item_count_pairing(self) -> Self:

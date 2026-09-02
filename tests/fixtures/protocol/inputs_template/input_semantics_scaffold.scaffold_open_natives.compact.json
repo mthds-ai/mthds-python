@@ -1,0 +1,16 @@
+{
+  "json_in": {
+    "concept": "native.JSON",
+    "content": {
+      "json_obj": {}
+    }
+  },
+  "dynamic_in": {
+    "concept": "native.Dynamic",
+    "content": {}
+  },
+  "composite_in": {
+    "concept": "native.Composite",
+    "content": {}
+  }
+}

@@ -1,0 +1,281 @@
+{
+  "input_semantics_hinted.hinted_slots": {
+    "field": {
+      "kind": "prose",
+      "name": "output",
+      "concept_ref": "native.Text",
+      "description": "A text",
+      "required": true
+    }
+  },
+  "input_semantics_probe.probe_single": {
+    "field": {
+      "kind": "prose",
+      "name": "output",
+      "concept_ref": "native.Text",
+      "description": "A text",
+      "required": true
+    }
+  },
+  "input_semantics_probe.probe_native_inputs": {
+    "field": {
+      "kind": "prose",
+      "name": "output",
+      "concept_ref": "native.Text",
+      "description": "A text",
+      "required": true
+    }
+  },
+  "input_semantics_probe.probe_markers": {
+    "field": {
+      "kind": "prose",
+      "name": "output",
+      "concept_ref": "native.Text",
+      "description": "A text",
+      "required": true
+    }
+  },
+  "input_semantics_probe.probe_refined": {
+    "field": {
+      "kind": "prose",
+      "name": "output",
+      "concept_ref": "native.Text",
+      "description": "A text",
+      "required": true
+    }
+  },
+  "input_semantics_scaffold.scaffold_nesting": {
+    "field": {
+      "kind": "prose",
+      "name": "output",
+      "concept_ref": "native.Text",
+      "description": "A text",
+      "required": true
+    }
+  },
+  "input_semantics_scaffold.scaffold_fixed_batch": {
+    "field": {
+      "kind": "prose",
+      "name": "output",
+      "concept_ref": "native.Text",
+      "description": "A text",
+      "required": true
+    }
+  },
+  "input_semantics_scaffold.scaffold_open_natives": {
+    "field": {
+      "kind": "prose",
+      "name": "output",
+      "concept_ref": "native.Text",
+      "description": "A text",
+      "required": true
+    }
+  },
+  "input_semantics_output.output_structured": {
+    "field": {
+      "kind": "object",
+      "name": "output",
+      "concept_ref": "input_semantics_output.Verdict",
+      "description": "OUTPUT_desc_concept_Verdict: a flat structured result, so an output descriptor recurses at least once",
+      "required": true,
+      "fields": [
+        {
+          "kind": "enum",
+          "name": "label",
+          "description": "OUTPUT_desc_field_label: the verdict itself",
+          "required": true,
+          "choices": [
+            "accepted",
+            "rejected",
+            "deferred"
+          ]
+        },
+        {
+          "kind": "number",
+          "name": "confidence",
+          "description": "OUTPUT_desc_field_confidence: how sure, 0 to 1",
+          "required": true,
+          "integer": false
+        },
+        {
+          "kind": "text",
+          "name": "rationale",
+          "description": "OUTPUT_desc_field_rationale: why it landed there",
+          "required": false
+        }
+      ]
+    }
+  },
+  "input_semantics_output.output_nested": {
+    "field": {
+      "kind": "object",
+      "name": "output",
+      "concept_ref": "input_semantics_output.Dossier",
+      "description": "OUTPUT_desc_concept_Dossier: a nested structured result carrying a date and a list of concepts",
+      "required": true,
+      "fields": [
+        {
+          "kind": "text",
+          "name": "reference",
+          "description": "OUTPUT_desc_field_reference: the dossier reference",
+          "required": true
+        },
+        {
+          "kind": "date",
+          "name": "opened_on",
+          "description": "OUTPUT_desc_field_opened_on: when it was opened",
+          "required": true,
+          "datetime": false
+        },
+        {
+          "kind": "boolean",
+          "name": "settled",
+          "description": "OUTPUT_desc_field_settled: whether it is closed",
+          "required": false
+        },
+        {
+          "kind": "list",
+          "name": "findings",
+          "concept_ref": "input_semantics_output.Finding",
+          "description": "OUTPUT_desc_field_findings: a NESTED list, which stays a bare array on the wire",
+          "required": true,
+          "item": {
+            "kind": "object",
+            "concept_ref": "input_semantics_output.Finding",
+            "description": "OUTPUT_desc_concept_Finding: one element of a plural result",
+            "required": true,
+            "fields": [
+              {
+                "kind": "text",
+                "name": "summary",
+                "description": "OUTPUT_desc_field_summary: what was found",
+                "required": true
+              },
+              {
+                "kind": "number",
+                "name": "severity",
+                "description": "OUTPUT_desc_field_severity: how bad, 1 to 5",
+                "required": true,
+                "integer": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "input_semantics_output.output_plural": {
+    "field": {
+      "kind": "list",
+      "name": "output",
+      "concept_ref": "input_semantics_output.Finding",
+      "description": "OUTPUT_desc_concept_Finding: one element of a plural result",
+      "required": true,
+      "item": {
+        "kind": "object",
+        "concept_ref": "input_semantics_output.Finding",
+        "description": "OUTPUT_desc_concept_Finding: one element of a plural result",
+        "required": true,
+        "fields": [
+          {
+            "kind": "text",
+            "name": "summary",
+            "description": "OUTPUT_desc_field_summary: what was found",
+            "required": true
+          },
+          {
+            "kind": "number",
+            "name": "severity",
+            "description": "OUTPUT_desc_field_severity: how bad, 1 to 5",
+            "required": true,
+            "integer": true
+          }
+        ]
+      }
+    }
+  },
+  "input_semantics_output.output_fixed_plural": {
+    "field": {
+      "kind": "list",
+      "name": "output",
+      "concept_ref": "input_semantics_output.Finding",
+      "description": "OUTPUT_desc_concept_Finding: one element of a plural result",
+      "required": true,
+      "item": {
+        "kind": "object",
+        "concept_ref": "input_semantics_output.Finding",
+        "description": "OUTPUT_desc_concept_Finding: one element of a plural result",
+        "required": true,
+        "fields": [
+          {
+            "kind": "text",
+            "name": "summary",
+            "description": "OUTPUT_desc_field_summary: what was found",
+            "required": true
+          },
+          {
+            "kind": "number",
+            "name": "severity",
+            "description": "OUTPUT_desc_field_severity: how bad, 1 to 5",
+            "required": true,
+            "integer": true
+          }
+        ]
+      },
+      "item_count": 3
+    }
+  },
+  "input_semantics_output.output_optional": {
+    "field": {
+      "kind": "object",
+      "name": "output",
+      "concept_ref": "input_semantics_output.Verdict",
+      "description": "OUTPUT_desc_concept_Verdict: a flat structured result, so an output descriptor recurses at least once",
+      "required": true,
+      "fields": [
+        {
+          "kind": "enum",
+          "name": "label",
+          "description": "OUTPUT_desc_field_label: the verdict itself",
+          "required": true,
+          "choices": [
+            "accepted",
+            "rejected",
+            "deferred"
+          ]
+        },
+        {
+          "kind": "number",
+          "name": "confidence",
+          "description": "OUTPUT_desc_field_confidence: how sure, 0 to 1",
+          "required": true,
+          "integer": false
+        },
+        {
+          "kind": "text",
+          "name": "rationale",
+          "description": "OUTPUT_desc_field_rationale: why it landed there",
+          "required": false
+        }
+      ]
+    }
+  },
+  "input_semantics_output.output_native_text": {
+    "field": {
+      "kind": "prose",
+      "name": "output",
+      "concept_ref": "native.Text",
+      "description": "A text",
+      "required": true
+    }
+  },
+  "input_semantics_output.output_native_image": {
+    "field": {
+      "kind": "image",
+      "name": "output",
+      "concept_ref": "native.Image",
+      "description": "An image",
+      "required": true
+    }
+  }
+}
