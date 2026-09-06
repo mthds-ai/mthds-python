@@ -1,10 +1,11 @@
 import re
 import unicodedata
-from typing import Any, Self, cast
+from typing import Any, Final, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from mthds.package.manifest.validation import is_domain_code_valid, is_pipe_code_valid
+from mthds.package.semver import parse_constraint, parse_version, version_satisfies
 
 # Semver regex: MAJOR.MINOR.PATCH with optional pre-release and build metadata
 SEMVER_PATTERN = re.compile(
@@ -32,7 +33,21 @@ ADDRESS_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+/[a-zA-Z0-9._/-]
 
 RESERVED_DOMAINS: frozenset[str] = frozenset({"native", "mthds", "pipelex"})
 
-MTHDS_STANDARD_VERSION: str = "1.0.0"
+MTHDS_STANDARD_VERSION: Final[str] = "2.0.0"
+"""The MTHDS standard version this library implements.
+
+This is a copy of a cut made by the standard, and the only place this library
+states it. One number versions the language, the native concept set, the
+`METHODS.toml` and `methods.lock` formats, the library crate format and the
+namespace resolution rules — see https://mthds.ai/spec/versioning/ ("The
+Standard Version") for what bumps it, and for the rule that resolves the pinned
+native set an implementation of this version materializes.
+
+Two artifacts carry it and mean different things: a manifest's `mthds_version`
+is a *constraint*, evaluated against this value by
+`is_mthds_version_satisfied`, and a library crate's `mthds_version` is a *stamp*
+of the value the crate was normalized against.
+"""
 
 # Method name: snake_case, 2-25 chars, must start with a letter
 METHOD_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,24}$")
@@ -66,6 +81,32 @@ def is_valid_version_constraint(constraint: str) -> bool:
     - Wildcard: "*", "1.*", "1.0.*"
     """
     return VERSION_CONSTRAINT_PATTERN.match(constraint.strip()) is not None
+
+
+def is_mthds_version_satisfied(constraint: str) -> bool:
+    """Check whether the standard version this library implements satisfies a manifest constraint.
+
+    A manifest's `mthds_version` is evaluated against `MTHDS_STANDARD_VERSION`
+    and against nothing else — never against the release version of this
+    package, of a runner, or of the protocol, which are separate numbers moving
+    on separate cadences (https://mthds.ai/spec/versioning/).
+
+    Evaluating the constraint is deliberately not part of parsing a manifest: a
+    package declaring a standard version this runtime does not implement is a
+    well-formed manifest, and what to do about it — warn, refuse to load, refuse
+    to validate — is the runtime's call.
+
+    Args:
+        constraint: The `mthds_version` constraint from a manifest (e.g. ">=2.0.0").
+
+    Returns:
+        True if the implemented standard version satisfies the constraint.
+
+    Raises:
+        SemVerError: If the constraint is not a parsable version constraint.
+    """
+    parsed_constraint = parse_constraint(constraint)
+    return version_satisfies(parse_version(MTHDS_STANDARD_VERSION), constraint=parsed_constraint)
 
 
 def is_valid_address(address: str) -> bool:

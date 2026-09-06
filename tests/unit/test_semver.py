@@ -37,10 +37,16 @@ class TestSemver:
 
     # --- parse_constraint ---
 
-    @pytest.mark.parametrize("constraint_str", ["^1.0.0", ">=1.0.0,<2.0.0", "*"])
+    @pytest.mark.parametrize("constraint_str", ["^1.0.0", ">=1.0.0,<2.0.0", ">=1.0.0, <2.0.0", " ^1.0.0 ", "*"])
     def test_parse_constraint(self, constraint_str: str):
         result = parse_constraint(constraint_str)
         assert result is not None
+
+    def test_parse_constraint_ignores_whitespace_between_blocks(self):
+        # The manifest format documents the spaced spelling, and SimpleSpec rejects it over the space alone.
+        spaced = parse_constraint(">=1.0.0, <2.0.0")
+        assert version_satisfies(parse_version("1.5.0"), spaced)
+        assert not version_satisfies(parse_version("2.0.0"), spaced)
 
     @pytest.mark.parametrize("invalid", [">>>1.0.0", "not_valid"])
     def test_parse_constraint_invalid(self, invalid: str):

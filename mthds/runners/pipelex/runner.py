@@ -379,9 +379,10 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         """
         # TODO(pipelex): pipelex CLI must expose `protocol_version` for us to
         # report it here (e.g. extend `pipelex --version` to emit both the
-        # runner version and the MTHDS protocol version it implements). The
-        # value lives in pipelex as `MTHDS_PROTOCOL_VERSION` but is not
-        # surfaced through the CLI today.
+        # runner version and the MTHDS protocol version it implements). pipelex
+        # holds the value already — it imports `PROTOCOL_VERSION` from this
+        # package — but does not surface it through the CLI. Tracked as
+        # L-260829-43c082; this raise goes away when that lands.
         msg = (
             "PipelexRunner cannot report `protocol_version`: the pipelex CLI does not yet expose it. "
             "Extend the pipelex CLI to emit the MTHDS protocol version it implements, then parse it here."

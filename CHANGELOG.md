@@ -2,13 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`is_mthds_version_satisfied` — a manifest's `mthds_version` evaluated against the standard version, and against nothing else.** The constraint was validated for spelling and then never evaluated here, so every runtime open-coded the parse-and-match against `MTHDS_STANDARD_VERSION` itself. Parsing a manifest still does not evaluate it: a package asking for a standard version this runtime does not implement is a well-formed manifest, and whether that warns, refuses the load or fails validation is the runtime's call.
+- **`docs/versioning.md`** — the four numbers in play when you use this package, which two are copies of the standard's cut, and why a manifest constraint and a crate stamp mean different things while sharing one number.
+
 ### Changed
 
+- **`MTHDS_STANDARD_VERSION` follows the standard's cut: `1.0.0` → `2.0.0`.** The MTHDS specification unified its release number and its standard version and cut both at `2.0.0`, a major accounting for the breaking native, manifest, lock and resolution changes it had already shipped while the constant stood still ([the rule](https://mthds.ai/spec/versioning/)). This package copies that cut. Consumers feel it in two places: a manifest constraint is now evaluated against `2.0.0` (a `>=1.0.0` stays satisfied, a `^1.0.0` no longer is), and `pipelex` stamps the crates it normalizes with the new version. `PROTOCOL_VERSION` stays `0.6.0` — the protocol is versioned separately and the routes did not change. Both constants now carry a docstring naming the spec page that governs them, since each is a copy of a cut rather than a decision this package makes. **(Breaking)**
 - **The projection fixture corpus covers `native.Anything` at a slot and a text field merely named like a URL.** A recapture from `pipelex` `dev` adds two pipes from `scaffold_bundle.mthds`: one placing `native.Anything` at an input slot, which the descriptor states as an `unknown` node, and one pairing `native.Dynamic` with a structured concept whose text fields are named `url` and `homepage_url`, which grows the worked sites of the existing `text-named-url` and `optional-field-included` classes without declaring a new one. `input_form.json`, `output_form.json`, `pipe_io_contracts.json` and `inputs_template/manifest.json` move with it, and `mthds-js` commits the identical bytes.
 - **The unshapeable record names a second open engine bug.** Both shapes of the new `scaffold_anything_slot` template are refused by the runtime's input shaper with a `StuffFactoryError`, tracked by `L-260902-10eb56`: at a `native.Anything` slot the shaper accepts a bare string and nothing else, refusing the empty object that slot's own published contract gives as its template, and shapes even that string into a `native.Text` stuff rather than an `Anything` one. Until then the record's every entry belonged to the nested-list slot under `L-260830-191719`.
 
 ### Fixed
 
+- **A compound version constraint spelled with a space was unparsable.** `parse_constraint` handed the string to `SimpleSpec` untouched, which rejects `">=1.0.0, <2.0.0"` over the space alone — while the manifest format documents that exact spelling and `is_valid_version_constraint` accepts it. Any manifest or dependency written that way raised `SemVerError` from the resolver instead of resolving. The blocks are now stripped before parsing.
 - **The fixture corpus README's provenance named the wrong capture.** It listed three bundles where the committed capture has been taken from four since `output_bundle.mthds` joined, and omitted `output_form.json` from the files to copy across, so following it reproduced neither the committed bytes nor a complete capture.
 
 ## [v0.13.0] - 2026-09-02
