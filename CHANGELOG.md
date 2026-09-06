@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **The projection fixture corpus covers `native.Anything` at a slot and a text field merely named like a URL.** A recapture from `pipelex` `dev` adds two pipes from `scaffold_bundle.mthds`: one placing `native.Anything` at an input slot, which the descriptor states as an `unknown` node, and one pairing `native.Dynamic` with a structured concept whose text fields are named `url` and `homepage_url`, which grows the worked sites of the existing `text-named-url` and `optional-field-included` classes without declaring a new one. `input_form.json`, `output_form.json`, `pipe_io_contracts.json` and `inputs_template/manifest.json` move with it, and `mthds-js` commits the identical bytes.
+- **The unshapeable record names a second open engine bug.** Both shapes of the new `scaffold_anything_slot` template are refused by the runtime's input shaper with a `StuffFactoryError`, tracked by `L-260902-10eb56`: at a `native.Anything` slot the shaper accepts a bare string and nothing else, refusing the empty object that slot's own published contract gives as its template, and shapes even that string into a `native.Text` stuff rather than an `Anything` one. Until then the record's every entry belonged to the nested-list slot under `L-260830-191719`.
+
+### Fixed
+
+- **The fixture corpus README's provenance named the wrong capture.** It listed three bundles where the committed capture has been taken from four since `output_bundle.mthds` joined, and omitted `output_form.json` from the files to copy across, so following it reproduced neither the committed bytes nor a complete capture.
+
 ## [v0.13.0] - 2026-09-02
 
 ### Added
