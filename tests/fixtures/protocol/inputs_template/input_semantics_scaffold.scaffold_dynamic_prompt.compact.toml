@@ -1,0 +1,4 @@
+# concept: native.Dynamic
+dynamic_prompted = {concept = "native.Dynamic", content = {}}
+# concept: input_semantics_scaffold.Bookmark
+bookmark = {url = "url_value", homepage_url = "homepage_url_value", label = "label_value", shelf_note = "shelf_note_value"}

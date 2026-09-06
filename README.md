@@ -20,6 +20,7 @@ pip install mthds
 
 See [docs/runners.md](./docs/runners.md) for the protocol + runners reference.
 See [docs/inputs-template.md](./docs/inputs-template.md) for the inputs-template projection.
+See [docs/versioning.md](./docs/versioning.md) for the MTHDS standard and protocol versions this package carries.
 
 ## Quick start
 

@@ -18,10 +18,17 @@ if TYPE_CHECKING:
 PROTOCOL_VERSION: Final[str] = "0.6.0"
 """The MTHDS Protocol version this SDK implements.
 
-Single source of truth. Every runner reports exactly this value as
-`protocol_version` in its `version()` handshake — runners do not get to
-override or interpret it. The protocol version is a property of the
-standard, not of any individual runner.
+This is a copy of a cut made by the standard, and the only place this library
+states it. Every runner reports exactly this value as `protocol_version` in its
+`version()` handshake — runners do not get to override or interpret it, because
+the protocol version is a property of the standard rather than of any individual
+runner.
+
+It versions the HTTP runner contract only — the routes and the shapes they
+exchange — and it moves on its own cadence: a release of the standard that
+leaves those alone leaves this number exactly where it is, so it never tracks
+`MTHDS_STANDARD_VERSION`. See https://mthds.ai/latest/spec/versioning/ ("The Protocol
+Version") for what bumps it.
 """
 
 

@@ -1,0 +1,12 @@
+{
+  "dynamic_prompted": {
+    "concept": "native.Dynamic",
+    "content": {}
+  },
+  "bookmark": {
+    "url": "url_value",
+    "homepage_url": "homepage_url_value",
+    "label": "label_value",
+    "shelf_note": "shelf_note_value"
+  }
+}

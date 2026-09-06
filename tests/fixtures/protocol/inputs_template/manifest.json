@@ -18,6 +18,8 @@
     "input_semantics_probe.probe_native_inputs",
     "input_semantics_probe.probe_refined",
     "input_semantics_probe.probe_single",
+    "input_semantics_scaffold.scaffold_anything_slot",
+    "input_semantics_scaffold.scaffold_dynamic_prompt",
     "input_semantics_scaffold.scaffold_fixed_batch",
     "input_semantics_scaffold.scaffold_nesting",
     "input_semantics_scaffold.scaffold_open_natives"
@@ -236,7 +238,7 @@
       "divergence_id": "optional-field-included",
       "reason": "The engine passes include_optional=False at the top of an input's own structure class and not through the recursion, so it hides an optional field at depth one and shows one nested deeper. The projection renders every field the descriptor states, at every depth.",
       "ledger_item": "L-260830-d51440",
-      "occurrences": 163,
+      "occurrences": 167,
       "examples": [
         {
           "pipe_ref": "input_semantics_hinted.hinted_slots",
@@ -265,7 +267,7 @@
       "divergence_id": "text-named-url",
       "reason": "The engine picks a placeholder by field name, so a text field merely named url or ending in _url renders as a URL. The projection reads the descriptor's kind instead.",
       "ledger_item": "L-260830-dc48bf",
-      "occurrences": 4,
+      "occurrences": 6,
       "examples": [
         {
           "pipe_ref": "input_semantics_scaffold.scaffold_nesting",
@@ -341,6 +343,18 @@
       "shape": "explicit",
       "error_type": "ValidationError",
       "ledger_item": "L-260830-191719"
+    },
+    {
+      "pipe_ref": "input_semantics_scaffold.scaffold_anything_slot",
+      "shape": "compact",
+      "error_type": "StuffFactoryError",
+      "ledger_item": "L-260902-10eb56"
+    },
+    {
+      "pipe_ref": "input_semantics_scaffold.scaffold_anything_slot",
+      "shape": "explicit",
+      "error_type": "StuffFactoryError",
+      "ledger_item": "L-260902-10eb56"
     }
   ]
 }

@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.14.0] - 2026-09-06
+
+### Added
+
+- **Version constraint evaluation helper:** Added `is_mthds_version_satisfied` to `mthds.package.manifest.schema`, letting runtimes evaluate a manifest's `mthds_version` constraint against the implemented `MTHDS_STANDARD_VERSION`. Manifest parsing deliberately skips this check, leaving the decision to warn or fail up to the runtime.
+- **Versioning documentation:** Added `docs/versioning.md` defining the four version numbers in play (Standard, Protocol, Package release, and Runner) and how manifest constraints and crate stamps interact with them.
+- **New test fixtures:** Expanded the projection fixture corpus to cover `native.Anything` at an input slot and a structured concept using text fields named `url` and `homepage_url`.
+
+### Changed
+
+- **Standard version bump (Breaking):** `MTHDS_STANDARD_VERSION` moved from `1.0.0` to `2.0.0`. Manifest constraints are now evaluated against `2.0.0` (e.g., `>=1.0.0` still passes, but `^1.0.0` no longer does), and `pipelex` now stamps normalized crates with this version. `PROTOCOL_VERSION` remains at `0.6.0`, as the HTTP runner contract and routes are unchanged.
+- **Version constant docstrings:** `MTHDS_STANDARD_VERSION` and `PROTOCOL_VERSION` now include docstrings pointing to the governing specification pages and clarifying that these values are copies of standard cuts rather than package-level decisions.
+- **Fixture unshapeable records:** Updated the fixture manifest's `unshapeable` array to track a second open engine bug (`L-260902-10eb56`), where the input shaper incorrectly refuses the empty object template for `native.Anything` slots.
+
+### Fixed
+
+- **Compound version constraint parsing:** Fixed `parse_constraint` raising a `SemVerError` on compound constraints containing a space (e.g., `">=1.0.0, <2.0.0"`). Whitespace around blocks is now stripped, aligning the parser with the documented manifest format.
+- **Specification site links:** Fixed broken 404 links to the MTHDS specification site across documentation and docstrings; links now use the `/latest/` prefix (e.g., `https://mthds.ai/latest/spec/...`).
+- **Fixture README provenance:** Corrected the fixture corpus `README.md` to match the current capture state, adding `output_bundle.mthds` to the bundle list and `output_form.json` to the required copy instructions.
+
 ## [v0.13.0] - 2026-09-02
 
 ### Added
