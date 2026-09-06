@@ -3565,6 +3565,131 @@
       }
     }
   },
+  "input_semantics_scaffold.scaffold_anything_slot": {
+    "inputs": {
+      "anything_in": {
+        "concept_ref": "native.Anything",
+        "presence": "plain",
+        "multiplicity": "single",
+        "item_count": null,
+        "json_schema": {
+          "title": "native.Anything",
+          "description": "Anything"
+        }
+      }
+    },
+    "output": {
+      "concept_ref": "native.Text",
+      "multiplicity": "single",
+      "item_count": null,
+      "optional": false,
+      "json_schema": {
+        "description": "A text",
+        "properties": {
+          "text": {
+            "description": "The text",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "native.Text",
+        "type": "object"
+      }
+    }
+  },
+  "input_semantics_scaffold.scaffold_dynamic_prompt": {
+    "inputs": {
+      "dynamic_prompted": {
+        "concept_ref": "native.Dynamic",
+        "presence": "plain",
+        "multiplicity": "single",
+        "item_count": null,
+        "json_schema": {
+          "properties": {},
+          "title": "native.Dynamic",
+          "type": "object",
+          "description": "A dynamic concept"
+        }
+      },
+      "bookmark": {
+        "concept_ref": "input_semantics_scaffold.Bookmark",
+        "presence": "plain",
+        "multiplicity": "single",
+        "item_count": null,
+        "json_schema": {
+          "description": "SCAFFOLD_desc_concept_Bookmark: a shelf reference whose text fields are named like links",
+          "properties": {
+            "url": {
+              "description": "SCAFFOLD_desc_field_url: a required text field merely NAMED url",
+              "title": "Url",
+              "type": "string"
+            },
+            "homepage_url": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "SCAFFOLD_desc_field_homepage_url: an optional text field whose name ENDS in _url",
+              "title": "Homepage Url"
+            },
+            "label": {
+              "description": "SCAFFOLD_desc_field_label: ordinary required text beside them",
+              "title": "Label",
+              "type": "string"
+            },
+            "shelf_note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "SCAFFOLD_desc_field_shelf_note: ordinary optional text beside them",
+              "title": "Shelf Note"
+            }
+          },
+          "required": [
+            "url",
+            "label"
+          ],
+          "title": "input_semantics_scaffold.Bookmark",
+          "type": "object"
+        }
+      }
+    },
+    "output": {
+      "concept_ref": "native.Text",
+      "multiplicity": "single",
+      "item_count": null,
+      "optional": false,
+      "json_schema": {
+        "description": "A text",
+        "properties": {
+          "text": {
+            "description": "The text",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "native.Text",
+        "type": "object"
+      }
+    }
+  },
   "input_semantics_output.output_structured": {
     "inputs": {
       "note": {

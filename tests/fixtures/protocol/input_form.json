@@ -1484,6 +1484,67 @@
       }
     ]
   },
+  "input_semantics_scaffold.scaffold_anything_slot": {
+    "fields": [
+      {
+        "kind": "unknown",
+        "name": "anything_in",
+        "concept_ref": "native.Anything",
+        "description": "Anything",
+        "required": true,
+        "presence": "plain",
+        "gating": true
+      }
+    ]
+  },
+  "input_semantics_scaffold.scaffold_dynamic_prompt": {
+    "fields": [
+      {
+        "kind": "unknown",
+        "name": "dynamic_prompted",
+        "concept_ref": "native.Dynamic",
+        "description": "A dynamic concept",
+        "required": true,
+        "presence": "plain",
+        "gating": true
+      },
+      {
+        "kind": "object",
+        "name": "bookmark",
+        "concept_ref": "input_semantics_scaffold.Bookmark",
+        "description": "SCAFFOLD_desc_concept_Bookmark: a shelf reference whose text fields are named like links",
+        "required": true,
+        "presence": "plain",
+        "gating": true,
+        "fields": [
+          {
+            "kind": "text",
+            "name": "url",
+            "description": "SCAFFOLD_desc_field_url: a required text field merely NAMED url",
+            "required": true
+          },
+          {
+            "kind": "text",
+            "name": "homepage_url",
+            "description": "SCAFFOLD_desc_field_homepage_url: an optional text field whose name ENDS in _url",
+            "required": false
+          },
+          {
+            "kind": "text",
+            "name": "label",
+            "description": "SCAFFOLD_desc_field_label: ordinary required text beside them",
+            "required": true
+          },
+          {
+            "kind": "text",
+            "name": "shelf_note",
+            "description": "SCAFFOLD_desc_field_shelf_note: ordinary optional text beside them",
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
   "input_semantics_output.output_structured": {
     "fields": [
       {
