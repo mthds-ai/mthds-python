@@ -10,7 +10,7 @@ class TestVersions:
 
     def test_constants_match_the_standards_cut(self):
         # Pinned deliberately: these are copies of a cut made in the standard
-        # (https://mthds.ai/spec/versioning/), so a value moving here without a
+        # (https://mthds.ai/latest/spec/versioning/), so a value moving here without a
         # cut moving there is exactly what this asserts against.
         assert MTHDS_STANDARD_VERSION == "2.0.0"
         assert PROTOCOL_VERSION == "0.6.0"

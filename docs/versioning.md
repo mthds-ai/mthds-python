@@ -9,7 +9,7 @@ Four different numbers are in play when you use `mthds`, and only two of them ar
 | This package's release | `pyproject.toml` | This library, and nothing else |
 | A runner's version | `VersionInfo.runner_version`, reported by the runner | That runner's own build |
 
-The first two are **copies of a cut made by the standard**, not decisions this package makes. The rule that moves them — what counts as a major, a minor and a patch for each — is [`https://mthds.ai/spec/versioning/`](https://mthds.ai/spec/versioning/), and each constant is declared once, in one place, with that page named in its docstring. Following a cut is therefore a single edit per number.
+The first two are **copies of a cut made by the standard**, not decisions this package makes. The rule that moves them — what counts as a major, a minor and a patch for each — is [`https://mthds.ai/latest/spec/versioning/`](https://mthds.ai/latest/spec/versioning/), and each constant is declared once, in one place, with that page named in its docstring. Following a cut is therefore a single edit per number.
 
 Two properties of the rule are worth knowing before you read a version out of this package:
 

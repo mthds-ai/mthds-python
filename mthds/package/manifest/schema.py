@@ -39,7 +39,7 @@ MTHDS_STANDARD_VERSION: Final[str] = "2.0.0"
 This is a copy of a cut made by the standard, and the only place this library
 states it. One number versions the language, the native concept set, the
 `METHODS.toml` and `methods.lock` formats, the library crate format and the
-namespace resolution rules — see https://mthds.ai/spec/versioning/ ("The
+namespace resolution rules — see https://mthds.ai/latest/spec/versioning/ ("The
 Standard Version") for what bumps it, and for the rule that resolves the pinned
 native set an implementation of this version materializes.
 
@@ -89,7 +89,7 @@ def is_mthds_version_satisfied(constraint: str) -> bool:
     A manifest's `mthds_version` is evaluated against `MTHDS_STANDARD_VERSION`
     and against nothing else — never against the release version of this
     package, of a runner, or of the protocol, which are separate numbers moving
-    on separate cadences (https://mthds.ai/spec/versioning/).
+    on separate cadences (https://mthds.ai/latest/spec/versioning/).
 
     Evaluating the constraint is deliberately not part of parsing a manifest: a
     package declaring a standard version this runtime does not implement is a

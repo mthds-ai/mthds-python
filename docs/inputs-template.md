@@ -1,6 +1,6 @@
 # The inputs-template projection
 
-A pipe's **inputs template** is the fill-in document somebody hands back as that pipe's inputs: a person at a form, or an agent preparing a run. `mthds.protocol.inputs_template` projects one from the [input-form descriptor](https://mthds.ai/spec/input-form-descriptor/) the standard already defines, so a client holding the descriptor can offer a template for a method it does **not** have on disk — which is exactly what a `method_ref` address or a hosted `method_id` names.
+A pipe's **inputs template** is the fill-in document somebody hands back as that pipe's inputs: a person at a form, or an agent preparing a run. `mthds.protocol.inputs_template` projects one from the [input-form descriptor](https://mthds.ai/latest/spec/input-form-descriptor/) the standard already defines, so a client holding the descriptor can offer a template for a method it does **not** have on disk — which is exactly what a `method_ref` address or a hosted `method_id` names.
 
 ```python
 from mthds.protocol.input_form import InputForm

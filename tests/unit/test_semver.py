@@ -1,6 +1,7 @@
 import pytest
 from semantic_version import Version  # type: ignore[import-untyped]
 
+from mthds.package.manifest.schema import is_valid_version_constraint
 from mthds.package.semver import (
     SemVerError,
     parse_constraint,
@@ -52,6 +53,29 @@ class TestSemver:
     def test_parse_constraint_invalid(self, invalid: str):
         with pytest.raises(SemVerError, match="Invalid semver constraint"):
             parse_constraint(invalid)
+
+    @pytest.mark.parametrize(
+        ("topic", "constraint_str", "is_parsable"),
+        [
+            ("a tab between the blocks of a compound constraint", ">=1.0.0,\t<2.0.0", True),
+            ("a newline between them", ">=1.0.0,\n<2.0.0", True),
+            ("whitespace wrapping the whole constraint", "\n>=1.0.0\n", True),
+            ("an empty block left by a doubled comma", ">=1.0.0,,<2.0.0", False),
+            ("an empty block left by a trailing comma", ">=1.0.0, ", False),
+            ("whitespace inside a block, between the operator and the version", "> = 1.0.0", False),
+        ],
+    )
+    def test_a_spelling_parses_exactly_when_the_manifest_format_accepts_it(self, topic: str, constraint_str: str, is_parsable: bool):
+        # The bug this guards: `is_valid_version_constraint` accepted a spelling that `parse_constraint`
+        # then refused, so a well-formed manifest raised SemVerError from the resolver instead of resolving.
+        # Stripping the blocks must never make the two disagree in either direction — in particular an empty
+        # block must stay a refusal rather than being silently dropped, which would widen the constraint.
+        assert is_valid_version_constraint(constraint_str) is is_parsable, topic
+        if is_parsable:
+            assert parse_constraint(constraint_str) is not None, topic
+        else:
+            with pytest.raises(SemVerError, match="Invalid semver constraint"):
+                parse_constraint(constraint_str)
 
     # --- version_satisfies ---
 

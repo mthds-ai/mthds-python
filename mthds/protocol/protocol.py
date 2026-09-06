@@ -27,7 +27,7 @@ runner.
 It versions the HTTP runner contract only — the routes and the shapes they
 exchange — and it moves on its own cadence: a release of the standard that
 leaves those alone leaves this number exactly where it is, so it never tracks
-`MTHDS_STANDARD_VERSION`. See https://mthds.ai/spec/versioning/ ("The Protocol
+`MTHDS_STANDARD_VERSION`. See https://mthds.ai/latest/spec/versioning/ ("The Protocol
 Version") for what bumps it.
 """
 
