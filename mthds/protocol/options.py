@@ -72,11 +72,11 @@ def normalized_selector(*, name: str, value: object) -> str | None:
     answer, rather than a bare truthiness check silently dropping the falsy wrong types (`0`,
     `[]`) and forwarding the truthy ones (`123`, `["mt_1"]`) to a server `422`. This is a
     deliberate DIVERGENCE from the JS lineage rather than parity with it: `nonEmptyString` in
-    `pipelex-sdk-js` never throws, so it drops most wrong types silently and forwards a
-    `["mt_1"]` whose `length` happens to be non-zero. Refusing at the boundary is the better
-    behaviour, but the two sides do not agree on it yet. `value` is
-    typed `object` rather than `str | None` deliberately — this helper *is* the runtime
-    boundary, and the callers it guards against are the untyped ones a type checker never sees.
+    `pipelex-sdk-js/src/client.ts` never throws, so it drops most wrong types silently and
+    forwards a `["mt_1"]` whose `length` happens to be non-zero. Refusing at the boundary is the
+    better behaviour, but the two sides do not agree on it yet. `value` is typed `object` rather
+    than `str | None` deliberately — this helper *is* the runtime boundary, and the callers it
+    guards against are the untyped ones a type checker never sees.
 
     An absent or **empty** value normalizes to `None`: an empty selector selects nothing, so it
     is not sent and does not satisfy a client's "something to run" precondition.
@@ -165,7 +165,8 @@ def assert_exclusive_run_sources(
 
     Exclusivity keys off PRESENCE, not emptiness — a caller who supplies `files={}` alongside
     `bundle_b64` still expressed two encodings — while `mthds_contents` counts only when
-    non-empty (an empty list is "no contents"). The wording mirrors the server's validator.
+    non-empty (an empty list is "no contents"). Both servers count these values the same way,
+    but the wording is the `mthds-js` twin's, byte for byte, and neither server's.
 
     Args:
         mthds_contents: Inline MTHDS bundle contents, or None.
@@ -194,8 +195,8 @@ def assert_method_ref_pairs_with_nothing(
     bundle_b64: str | None = None,
     method_id: object = None,
 ) -> None:
-    """Enforce the run routes' `method_ref` exclusivity, mirroring the server's own 422s so an
-    illegal pairing fails before anything hits the wire.
+    """Enforce the run routes' `method_ref` exclusivity, so an illegal pairing fails before
+    anything hits the wire.
 
     A `method_ref` is a complete run source (the fetched package carries its `.mthds` and its
     entry pipe), so it pairs with NOTHING: not with inline `mthds_contents`, not with a bundle
@@ -205,8 +206,11 @@ def assert_method_ref_pairs_with_nothing(
     The one documented run-route exception is deliberately NOT here: inline source + `method_id`
     stays legal (the inline source runs; the id demotes to run-history linkage). `pipe_code`
     beside a `method_ref` is legal too — it overrides the fetched manifest's `main_pipe`.
-    Presence semantics match the server's: `mthds_contents` counts when non-empty, a bundle
-    encoding counts when the key is present, a selector counts when non-empty.
+    `mthds_contents` counts when non-empty and a bundle encoding counts when the key is present,
+    as on both servers. A selector counts only when non-empty, which is not the servers' rule:
+    they declare `min_length=1`, so an empty selector is a `422` there rather than absent. The
+    messages are those of the private `assertMethodRefPairsWithNothing` in
+    `pipelex-sdk-js/src/client.ts`, byte for byte; `mthds-js` exports no counterpart.
 
     Args:
         method_ref: The published method's address, or None — when absent or empty, no pairing
