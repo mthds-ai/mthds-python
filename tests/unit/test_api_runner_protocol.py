@@ -11,6 +11,7 @@ from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import InvalidValidationReport, ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.client import MthdsAPIClient
+from tests.unit.test_data import ExecuteWireResponses
 
 _BASE_URL = "http://localhost:8081"
 
@@ -198,3 +199,37 @@ class TestMthdsAPIClientProtocol:
         assert info.runner_version == "0.3.0"
         # Implementation identification passes through as extensions, never named by the SDK.
         assert info.model_extra == {"some_vendor_name": "vendor-runner"}
+
+    # ── execute / start run sources ───────────────────────────────
+
+    @pytest.mark.parametrize("route", ["execute", "start"])
+    def test_run_requires_something_to_run(self, route: str) -> None:
+        """Neither a pipe, nor contents, nor an extension arg: the call is refused before any request."""
+        client = self._client()
+        with pytest.raises(PipelineRequestError, match=f"must be provided to the API {route}"):
+            asyncio.run(getattr(client, route)())
+
+    @pytest.mark.parametrize("route", ["execute", "start"])
+    def test_run_rejects_bundle_beside_inline_contents(self, route: str) -> None:
+        """A method bundle rides `extra` on this client, and it is still exclusive with inline
+        contents — the shared run-source rule, not one this runner restates.
+        """
+        client = self._client()
+        with pytest.raises(PipelineRequestError, match="self-contained"):
+            asyncio.run(getattr(client, route)(mthds_contents=['domain = "answer"'], extra={"files": {"main.mthds": "x"}}))
+
+    @pytest.mark.parametrize("route", ["execute", "start"])
+    def test_run_rejects_two_bundle_encodings(self, route: str) -> None:
+        """`files` and `bundle_b64` in `extra` are two encodings of one bundle."""
+        client = self._client()
+        with pytest.raises(PipelineRequestError, match="two encodings of the same bundle"):
+            asyncio.run(getattr(client, route)(extra={"files": {}, "bundle_b64": "UEsDBA=="}))
+
+    def test_execute_accepts_a_bundle_as_the_only_run_source(self, mocker: MockerFixture) -> None:
+        """A bundle in `extra` satisfies the precondition and merges into the body as a top-level property."""
+        client = self._client()
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=ExecuteWireResponses.REDUCED)))
+
+        asyncio.run(client.execute(extra={"files": {"main.mthds": 'domain = "answer"'}}))
+        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
+        assert '"files":{"main.mthds":"domain = \\"answer\\""}' in sent

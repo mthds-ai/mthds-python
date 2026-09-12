@@ -6,7 +6,7 @@ The `mthds` package is the Python client for the open-source `pipelex-api` runne
 
 The protocol contract and its implementations live in separate packages:
 
-- `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResultExecute`, `RunResultStart`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `pipe_io_contracts.py` and `input_form.py` (the two validate artifacts the standard owns — see [The validate artifacts](#the-validate-artifacts-pipe_io_contracts-and-input_form) below), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
+- `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResultExecute`, `RunResultStart`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `pipe_io_contracts.py` and `input_form.py` (the two validate artifacts the standard owns — see [The validate artifacts](#the-validate-artifacts-pipe_io_contracts-and-input_form) below), `options.py` (the run-source argument surface — see [Run sources: what may be combined](#run-sources-what-may-be-combined) below), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
 - `mthds/runners/` — every runner implementation, one subpackage per runner:
     - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictConcept`, `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute` — the runners' concrete JSON materialization of the protocol's domain shapes), `exceptions.py` (API auth + the protocol's 202-degrade error, `RunStillRunningError`).
     - `pipelex/runner.py` — `PipelexRunner`, the local runner that shells out to the `pipelex` CLI.
@@ -116,6 +116,21 @@ The abstract `MTHDSProtocol` interface carries the protocol's **basic** argument
 
 - Extension args never appear in this SDK — not even as convenience params. They ride the generic `extra` mapping on both `execute` and `start`: `client.start(pipe_code="answer", extra={"some_server_arg": True})` merges `some_server_arg` into the request body as a top-level property. The server you call defines and handles its own extension args; consult that server's API documentation for what it accepts.
 - Protocol args inside `extra` are rejected client-side with `PipelineRequestError` — pass them as named parameters.
+
+### Run sources: what may be combined
+
+A run request has to name something to run, and several of the ways to name it exclude each other. That rule is an invariant of the request itself rather than of any one runner, so it lives in `mthds.protocol.options` and every Python client — `MthdsAPIClient` here, `PipelexAPIClient` in `pipelex-sdk` — enforces it from there instead of re-deriving it. The module is the twin of `mthds-js/src/protocol/options.ts`, and its error wording mirrors the server's validator, so a client-side rejection reads like the 422 it pre-empts.
+
+Three layers of argument meet in it: the protocol's own source (`pipe_code`, `mthds_contents`), the pipelex-api extensions that carry a whole method bundle (`files`, `bundle_b64`) or its published address (`method_ref`), and the hosted platform's catalog id (`method_id`). Only the first layer is a named parameter of `execute` / `start`; the others ride `extra` here, and are named parameters on a client that types its own stack's arguments.
+
+| Function | What it decides |
+| --- | --- |
+| `assert_exclusive_run_sources` | A bundle is self-contained, so it cannot be combined with `mthds_contents`, and `files` / `bundle_b64` are two encodings of one bundle. Keys off **presence** (`files={}` beside a zip is still two encodings), while `mthds_contents` counts only when non-empty. |
+| `has_bundle_payload` | Whether a **runnable** bundle is present — an empty map or string carries no method, so it satisfies nothing. |
+| `assert_method_ref_pairs_with_nothing` | A `method_ref` is a complete run source: exclusive with `mthds_contents`, with a bundle encoding, and with `method_id`. `pipe_code` beside it is legal (it overrides the fetched manifest's `main_pipe`), and inline source + `method_id` stays legal (the inline source runs, the id becomes run-history linkage). |
+| `normalized_selector` / `run_selector_extensions` | The boundary normalization a selector goes through: a non-string is refused rather than silently dropped or forwarded to a server 422, and an absent or empty selector contributes nothing. |
+
+`MthdsAPIClient.execute` / `start` apply the exclusivity to the bundle keys found in `extra`, so `execute(mthds_contents=[…], extra={"files": {…}})` is refused client-side.
 
 ## The durable run lifecycle (hosted API only) — lives in `pipelex-sdk`
 

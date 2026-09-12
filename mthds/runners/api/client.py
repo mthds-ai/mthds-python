@@ -11,6 +11,7 @@ from typing_extensions import override
 from mthds.config import load_config
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationResult, VersionInfo
+from mthds.protocol.options import RUN_ARG_BUNDLE_B64, RUN_ARG_FILES, assert_exclusive_run_sources
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.exceptions import ClientAuthenticationError, RunStillRunningError
 from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
@@ -161,12 +162,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             Complete execution results including run state and output
 
         Raises:
+            PipelineRequestError: If nothing to run was named, if `extra` carries a protocol
+                arg, or if it carries run sources that exclude each other.
             RunStillRunningError: If the server answers 202 (the protocol's optional
                 async degrade) — the run continues server-side; resume by `run_id`.
         """
-        if not pipe_code and not mthds_contents and not extra:
-            msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API execute."
-            raise PipelineRequestError(msg)
+        _assert_run_sources(pipe_code=pipe_code, mthds_contents=mthds_contents, extra=extra, route="execute")
 
         body = _build_run_body(
             pipe_code=pipe_code,
@@ -214,10 +215,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             RunResultStart — the authoritative server-generated `pipeline_run_id`
             (no output yet). On a hosted deployment the id is durable — poll the
             durable run lifecycle (a hosted extension, exposed by `pipelex-sdk`).
+
+        Raises:
+            PipelineRequestError: If nothing to run was named, if `extra` carries a protocol
+                arg, or if it carries run sources that exclude each other.
         """
-        if not pipe_code and not mthds_contents and not extra:
-            msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API start."
-            raise PipelineRequestError(msg)
+        _assert_run_sources(pipe_code=pipe_code, mthds_contents=mthds_contents, extra=extra, route="start")
 
         body = _build_run_body(
             pipe_code=pipe_code,
@@ -386,6 +389,40 @@ _VALIDATE_REQUEST_ARGS: frozenset[str] = frozenset({"mthds_contents", "allow_sig
 # 200 `/validate` body into the protocol-neutral verdict union, discriminated on `is_valid`.
 # The `pipelex-sdk` subclass parses the same body into its Pipelex-branded narrowing instead.
 _VALIDATION_RESULT_ADAPTER: TypeAdapter[ValidationResult] = TypeAdapter(ValidationResult)
+
+
+def _assert_run_sources(*, pipe_code: str | None, mthds_contents: list[str] | None, extra: dict[str, Any] | None, route: str) -> None:
+    """Guard the run-source arguments of one `/execute` | `/start` call, before any body is built.
+
+    Two checks, in the order the JS twin makes them: something to run must have been named, and
+    the run sources present must not exclude each other. The exclusivity rule itself is not
+    stated here — it is an invariant of the request rather than of this runner, so it comes from
+    `mthds.protocol.options`, which every Python client shares.
+
+    A method bundle is a pipelex-api extension rather than a protocol arg, so it arrives inside
+    `extra` on this client. That is why the bundle keys are read from the validated extension
+    mapping: a caller who sends `extra={"files": …}` beside `mthds_contents` gets the same
+    rejection a caller of a client that names `files` outright would get.
+
+    Args:
+        pipe_code: The pipe selector, or None.
+        mthds_contents: Inline MTHDS bundle contents, or None.
+        extra: Server-specific extension args from the caller, or None.
+        route: The protocol route being called, for the error message (`execute` / `start`).
+
+    Raises:
+        PipelineRequestError: If nothing to run was named, if `extra` carries a protocol arg, or
+            if the request carries run sources that exclude each other.
+    """
+    extensions = _build_extensions(extra)
+    if not pipe_code and not mthds_contents and not extensions:
+        msg = f"Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API {route}."
+        raise PipelineRequestError(msg)
+    assert_exclusive_run_sources(
+        mthds_contents=mthds_contents,
+        files=extensions.get(RUN_ARG_FILES),
+        bundle_b64=extensions.get(RUN_ARG_BUNDLE_B64),
+    )
 
 
 def _build_run_body(

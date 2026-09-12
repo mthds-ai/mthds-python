@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **`mthds.protocol.options` — the run-source argument surface:** the predicates that decide which combinations of `pipe_code`, `mthds_contents`, the pipelex-api bundle encodings (`files` / `bundle_b64`), a published address (`method_ref`) and the hosted catalog id (`method_id`) may be sent together, plus the boundary normalization a method selector goes through (`normalized_selector`, `run_selector_extensions`), where a non-string is refused rather than silently dropped or forwarded to a server 422. The rule is an invariant of the request rather than of any one runner, so every Python client now enforces it from one definition instead of re-deriving it; the module is the twin of `mthds-js`'s `protocol/options.ts` and its wording mirrors the server's validator.
+
+### Changed
+
+- **`MthdsAPIClient.execute` / `start` refuse run sources that exclude each other (Breaking):** a method bundle rides `extra` on the protocol client, and a call that sends one beside inline `mthds_contents`, or that sends both bundle encodings at once, now raises `PipelineRequestError` client-side instead of reaching the server's 422. A caller who was relying on the server to arbitrate sends one source.
+
 ## [v0.14.0] - 2026-09-06
 
 ### Added
