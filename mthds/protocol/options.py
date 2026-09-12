@@ -10,10 +10,17 @@ parameter, or a key it pulled out of `extra`).
 
 They travel with the request rather than with any one runner: which source combinations are
 legal is an invariant of the request itself, so a Python client that builds one can enforce it
-from this single definition instead of re-deriving it and drifting. **That consolidation is
-under way, not done.** `MthdsAPIClient` here calls `assert_exclusive_run_sources` and nothing
-else, and `PipelexAPIClient` in `pipelex-sdk` still carries its own private copies — it pins an
-older `mthds` and cannot import this module until one ships with it.
+from this single definition instead of re-deriving it and drifting. **This module is that
+definition, and nothing in the Python stack enforces from it yet.** `MthdsAPIClient` in this
+package calls none of these predicates: it is a client for any MTHDS-compliant runner, so it
+forwards the keys inside `extra` without interpreting them and leaves the addressed server to
+answer for the combination. `PipelexAPIClient` in `pipelex-sdk` is the client that takes these
+arguments by name and can pre-empt that refusal, and it still carries its own private copies —
+it pins an older `mthds` and cannot import this module until one ships with it.
+
+Which layer should enforce the extension rules — the generic client, the client that names the
+arguments, or a Pipelex-scoped module beside this one — is still open. These definitions are the
+part that is settled.
 
 This module is the Python twin of `mthds-js/src/protocol/options.ts`, whose two exported
 predicates it matches message for message. It is **not** a twin of either server, and a
@@ -31,8 +38,9 @@ Three layers of argument meet here, and each predicate's docstring says which la
 
 Only the first layer is a named parameter of `MTHDSProtocol.execute` / `start`; the other two
 reach the wire through the generic `extra` passthrough, or as named parameters of a client that
-types its own stack's arguments. Keeping all three here is deliberate — a rule split across the
-packages that enforce it is a rule that drifts, which is the situation this module ends.
+types its own stack's arguments. All three are stated here on one argument: a rule split across
+the packages that enforce it is a rule that drifts, which is the situation today and the one
+this module exists to end.
 
 The `pipe-selector` campaign will change this surface (a `pipe_ref` beside `pipe_code`, and
 which of the two may be combined with what). When it does, it changes it here.
@@ -129,11 +137,11 @@ def run_selector_extensions(*, method_ref: object = None, method_id: object = No
 def has_bundle_payload(*, files: Mapping[str, str] | None = None, bundle_b64: str | None = None) -> bool:
     """Does the request carry a method bundle (the pipelex-api `files` / `bundle_b64` extension)?
 
-    A bundle satisfies the "something to run" precondition on its own — it carries its own
-    `.mthds`, so neither `pipe_code` nor `mthds_contents` is required alongside it. Unlike
+    A bundle satisfies a client's "something to run" precondition on its own — it carries its
+    own `.mthds`, so neither `pipe_code` nor `mthds_contents` is required alongside it. Unlike
     `assert_exclusive_run_sources`, this keys off a RUNNABLE payload: an empty map or string
-    carries no method, so it does not satisfy the precondition (and must not be sent — the
-    runner rejects a zero-file bundle).
+    carries no method, so it satisfies nothing (and must not be sent — the runner rejects a
+    zero-file bundle).
 
     Args:
         files: The bundle as a path-to-text map, or None.

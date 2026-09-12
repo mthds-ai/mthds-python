@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+from typing import Any
 
 import httpx
 import pytest
@@ -202,34 +203,46 @@ class TestMthdsAPIClientProtocol:
 
     # ── execute / start run sources ───────────────────────────────
 
-    @pytest.mark.parametrize("route", ["execute", "start"])
-    def test_run_requires_something_to_run(self, route: str, mocker: MockerFixture) -> None:
-        """Neither a pipe, nor contents, nor an extension arg: the call is refused before any request."""
+    @pytest.mark.parametrize(
+        ("route", "wire_response"),
+        [("execute", ExecuteWireResponses.REDUCED), ("start", {"pipeline_run_id": "run_7f3a"})],
+    )
+    def test_run_requires_something_to_run(self, route: str, wire_response: dict[str, Any], mocker: MockerFixture) -> None:
+        """Neither a pipe, nor contents, nor an extension arg: the call is refused before any request.
+
+        The transport stub answers with a well-formed body on purpose. Were the guard removed,
+        the call would run to completion and this test would report the guard's absence — rather
+        than a parse error from a stub that could never have produced a result anyway.
+        """
         client = self._client()
-        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock())
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=wire_response)))
         with pytest.raises(PipelineRequestError, match=f"must be provided to the API {route}"):
             asyncio.run(getattr(client, route)())
         send_mock.assert_not_called()
 
-    @pytest.mark.parametrize("route", ["execute", "start"])
-    def test_run_rejects_bundle_beside_inline_contents(self, route: str, mocker: MockerFixture) -> None:
-        """A method bundle rides `extra` on this client, and it is still exclusive with inline
-        contents — the shared run-source rule, not one this runner restates.
+    @pytest.mark.parametrize(
+        ("route", "wire_response"),
+        [("execute", ExecuteWireResponses.REDUCED), ("start", {"pipeline_run_id": "run_7f3a"})],
+    )
+    def test_run_forwards_extension_args_without_interpreting_them(self, route: str, wire_response: dict[str, Any], mocker: MockerFixture) -> None:
+        """`extra` is the server's to define, so this client forwards its keys without judging them.
+
+        The combination sent here — inline contents beside both bundle encodings at once — is
+        illegal on `pipelex-api`, which is the runner that defines `files` and `bundle_b64`. They
+        are that runner's extension args and not the protocol's, and `MthdsAPIClient` is
+        documented as a client for any MTHDS-compliant runner, so it is the addressed server that
+        answers for the combination. Pre-empting the refusal is the business of a client that
+        takes those arguments by name, from the shared definitions in `mthds.protocol.options`.
         """
         client = self._client()
-        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock())
-        with pytest.raises(PipelineRequestError, match="self-contained"):
-            asyncio.run(getattr(client, route)(mthds_contents=['domain = "answer"'], extra={"files": {"main.mthds": "x"}}))
-        send_mock.assert_not_called()
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=wire_response)))
 
-    @pytest.mark.parametrize("route", ["execute", "start"])
-    def test_run_rejects_two_bundle_encodings(self, route: str, mocker: MockerFixture) -> None:
-        """`files` and `bundle_b64` in `extra` are two encodings of one bundle."""
-        client = self._client()
-        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock())
-        with pytest.raises(PipelineRequestError, match="two encodings of the same bundle"):
-            asyncio.run(getattr(client, route)(extra={"files": {}, "bundle_b64": "UEsDBA=="}))
-        send_mock.assert_not_called()
+        asyncio.run(getattr(client, route)(mthds_contents=['domain = "answer"'], extra={"files": {}, "bundle_b64": "UEsDBA=="}))
+
+        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
+        assert '"mthds_contents":["domain = \\"answer\\""]' in sent
+        assert '"files":{}' in sent
+        assert '"bundle_b64":"UEsDBA=="' in sent
 
     def test_execute_accepts_a_bundle_as_the_only_run_source(self, mocker: MockerFixture) -> None:
         """A bundle in `extra` satisfies the precondition and merges into the body as a top-level property."""
