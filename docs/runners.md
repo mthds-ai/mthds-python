@@ -6,7 +6,7 @@ The `mthds` package is the Python client for the open-source `pipelex-api` runne
 
 The protocol contract and its implementations live in separate packages:
 
-- `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResultExecute`, `RunResultStart`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `pipe_io_contracts.py` and `input_form.py` (the two validate artifacts the standard owns — see [The validate artifacts](#the-validate-artifacts-pipe_io_contracts-and-input_form) below), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
+- `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResultExecute`, `RunResultStart`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `pipe_io_contracts.py` and `input_form.py` (the two validate artifacts the standard owns — see [The validate artifacts](#the-validate-artifacts-pipe_io_contracts-and-input_form) below), `method_files.py` (the catalog serialization of a stored method's source — see [The catalog serialization](#the-catalog-serialization-method_files) below), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
 - `mthds/runners/` — every runner implementation, one subpackage per runner:
     - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictConcept`, `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute` — the runners' concrete JSON materialization of the protocol's domain shapes), `exceptions.py` (API auth + the protocol's 202-degrade error, `RunStillRunningError`).
     - `pipelex/runner.py` — `PipelexRunner`, the local runner that shells out to the `pipelex` CLI.
@@ -109,6 +109,29 @@ What to know about the two modules:
 - **The models describe themselves in serialization mode too.** The serializer that drops the inapplicable slots publishes no return schema of its own, so `model_json_schema(mode="serialization")` is identical to the validation one: every per-kind arm keeps its properties, its `kind` const and its closed shape. A server that embeds these models in a response model — FastAPI, and the OpenAPI artifact it generates in serialization mode — therefore publishes the per-kind field shapes rather than an opaque object behind the discriminator.
 - **Parity with the TypeScript client is measured.** `tests/fixtures/protocol/` holds one real payload pair from the reference engine, committed byte-for-byte here and in `mthds-js`; the suite parses it strictly and asserts the dump equals the input. The fixture's README records the capture and the known engine drift the standard has since ruled on.
 - **The descriptor projects to a fill-in inputs template, client-side.** `mthds.protocol.inputs_template` turns one `PipeInputFormDescriptor` into the template somebody fills in and hands back — the compact and explicit shapes, as JSON or as TOML — so a client needs no server round trip to offer one for a method it does not have on disk. It is held to byte identity with the twin projection in the `mthds` npm package. See [docs/inputs-template.md](./inputs-template.md).
+
+### The catalog serialization: `method_files`
+
+A stored method's source is persisted by the hosted platform as one string in the **catalog** form — the JSON `[{ name, content }]` array the webapp editor writes, one entry per bundle-relative file, for the method's `.mthds` source and again for its custom PipeFunc `python`. `mthds.protocol.method_files` is the one Python definition of that form: `MethodFile` (`name` + `content`, a closed strict shape) and the pair `serialize_method_files` / `parse_method_files` between a list of them and the stored string. It mirrors `protocol/method_files.ts` in the `mthds` npm package, so a client that fetches a stored method and wants its bundle back — `pipelex-sdk`, an MCP server, your own code — reads it here instead of re-porting the platform's decoder.
+
+```python
+from mthds.protocol.method_files import MethodFile, parse_method_files, serialize_method_files
+
+files = parse_method_files(stored_method["mthds"])  # -> list[MethodFile], in stored order; "" and "[]" both give []
+for method_file in files:
+    print(method_file.name, len(method_file.content))
+
+stored = serialize_method_files([MethodFile(name="bundle.mthds", content=bundle_text)])  # -> the catalog string
+```
+
+What to know about it:
+
+- **It is the at-rest representation, not the run surface.** The catalog is an ordered, named array; a run request's `files` is an unordered path-to-text map. They are different shapes for different moments, and this module owns only the first.
+- **No files is `""`, never `"[]"`.** The empty string is the platform's "no source" / "clear the field" sentinel, so the empty list serializes to it; the literal `"[]"` would be stored as a source. On the way back, a blank string, `None` and the empty array all parse to `[]`.
+- **A blank file is not a file.** An entry whose content is empty or whitespace-only is dropped on both directions, so the round-trip is stable and the canonical form never carries an empty file. "Whitespace" here is what ECMAScript's `trim` strips — the byte-order mark included, the C0 separators U+001C–U+001F and U+0085 excluded — because the twin's verdict on a file must be this side's, and Python's `str.isspace` disagrees at both ends.
+- **The bytes are the twin's.** Serialization writes what `JSON.stringify` writes: compact separators, UTF-8 left as is, only the JSON-mandated escapes. The suite pins it against a string the twin printed.
+- **Anything but the named array is a contract violation.** A source that is not JSON — a legacy raw bundle string included — a non-array value, or an entry that is not an object with string `name` and string `content` raises `PipelineRequestError`. An entry's extra members are tolerated and stripped; a blank name is not a reason to drop an entry; duplicate names are kept.
+- **Where it departs from the platform's own decoder, it follows the twin.** The platform passes a whitespace-only raw source (its guard is a falsy check) and fails it downstream, drops blank-named entries, and reads a non-array source as one legacy bundle; this module and the TypeScript twin agree with each other on all three instead, so the three implementations never split two against one.
 
 ### Basic args vs extension args
 

@@ -590,3 +590,86 @@ class CompactSlotCases:
         item_count=2,
         item=ObjectItem(concept_ref="probe.Gadget", required=True, fields=[TextField(name="label", required=True)]),
     )
+
+
+class MethodFileCases:
+    """Vectors for the catalog serialization, pinned against the TypeScript twin.
+
+    `TWIN_SERIALIZED` is the exact string `serializeMethodFiles(TWIN_FILES)` printed when run from
+    `mthds-js/src/protocol/method_files.ts` (2026-09-12, node 24): compact separators, UTF-8 left as
+    is, the double quote, the backslash and the control characters escaped and nothing else. `BLANK_PREDICATE` is what the same
+    run said of each code point — which single-character contents `serializeMethodFiles` dropped and
+    which `parseMethodFiles` read as "no source" — so every disagreement between ECMAScript's `trim`
+    and Python's `str.isspace` is stated as a case rather than assumed away.
+    """
+
+    TWIN_FILES: ClassVar[list[dict[str, str]]] = [
+        {
+            "name": "bundle.mthds",
+            "content": 'domain = "x"\n[concept.\u00c9t\u00e9]\n'
+            'description = "caf\u00e9 \u2014 \u00fcn\u00efc\u00f6d\u00e9 \u65e5\u672c \U0001f642"\n',
+        },
+        {"name": "funcs/price.py", "content": 'def price():\n\treturn "a\\\\b" + \'\\u00e9\' + "/" + "<tag>" + "&"\n'},
+    ]
+    TWIN_SERIALIZED: ClassVar[str] = (
+        '[{"name":"bundle.mthds","content":"domain = \\"x\\"\\n[concept.\u00c9t\u00e9]\\n'
+        'description = \\"caf\u00e9 \u2014 \u00fcn\u00efc\u00f6d\u00e9 \u65e5\u672c \U0001f642\\"\\n"},'
+        '{"name":"funcs/price.py","content":"def price():\\n\\treturn \\"a\\\\\\\\b\\" + \'\\\\u00e9\' + \\"/\\" + \\"<tag>\\" + \\"&\\"\\n"}]'
+    )
+
+    # (topic, single-character content, whether the twin treats it as blank)
+    BLANK_PREDICATE: ClassVar[list[tuple[str, str, bool]]] = [
+        ("U+0009 TAB", "\t", True),
+        ("U+000A LF", "\n", True),
+        ("U+000B VT", "\v", True),
+        ("U+000C FF", "\f", True),
+        ("U+000D CR", "\r", True),
+        ("U+0020 SPACE", " ", True),
+        ("U+00A0 NBSP", "\u00a0", True),
+        ("U+1680 OGHAM SPACE MARK", "\u1680", True),
+        ("U+2000 EN QUAD", "\u2000", True),
+        ("U+200A HAIR SPACE", "\u200a", True),
+        ("U+2028 LINE SEPARATOR", "\u2028", True),
+        ("U+2029 PARAGRAPH SEPARATOR", "\u2029", True),
+        ("U+202F NARROW NBSP", "\u202f", True),
+        ("U+205F MEDIUM MATHEMATICAL SPACE", "\u205f", True),
+        ("U+3000 IDEOGRAPHIC SPACE", "\u3000", True),
+        ("U+FEFF BOM — blank to the twin, not to str.isspace", "\ufeff", True),
+        ("U+001C FILE SEPARATOR — content to the twin, whitespace to str.isspace", "\x1c", False),
+        ("U+001D GROUP SEPARATOR — content to the twin, whitespace to str.isspace", "\x1d", False),
+        ("U+001E RECORD SEPARATOR — content to the twin, whitespace to str.isspace", "\x1e", False),
+        ("U+001F UNIT SEPARATOR — content to the twin, whitespace to str.isspace", "\x1f", False),
+        ("U+0085 NEXT LINE — content to the twin, whitespace to str.isspace", "\x85", False),
+        ("U+200B ZERO WIDTH SPACE — content on both sides", "\u200b", False),
+        ("U+180E MONGOLIAN VOWEL SEPARATOR — content on both sides", "\u180e", False),
+    ]
+
+    # (topic, source) — every one read by the twin as "no files"
+    NO_FILES_SOURCES: ClassVar[list[tuple[str, str | None]]] = [
+        ("the empty string", ""),
+        ("whitespace only", "   "),
+        ("a mix of every whitespace kind, the BOM included", " \n\t\r \ufeff "),
+        ("None, a field never set", None),
+        ("the empty JSON array", "[]"),
+        ("the empty JSON array with trailing whitespace", "[]  "),
+        ("the empty JSON array with leading whitespace", "  []"),
+    ]
+
+    # (topic, source) — every one refused by the twin with PipelineRequestError
+    CONTRACT_VIOLATIONS: ClassVar[list[tuple[str, str]]] = [
+        ("raw bundle text is the legacy shape, not the catalog array", "domain = 'x'"),
+        ("a BOM before the array is not JSON on either side", "\ufeff[]"),
+        ("a JSON object, even one shaped like an entry", '{"name":"a.py","content":"x"}'),
+        ("JSON null", "null"),
+        ("a JSON string", '"abc"'),
+        ("a JSON number", "1"),
+        ("NaN, which Python's json accepts and the twin's does not — refused either way", "NaN"),
+        ("an entry missing content", '[{"name":"a.py"}]'),
+        ("an entry that is a bare string", '["a.py"]'),
+        ("an entry that is null", "[null]"),
+        ("an entry that is an array", "[[]]"),
+        ("an entry whose name is not a string", '[{"name":1,"content":"x"}]'),
+        ("an entry whose content is not a string", '[{"name":"a","content":1}]'),
+        ("an entry whose content is null", '[{"name":"a","content":null}]'),
+        ("one good entry does not excuse a bad one", '[{"name":"a","content":"x"},{"name":"b"}]'),
+    ]
