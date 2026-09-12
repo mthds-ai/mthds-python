@@ -119,7 +119,7 @@ The abstract `MTHDSProtocol` interface carries the protocol's **basic** argument
 
 ### Run sources: what may be combined
 
-A run request has to name something to run, and several of the ways to name it exclude each other. That rule is an invariant of the request itself rather than of any one runner, so it lives in `mthds.protocol.options` and every Python client — `MthdsAPIClient` here, `PipelexAPIClient` in `pipelex-sdk` — enforces it from there instead of re-deriving it. The module is the twin of `mthds-js/src/protocol/options.ts`, and its error wording mirrors the server's validator, so a client-side rejection reads like the 422 it pre-empts.
+A run request has to name something to run, and several of the ways to name it exclude each other. That rule is an invariant of the request itself rather than of any one runner, so it lives in `mthds.protocol.options` for any Python client to enforce from one place instead of re-deriving it. **That consolidation is under way rather than finished** — see "What is actually wired" below. The module is the twin of `mthds-js/src/protocol/options.ts`, whose two exported predicates it matches message for message; it is **not** a twin of either server, so a rejection here can read differently from the 422 it pre-empts (`pipelex-api` and the hosted platform word the same refusal differently, and check the two exclusivity arms in opposite orders).
 
 Three layers of argument meet in it: the protocol's own source (`pipe_code`, `mthds_contents`), the pipelex-api extensions that carry a whole method bundle (`files`, `bundle_b64`) or its published address (`method_ref`), and the hosted platform's catalog id (`method_id`). Only the first layer is a named parameter of `execute` / `start`; the others ride `extra` here, and are named parameters on a client that types its own stack's arguments.
 
@@ -130,7 +130,11 @@ Three layers of argument meet in it: the protocol's own source (`pipe_code`, `mt
 | `assert_method_ref_pairs_with_nothing` | A `method_ref` is a complete run source: exclusive with `mthds_contents`, with a bundle encoding, and with `method_id`. `pipe_code` beside it is legal (it overrides the fetched manifest's `main_pipe`), and inline source + `method_id` stays legal (the inline source runs, the id becomes run-history linkage). |
 | `normalized_selector` / `run_selector_extensions` | The boundary normalization a selector goes through: a non-string is refused rather than silently dropped or forwarded to a server 422, and an absent or empty selector contributes nothing. |
 
-`MthdsAPIClient.execute` / `start` apply the exclusivity to the bundle keys found in `extra`, so `execute(mthds_contents=[…], extra={"files": {…}})` is refused client-side.
+#### What is actually wired
+
+The table above describes the predicates, not a guarantee every client makes. Today `MthdsAPIClient.execute` / `start` call `assert_exclusive_run_sources` and nothing else: they apply the exclusivity to the bundle keys found in `extra`, so `execute(mthds_contents=[…], extra={"files": {…}})` is refused client-side.
+
+The rest is available to callers, not enforced here. `has_bundle_payload` and `assert_method_ref_pairs_with_nothing` have no caller in this package, so on `MthdsAPIClient` an illegal `method_ref` pairing and a non-string selector passed through `extra` both still reach the server and come back as a 422. The selector refusal `normalized_selector` provides applies to a client that takes these arguments by name — `PipelexAPIClient` in `pipelex-sdk`, which today still carries its own private copies and pins an older `mthds`.
 
 ## The durable run lifecycle (hosted API only) — lives in `pipelex-sdk`
 

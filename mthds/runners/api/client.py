@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 from urllib.parse import quote
 
 import httpx
@@ -391,7 +391,9 @@ _VALIDATE_REQUEST_ARGS: frozenset[str] = frozenset({"mthds_contents", "allow_sig
 _VALIDATION_RESULT_ADAPTER: TypeAdapter[ValidationResult] = TypeAdapter(ValidationResult)
 
 
-def _assert_run_sources(*, pipe_code: str | None, mthds_contents: list[str] | None, extra: dict[str, Any] | None, route: str) -> None:
+def _assert_run_sources(
+    *, pipe_code: str | None, mthds_contents: list[str] | None, extra: dict[str, Any] | None, route: Literal["execute", "start"]
+) -> None:
     """Guard the run-source arguments of one `/execute` | `/start` call, before any body is built.
 
     Two checks, in the order the JS twin makes them: something to run must have been named, and

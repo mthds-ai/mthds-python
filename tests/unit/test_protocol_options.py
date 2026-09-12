@@ -49,7 +49,12 @@ class TestRunSourceOptions:
     @pytest.mark.parametrize("wrong_value", [123, ["mt_1"], 0, [], {}, True])
     def test_non_string_selector_is_refused(self, wrong_value: object) -> None:
         """A non-string is refused rather than dropped (falsy) or forwarded (truthy) — one answer
-        for every wrong type, matching how the JS client partitions the same argument.
+        for every wrong type.
+
+        This DIVERGES from the JS lineage rather than matching it: `nonEmptyString` in
+        `pipelex-sdk-js` never throws, so it drops most of these silently and forwards
+        `["mt_1"]`, whose `length` happens to be non-zero. Refusing is the better behaviour;
+        the two sides do not agree on it yet.
         """
         with pytest.raises(PipelineRequestError, match="must be a string, received"):
             normalized_selector(name=RUN_ARG_METHOD_REF, value=wrong_value)
@@ -137,6 +142,18 @@ class TestRunSourceOptions:
         """An empty contents list is "no contents", so it does not collide with a bundle."""
         assert_exclusive_run_sources(mthds_contents=[], files={"main.mthds": "x"})
 
+    def test_bundle_with_contents_keys_off_presence_not_emptiness(self) -> None:
+        """An empty `files` map beside inline contents is still two run sources.
+
+        This arm and `has_bundle_payload` deliberately read the same value differently: an empty
+        encoding is PRESENT for exclusivity and RUNNABLE for neither. Pinning both sides of that
+        disagreement is what stops a later refactor from routing exclusivity through
+        `has_bundle_payload` and turning this refusal into an accepted request.
+        """
+        assert has_bundle_payload(files={}) is False
+        with pytest.raises(PipelineRequestError, match="self-contained"):
+            assert_exclusive_run_sources(mthds_contents=['domain = "answer"'], files={})
+
     # ── assert_method_ref_pairs_with_nothing ─────────────────────
 
     def test_absent_method_ref_checks_nothing(self) -> None:
@@ -183,3 +200,13 @@ class TestRunSourceOptions:
         """The address goes through the same boundary normalization as any selector."""
         with pytest.raises(PipelineRequestError, match="method_ref must be a string"):
             assert_method_ref_pairs_with_nothing(method_ref=["github.com/Pipelex/methods"])
+
+    def test_non_string_method_id_is_refused_without_an_address(self) -> None:
+        """The selector type refusal does not depend on an unrelated argument.
+
+        `method_id` is normalized before the no-address early return, so one wrong value gets one
+        answer whether or not a `method_ref` accompanies it — the unconditional guarantee
+        `docs/runners.md` advertises for a selector at this boundary.
+        """
+        with pytest.raises(PipelineRequestError, match=r"method_id must be a string, received int\."):
+            assert_method_ref_pairs_with_nothing(method_id=42)

@@ -203,27 +203,33 @@ class TestMthdsAPIClientProtocol:
     # ── execute / start run sources ───────────────────────────────
 
     @pytest.mark.parametrize("route", ["execute", "start"])
-    def test_run_requires_something_to_run(self, route: str) -> None:
+    def test_run_requires_something_to_run(self, route: str, mocker: MockerFixture) -> None:
         """Neither a pipe, nor contents, nor an extension arg: the call is refused before any request."""
         client = self._client()
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock())
         with pytest.raises(PipelineRequestError, match=f"must be provided to the API {route}"):
             asyncio.run(getattr(client, route)())
+        send_mock.assert_not_called()
 
     @pytest.mark.parametrize("route", ["execute", "start"])
-    def test_run_rejects_bundle_beside_inline_contents(self, route: str) -> None:
+    def test_run_rejects_bundle_beside_inline_contents(self, route: str, mocker: MockerFixture) -> None:
         """A method bundle rides `extra` on this client, and it is still exclusive with inline
         contents — the shared run-source rule, not one this runner restates.
         """
         client = self._client()
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock())
         with pytest.raises(PipelineRequestError, match="self-contained"):
             asyncio.run(getattr(client, route)(mthds_contents=['domain = "answer"'], extra={"files": {"main.mthds": "x"}}))
+        send_mock.assert_not_called()
 
     @pytest.mark.parametrize("route", ["execute", "start"])
-    def test_run_rejects_two_bundle_encodings(self, route: str) -> None:
+    def test_run_rejects_two_bundle_encodings(self, route: str, mocker: MockerFixture) -> None:
         """`files` and `bundle_b64` in `extra` are two encodings of one bundle."""
         client = self._client()
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock())
         with pytest.raises(PipelineRequestError, match="two encodings of the same bundle"):
             asyncio.run(getattr(client, route)(extra={"files": {}, "bundle_b64": "UEsDBA=="}))
+        send_mock.assert_not_called()
 
     def test_execute_accepts_a_bundle_as_the_only_run_source(self, mocker: MockerFixture) -> None:
         """A bundle in `extra` satisfies the precondition and merges into the body as a top-level property."""

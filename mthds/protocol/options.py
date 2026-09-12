@@ -9,11 +9,18 @@ plain values, so a caller passes them from wherever its own signature keeps them
 parameter, or a key it pulled out of `extra`).
 
 They travel with the request rather than with any one runner: which source combinations are
-legal is an invariant of the request itself, so every Python client that builds one — the
-`MthdsAPIClient` here, `PipelexAPIClient` in `pipelex-sdk` — enforces it from this single
-definition instead of re-deriving it and drifting. This module is the Python twin of
-`mthds-js/src/protocol/options.ts`, and the error wording mirrors the server's own validator so
-a client-side rejection reads like the 422 it pre-empts.
+legal is an invariant of the request itself, so a Python client that builds one can enforce it
+from this single definition instead of re-deriving it and drifting. **That consolidation is
+under way, not done.** `MthdsAPIClient` here calls `assert_exclusive_run_sources` and nothing
+else, and `PipelexAPIClient` in `pipelex-sdk` still carries its own private copies — it pins an
+older `mthds` and cannot import this module until one ships with it.
+
+This module is the Python twin of `mthds-js/src/protocol/options.ts`, whose two exported
+predicates it matches message for message. It is **not** a twin of either server, and a
+rejection here can therefore read differently from the 422 it pre-empts: `pipelex-api` phrases
+the bundle-versus-contents refusal its own way, and the platform validator tests the two
+exclusivity arms in the opposite order, so one illegal body can draw a different sentence from
+each. The JS twin is the binding parity; the servers are the inspiration.
 
 Three layers of argument meet here, and each predicate's docstring says which layer it is about:
 
@@ -31,7 +38,7 @@ The `pipe-selector` campaign will change this surface (a `pipe_ref` beside `pipe
 which of the two may be combined with what). When it does, it changes it here.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Final
 
 from mthds.protocol.exceptions import PipelineRequestError
@@ -54,9 +61,12 @@ def normalized_selector(*, name: str, value: object) -> str | None:
 
     A **non-string** value is refused rather than dropped or forwarded. A published client
     validates its request-option types at its own boundary, so that one wrong value gets one
-    answer: a bare truthiness check would silently drop the falsy wrong types (`0`, `[]`) and
-    forward the truthy ones (`123`, `["mt_1"]`) to a server `422` — a different partition of
-    wrong values than the JS client makes for the same argument on the same wire. `value` is
+    answer, rather than a bare truthiness check silently dropping the falsy wrong types (`0`,
+    `[]`) and forwarding the truthy ones (`123`, `["mt_1"]`) to a server `422`. This is a
+    deliberate DIVERGENCE from the JS lineage rather than parity with it: `nonEmptyString` in
+    `pipelex-sdk-js` never throws, so it drops most wrong types silently and forwards a
+    `["mt_1"]` whose `length` happens to be non-zero. Refusing at the boundary is the better
+    behaviour, but the two sides do not agree on it yet. `value` is
     typed `object` rather than `str | None` deliberately — this helper *is* the runtime
     boundary, and the callers it guards against are the untyped ones a type checker never sees.
 
@@ -137,7 +147,7 @@ def has_bundle_payload(*, files: Mapping[str, str] | None = None, bundle_b64: st
 
 def assert_exclusive_run_sources(
     *,
-    mthds_contents: Sequence[str] | None = None,
+    mthds_contents: list[str] | None = None,
     files: Mapping[str, str] | None = None,
     bundle_b64: str | None = None,
 ) -> None:
@@ -171,7 +181,7 @@ def assert_exclusive_run_sources(
 def assert_method_ref_pairs_with_nothing(
     *,
     method_ref: object = None,
-    mthds_contents: Sequence[str] | None = None,
+    mthds_contents: list[str] | None = None,
     files: Mapping[str, str] | None = None,
     bundle_b64: str | None = None,
     method_id: object = None,
@@ -191,8 +201,8 @@ def assert_method_ref_pairs_with_nothing(
     encoding counts when the key is present, a selector counts when non-empty.
 
     Args:
-        method_ref: The published method's address, or None — when absent or empty, nothing is
-            checked.
+        method_ref: The published method's address, or None — when absent or empty, no pairing
+            is checked, though both selectors are still refused if present and not a string.
         mthds_contents: Inline MTHDS bundle contents, or None.
         files: The bundle as a path-to-text map, or None.
         bundle_b64: The bundle as a base64-encoded zip, or None.
@@ -202,7 +212,9 @@ def assert_method_ref_pairs_with_nothing(
         PipelineRequestError: If a `method_ref` is paired with any other run source, or if a
             selector is present and is not a string.
     """
-    if normalized_selector(name=RUN_ARG_METHOD_REF, value=method_ref) is None:
+    selected_method_ref = normalized_selector(name=RUN_ARG_METHOD_REF, value=method_ref)
+    selected_method_id = normalized_selector(name=RUN_ARG_METHOD_ID, value=method_id)
+    if selected_method_ref is None:
         return
     if mthds_contents:
         msg = "method_ref and inline mthds_contents are mutually exclusive; send one or the other."
@@ -210,7 +222,7 @@ def assert_method_ref_pairs_with_nothing(
     if files is not None or bundle_b64 is not None:
         msg = "method_ref and a method bundle (bundle_b64 / files) are mutually exclusive; send one or the other."
         raise PipelineRequestError(msg)
-    if normalized_selector(name=RUN_ARG_METHOD_ID, value=method_id) is not None:
+    if selected_method_id is not None:
         msg = (
             "method_ref and method_id are mutually exclusive: an address run carries its own provenance "
             "and takes no run-history linkage id. Send exactly one method selector."
