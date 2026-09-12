@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+from typing import Any
 
 import httpx
 import pytest
@@ -11,6 +12,7 @@ from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import InvalidValidationReport, ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.client import MthdsAPIClient
+from tests.unit.test_data import ExecuteWireResponses
 
 _BASE_URL = "http://localhost:8081"
 
@@ -198,3 +200,55 @@ class TestMthdsAPIClientProtocol:
         assert info.runner_version == "0.3.0"
         # Implementation identification passes through as extensions, never named by the SDK.
         assert info.model_extra == {"some_vendor_name": "vendor-runner"}
+
+    # ── execute / start run sources ───────────────────────────────
+
+    @pytest.mark.parametrize(
+        ("route", "wire_response"),
+        [("execute", ExecuteWireResponses.REDUCED), ("start", {"pipeline_run_id": "run_7f3a"})],
+    )
+    def test_run_requires_something_to_run(self, route: str, wire_response: dict[str, Any], mocker: MockerFixture) -> None:
+        """Neither a pipe, nor contents, nor an extension arg: the call is refused before any request.
+
+        The transport stub answers with a well-formed body on purpose. Were the guard removed,
+        the call would run to completion and this test would report the guard's absence — rather
+        than a parse error from a stub that could never have produced a result anyway.
+        """
+        client = self._client()
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=wire_response)))
+        with pytest.raises(PipelineRequestError, match=f"must be provided to the API {route}"):
+            asyncio.run(getattr(client, route)())
+        send_mock.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("route", "wire_response"),
+        [("execute", ExecuteWireResponses.REDUCED), ("start", {"pipeline_run_id": "run_7f3a"})],
+    )
+    def test_run_forwards_extension_args_without_interpreting_them(self, route: str, wire_response: dict[str, Any], mocker: MockerFixture) -> None:
+        """`extra` is the server's to define, so this client forwards its keys without judging them.
+
+        The combination sent here — inline contents beside both bundle encodings at once — is
+        illegal on `pipelex-api`, which is the runner that defines `files` and `bundle_b64`. They
+        are that runner's extension args and not the protocol's, and `MthdsAPIClient` is
+        documented as a client for any MTHDS-compliant runner, so it is the addressed server that
+        answers for the combination. Pre-empting the refusal is the business of a client that
+        takes those arguments by name, from the shared definitions in `mthds.protocol.options`.
+        """
+        client = self._client()
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=wire_response)))
+
+        asyncio.run(getattr(client, route)(mthds_contents=['domain = "answer"'], extra={"files": {}, "bundle_b64": "UEsDBA=="}))
+
+        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
+        assert '"mthds_contents":["domain = \\"answer\\""]' in sent
+        assert '"files":{}' in sent
+        assert '"bundle_b64":"UEsDBA=="' in sent
+
+    def test_execute_accepts_a_bundle_as_the_only_run_source(self, mocker: MockerFixture) -> None:
+        """A bundle in `extra` satisfies the precondition and merges into the body as a top-level property."""
+        client = self._client()
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=ExecuteWireResponses.REDUCED)))
+
+        asyncio.run(client.execute(extra={"files": {"main.mthds": 'domain = "answer"'}}))
+        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
+        assert '"files":{"main.mthds":"domain = \\"answer\\""}' in sent

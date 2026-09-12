@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 from urllib.parse import quote
 
 import httpx
@@ -161,12 +161,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             Complete execution results including run state and output
 
         Raises:
+            PipelineRequestError: If nothing to run was named, or if `extra` carries a
+                protocol arg.
             RunStillRunningError: If the server answers 202 (the protocol's optional
                 async degrade) — the run continues server-side; resume by `run_id`.
         """
-        if not pipe_code and not mthds_contents and not extra:
-            msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API execute."
-            raise PipelineRequestError(msg)
+        _assert_run_sources(pipe_code=pipe_code, mthds_contents=mthds_contents, extra=extra, route="execute")
 
         body = _build_run_body(
             pipe_code=pipe_code,
@@ -214,10 +214,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             RunResultStart — the authoritative server-generated `pipeline_run_id`
             (no output yet). On a hosted deployment the id is durable — poll the
             durable run lifecycle (a hosted extension, exposed by `pipelex-sdk`).
+
+        Raises:
+            PipelineRequestError: If nothing to run was named, or if `extra` carries a
+                protocol arg.
         """
-        if not pipe_code and not mthds_contents and not extra:
-            msg = "Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API start."
-            raise PipelineRequestError(msg)
+        _assert_run_sources(pipe_code=pipe_code, mthds_contents=mthds_contents, extra=extra, route="start")
 
         body = _build_run_body(
             pipe_code=pipe_code,
@@ -386,6 +388,36 @@ _VALIDATE_REQUEST_ARGS: frozenset[str] = frozenset({"mthds_contents", "allow_sig
 # 200 `/validate` body into the protocol-neutral verdict union, discriminated on `is_valid`.
 # The `pipelex-sdk` subclass parses the same body into its Pipelex-branded narrowing instead.
 _VALIDATION_RESULT_ADAPTER: TypeAdapter[ValidationResult] = TypeAdapter(ValidationResult)
+
+
+def _assert_run_sources(
+    *, pipe_code: str | None, mthds_contents: list[str] | None, extra: dict[str, Any] | None, route: Literal["execute", "start"]
+) -> None:
+    """Guard the run-source arguments of one `/execute` | `/start` call, before any body is built.
+
+    One check: something to run must have been named — a pipe, inline contents, or a
+    server-specific extension arg. Which extension arg names a run source, and which of them
+    exclude each other, is the server's own contract: this client serves any MTHDS-compliant
+    runner, so it counts the keys inside `extra` without interpreting them, and the runner
+    answers for the combination it was sent. A client that takes those arguments by name can
+    pre-empt the refusal from the shared definitions in `mthds.protocol.options`.
+
+    The extension mapping is built here rather than only in `_build_run_body` so that a protocol
+    arg smuggled through `extra` is refused at this boundary, before any body exists.
+
+    Args:
+        pipe_code: The pipe selector, or None.
+        mthds_contents: Inline MTHDS bundle contents, or None.
+        extra: Server-specific extension args from the caller, or None.
+        route: The protocol route being called, for the error message (`execute` / `start`).
+
+    Raises:
+        PipelineRequestError: If nothing to run was named, or if `extra` carries a protocol arg.
+    """
+    extensions = _build_extensions(extra)
+    if not pipe_code and not mthds_contents and not extensions:
+        msg = f"Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API {route}."
+        raise PipelineRequestError(msg)
 
 
 def _build_run_body(
