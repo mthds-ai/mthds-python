@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **`mthds.protocol.method_files` — the catalog serialization of a stored method's source**: `MethodFile` (`name` + `content`) and the pair `serialize_method_files` / `parse_method_files` between a list of files and the JSON `[{ name, content }]` string the hosted platform persists for a method's `.mthds` source and its custom PipeFunc `python`. The empty list serializes to `""`, the platform's "no source" sentinel, never to `"[]"`; blank-content entries are dropped in both directions; anything but the named array raises `PipelineRequestError`, including the three constants Python's `json` accepts and `JSON.parse` refuses. It mirrors the `mthds` npm package's `protocol/method_files.ts` edge for edge — blank is ECMAScript-blank, and the bytes are `JSON.stringify`'s down to both surrogate rules, an unpaired one escaped and an adjacent pair combined into the astral character Python alone can spell two ways — so a Python client reads a stored method's bundle from here rather than re-porting the platform's decoder. Python's own number model is kept out of the way too: integers decode as floats, the twin's single number type, so a literal longer than `sys.get_int_max_str_digits()` cannot raise a bare `ValueError` through the typed surface. One divergence from the twin is forced rather than chosen and is documented as such: Python's decoder recurses where `JSON.parse` iterates, so a deeply nested source is refused here and accepted there, at a depth that is an interpreter build constant.
+
 ## [v0.14.0] - 2026-09-06
 
 ### Added

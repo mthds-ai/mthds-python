@@ -178,6 +178,13 @@ strictParameterNoneValue = true
 strictSetInference = true
 typeCheckingMode = "strict"
 
+# Scoped once here rather than as a per-line ignore in each suite: a test may legitimately pin a
+# module-private name whose exact value IS the contract, such as the ECMAScript trim set the
+# catalog serialization's blank predicate is built from. Everything else stays strict.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+reportPrivateUsage = "none"
+
 [tool.ruff]
 exclude = [
   ".cursor",
@@ -326,6 +333,7 @@ convention = "google"
 "tests/**/*.py" = [
   "implicit-namespace-package", # Allow test files to not have __init__.py in their directories (avoids namespace collisions)
   "float-equality-comparison", # Tests assert exact float literals that round-trip exactly; `pytest.approx` would only add noise
+  "import-private-name", # A test may pin a module-private constant whose exact value IS the contract, e.g. the ECMAScript trim set
 ]
 "examples/**/*.py" = [
   "implicit-namespace-package", # Runnable demo scripts, not an importable package
