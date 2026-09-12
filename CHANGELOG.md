@@ -4,7 +4,7 @@
 
 ### Added
 
-- **`mthds.protocol.method_files` — the catalog serialization of a stored method's source**: `MethodFile` (`name` + `content`) and the pair `serialize_method_files` / `parse_method_files` between a list of files and the JSON `[{ name, content }]` string the hosted platform persists for a method's `.mthds` source and its custom PipeFunc `python`. The empty list serializes to `""`, the platform's "no source" sentinel, never to `"[]"`; blank-content entries are dropped in both directions; anything but the named array raises `PipelineRequestError`. It mirrors the `mthds` npm package's `protocol/method_files.ts` edge for edge — blank is ECMAScript-blank and the bytes are `JSON.stringify`'s — so a Python client reads a stored method's bundle from here rather than re-porting the platform's decoder.
+- **`mthds.protocol.method_files` — the catalog serialization of a stored method's source**: `MethodFile` (`name` + `content`) and the pair `serialize_method_files` / `parse_method_files` between a list of files and the JSON `[{ name, content }]` string the hosted platform persists for a method's `.mthds` source and its custom PipeFunc `python`. The empty list serializes to `""`, the platform's "no source" sentinel, never to `"[]"`; blank-content entries are dropped in both directions; anything but the named array raises `PipelineRequestError`, including the three constants Python's `json` accepts and `JSON.parse` refuses. It mirrors the `mthds` npm package's `protocol/method_files.ts` edge for edge — blank is ECMAScript-blank, and the bytes are `JSON.stringify`'s down to the escaping of an unpaired surrogate — so a Python client reads a stored method's bundle from here rather than re-porting the platform's decoder.
 
 ## [v0.14.0] - 2026-09-06
 

@@ -597,10 +597,12 @@ class MethodFileCases:
 
     `TWIN_SERIALIZED` is the exact string `serializeMethodFiles(TWIN_FILES)` printed when run from
     `mthds-js/src/protocol/method_files.ts` (2026-09-12, node 24): compact separators, UTF-8 left as
-    is, the double quote, the backslash and the control characters escaped and nothing else. `BLANK_PREDICATE` is what the same
-    run said of each code point — which single-character contents `serializeMethodFiles` dropped and
-    which `parseMethodFiles` read as "no source" — so every disagreement between ECMAScript's `trim`
-    and Python's `str.isspace` is stated as a case rather than assumed away.
+    is, the double quote, the backslash and the LF and TAB it happens to contain escaped and nothing
+    else. `BLANK_PREDICATE` is what the same run said of each code point — which single-character
+    contents `serializeMethodFiles` dropped and which `parseMethodFiles` read as "no source" — so
+    every disagreement between ECMAScript's `trim` and Python's `str.isspace` is stated as a case
+    rather than assumed away. It samples the set; `test_the_trim_set_is_ecmascripts_whole_trim_set`
+    is what actually holds the set complete, by deriving it.
     """
 
     TWIN_FILES: ClassVar[list[dict[str, str]]] = [
@@ -663,7 +665,7 @@ class MethodFileCases:
         ("JSON null", "null"),
         ("a JSON string", '"abc"'),
         ("a JSON number", "1"),
-        ("NaN, which Python's json accepts and the twin's does not — refused either way", "NaN"),
+        ("a bare NaN, refused by the decoder now and by the array check regardless", "NaN"),
         ("an entry missing content", '[{"name":"a.py"}]'),
         ("an entry that is a bare string", '["a.py"]'),
         ("an entry that is null", "[null]"),
@@ -672,4 +674,22 @@ class MethodFileCases:
         ("an entry whose content is not a string", '[{"name":"a","content":1}]'),
         ("an entry whose content is null", '[{"name":"a","content":null}]'),
         ("one good entry does not excuse a bad one", '[{"name":"a","content":"x"},{"name":"b"}]'),
+        # `json.loads` accepts these three as a Python extension and the twin's `JSON.parse`
+        # throws on every one. A bare `NaN` above is caught by the array check whatever the
+        # decoder does; inside an ignored member nothing downstream would ever look, so these
+        # are the cases that actually pin `parse_constant`.
+        ("NaN inside an ignored extra member", '[{"name":"a","content":"x","extra":NaN}]'),
+        ("Infinity inside an ignored extra member", '[{"name":"a","content":"x","extra":Infinity}]'),
+        ("-Infinity nested in an ignored member's array", '[{"name":"a","content":"x","extra":[1,-Infinity]}]'),
+        ("Infinity as a whole entry", "[Infinity]"),
+    ]
+
+    # (topic, content, the exact string the twin's `JSON.stringify` printed for that one file)
+    # `json.dumps(ensure_ascii=False)` writes an unpaired surrogate raw, which is not UTF-8
+    # encodable at all, so these fail at the storage boundary rather than at the typed surface.
+    LONE_SURROGATES: ClassVar[list[tuple[str, str, str]]] = [
+        ("a lone high surrogate", "\ud800", '[{"name":"f","content":"\\ud800"}]'),
+        ("a lone low surrogate", "\udfff", '[{"name":"f","content":"\\udfff"}]'),
+        ("a lone surrogate between text", "a\ud800b", '[{"name":"f","content":"a\\ud800b"}]'),
+        ("an astral character stays raw, being one code point", "\U0001f642", '[{"name":"f","content":"\U0001f642"}]'),
     ]
