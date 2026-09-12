@@ -693,3 +693,31 @@ class MethodFileCases:
         ("a lone surrogate between text", "a\ud800b", '[{"name":"f","content":"a\\ud800b"}]'),
         ("an astral character stays raw, being one code point", "\U0001f642", '[{"name":"f","content":"\U0001f642"}]'),
     ]
+
+    # (topic, content, the exact string the twin's `JSON.stringify` printed for that one file)
+    # A Python `str` addresses code points and can hold the two halves of a pair as two of them,
+    # where the twin — addressing UTF-16 code units — holds one astral character and writes it
+    # raw. The pair is combined before the dump, so these are the twin's bytes and not two
+    # escapes. Built with `chr` so no source encoding can quietly collapse a pair into one code
+    # point, which is exactly the mistake that hides this case.
+    SURROGATE_PAIRS: ClassVar[list[tuple[str, str, str]]] = [
+        ("a pair is the astral character it encodes", chr(0xD83D) + chr(0xDE42), '[{"name":"f","content":"\U0001f642"}]'),
+        ("the lowest pair", chr(0xD800) + chr(0xDC00), '[{"name":"f","content":"\U00010000"}]'),
+        ("the highest pair", chr(0xDBFF) + chr(0xDFFF), '[{"name":"f","content":"\U0010ffff"}]'),
+        (
+            "a lone high before a pair stays lone, the pair still combines",
+            chr(0xD800) + chr(0xD800) + chr(0xDC00),
+            '[{"name":"f","content":"\\ud800\U00010000"}]',
+        ),
+        ("a low before a high is two lone surrogates", chr(0xDC00) + chr(0xD800), '[{"name":"f","content":"\\udc00\\ud800"}]'),
+        (
+            "a pair followed by a lone low",
+            chr(0xD83D) + chr(0xDE42) + chr(0xDFFF),
+            '[{"name":"f","content":"\U0001f642\\udfff"}]',
+        ),
+    ]
+
+    # A JSON integer long enough to exceed `sys.get_int_max_str_digits()` makes Python's decoder
+    # raise a bare `ValueError` from `int()` — not a `JSONDecodeError` — where the twin, having one
+    # number type and no such limit, parses the same bytes. The limit is 4300 digits by default.
+    OVERSIZED_INTEGER_DIGITS: ClassVar[int] = 4301

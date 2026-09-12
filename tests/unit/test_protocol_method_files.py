@@ -124,12 +124,63 @@ class TestMethodFiles:
             parse_method_files(source)
         assert "method file" in str(exc_info.value).lower(), topic
 
-    def test_nesting_deep_enough_to_exhaust_the_decoder_is_a_contract_violation(self):
-        # `json.loads` raises `RecursionError` rather than `JSONDecodeError` on a deeply nested
-        # source, and `RecursionError` is not a `ValueError`, so catching only `JSONDecodeError`
-        # let it escape this typed surface. The twin's `JSON.parse` swallows the same input and
-        # refuses it cleanly, so the escape was also a divergence.
-        source = '[{"name":"a","content":"x","extra":' + "[" * 10000 + "]" * 10000 + "}]"
+    def test_a_source_that_exhausts_the_decoder_is_a_contract_violation(self):
+        # `json.loads` raises `RecursionError` rather than `JSONDecodeError` on a source nested
+        # deeper than its decoder allows, and `RecursionError` is not a `ValueError`, so catching
+        # only `JSONDecodeError` let it escape this typed surface.
+        #
+        # The depth that trips it is an interpreter build constant, not `sys.getrecursionlimit()`:
+        # it rose by an order of magnitude in CPython 3.14 and differs even between patch
+        # releases, so pinning one depth pins an accident of one build. Depth 10000 refuses on
+        # 3.11 to 3.13 and parses cleanly on 3.14, which is a supported interpreter the CI matrix
+        # runs — so the depth is discovered here instead.
+        #
+        # This guard is best-effort and NOT a parity rule: the twin's `JSON.parse` is iterative
+        # and accepts every depth tried, so it is the module's one forced divergence from it.
+        for depth in (10_000, 200_000, 500_000):
+            source = '[{"name":"a","content":"x","extra":' + "[" * depth + "]" * depth + "}]"
+            try:
+                json.loads(source)
+            except RecursionError:
+                with pytest.raises(PipelineRequestError):
+                    parse_method_files(source)
+                return
+        pytest.skip("no tried nesting depth exhausts this interpreter's JSON decoder")
+
+    @pytest.mark.parametrize(("topic", "content", "expected"), MethodFileCases.SURROGATE_PAIRS)
+    def test_a_surrogate_pair_is_written_as_the_astral_character_the_twin_writes(self, topic: str, content: str, expected: str):
+        # Python addresses code points and so can spell an astral character two ways; the twin
+        # addresses UTF-16 code units and has only one spelling. Escaping both halves instead of
+        # combining them makes the at-rest bytes differ from the twin's on every one of the pairs,
+        # and costs serialization its idempotence: the parse combines what the dump split.
+        serialized = serialize_method_files([MethodFile(name="f", content=content)])
+        assert serialized == expected, topic
+        assert serialized.encode("utf-8"), topic
+        assert serialize_method_files(parse_method_files(serialized)) == expected, topic
+
+    def test_the_surrogate_rules_cover_the_name_as_well_as_the_content(self):
+        # One `json.dumps` writes both members, so both get the same treatment — pinned here
+        # because a fix applied to only one of them would still pass every content-only case.
+        pair = chr(0xD83D) + chr(0xDE42)
+        assert serialize_method_files([MethodFile(name=pair, content="x")]) == '[{"name":"\U0001f642","content":"x"}]'
+        lone = "a" + chr(0xD800) + "b"
+        assert serialize_method_files([MethodFile(name=lone, content="x")]) == '[{"name":"a\\ud800b","content":"x"}]'
+
+    def test_an_oversized_integer_in_an_ignored_member_is_accepted_as_the_twin_accepts_it(self):
+        # Python runs every JSON integer through `int()`, which refuses a literal longer than
+        # `sys.get_int_max_str_digits()` with a bare `ValueError` — neither a `JSONDecodeError` nor
+        # a `RecursionError` — so it escaped this typed surface entirely, while the twin parsed the
+        # same bytes and stripped the member. Integers are decoded as floats here, which is the
+        # twin's own number model and immune to the limit.
+        source = '[{"name":"a.py","content":"x","extra":' + "1" * MethodFileCases.OVERSIZED_INTEGER_DIGITS + "}]"
+        # The vector is only meaningful while Python's own decoder still refuses these digits.
+        with pytest.raises(ValueError, match="Exceeds the limit"):
+            json.loads(source)
+        assert parse_method_files(source) == [MethodFile(name="a.py", content="x")]
+
+    def test_an_oversized_integer_where_a_string_belongs_is_still_a_contract_violation(self):
+        # Accepting the number must not accept the entry: the twin refuses this one too.
+        source = '[{"name":"a.py","content":' + "1" * MethodFileCases.OVERSIZED_INTEGER_DIGITS + "}]"
         with pytest.raises(PipelineRequestError):
             parse_method_files(source)
 
