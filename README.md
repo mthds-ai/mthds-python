@@ -14,7 +14,7 @@ pip install mthds
 
 ## What's in the box
 
-- **The protocol** (`mthds.protocol`) — `MTHDSProtocol`, the five-route interface every runner implements (`execute`, `start`, `validate`, `models`, `version`); the wire models (`RunResult`, `ModelDeck`, `ValidationReport`, `VersionInfo`); and the domain shapes methods are built from (`concept`, `stuff`, `working_memory`, `pipe_output`, `pipeline_inputs`).
+- **The protocol** (`mthds.protocol`) — `MTHDSProtocol`, the five-route interface every runner implements (`execute`, `start`, `validate`, `models`, `version`); the wire models (`RunResult`, `ModelDeck`, `ValidationReport`, `VersionInfo`); the domain shapes methods are built from (`concept`, `stuff`, `working_memory`, `pipe_output`, `pipeline_inputs`); and the catalog serialization of a stored method's source (`method_files`).
 - **Runners** (`mthds.runners`) — `MthdsAPIClient` (`mthds.runners.api.client`), the HTTP client for any MTHDS-Protocol server plus the hosted run-lifecycle (polling) extension; and `PipelexRunner` (`mthds.runners.pipelex.runner`), which shells out to a locally installed `pipelex` CLI.
 - **Package management** (`mthds.package`) — read, lock, and resolve `METHODS.toml` manifests.
 
