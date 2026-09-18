@@ -33,13 +33,15 @@ class StuffAbstract(BaseModel, ABC, Generic[ConceptType, StuffContentType]):
         already does.
 
         A subclass that emits something else — the `<package_address>::<domain>.<Code>`
-        crate key of a dependency-contributed concept, say — overrides this
-        method **under this name**, decorated again or as a plain method.
-        Declaring a second `field_serializer` for `concept` under any other name
-        raises pydantic's `multiple-field-serializers` error at class definition;
-        re-annotating the field with a serializer, or putting a `model_serializer`
-        on the concept subclass, is ignored in favour of this one with no
-        diagnostic at all.
+        crate key of a dependency-contributed concept, say — has two ways in, and
+        they do not reach the same places. Overriding `concept_ref` on the concept
+        reaches every reduction, this serializer included. Overriding this method
+        reaches a dump and nothing else: it must keep **this name**, decorated
+        again or as a plain method, since a second `field_serializer` for
+        `concept` under another name raises pydantic's `multiple-field-serializers`
+        error at class definition, while re-annotating the field with a serializer
+        or putting a `model_serializer` on the concept subclass is ignored in
+        favour of this one with no diagnostic at all.
         """
         return concept.concept_ref
 
