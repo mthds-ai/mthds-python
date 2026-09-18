@@ -113,8 +113,11 @@ class DictRunResultExecute(RunResultExecute[DictPipeOutputAbstract]):
 
         # Convert each Stuff -> DictStuff by dumping only the content
         for stuff_name, stuff in working_memory.root.items():
+            # The concept goes through the stuff's own serializer rather than `concept.concept_ref`:
+            # a runtime emitting the crate key of a dependency-contributed concept overrides
+            # `serialize_concept`, and reducing by hand here would ignore that override silently.
             dict_stuff = cls._dict_stuff_class(
-                concept=stuff.concept.concept_ref,
+                concept=stuff.model_dump(include={"concept"})["concept"],
                 content=stuff.content.model_dump(serialize_as_any=True),
             )
             dict_stuffs_root[stuff_name] = dict_stuff
