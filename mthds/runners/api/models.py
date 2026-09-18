@@ -113,6 +113,9 @@ class DictRunResultExecute(RunResultExecute[DictPipeOutputAbstract]):
 
         # Convert each Stuff -> DictStuff by dumping only the content
         for stuff_name, stuff in working_memory.root.items():
+            # The concept is reduced by `concept_ref`, which is what the protocol's own field
+            # serializer delegates to. A runtime that overrides `serialize_concept` instead is
+            # not followed here: which override point this path should honour is L-260918-5f09d8.
             dict_stuff = cls._dict_stuff_class(
                 concept=stuff.concept.concept_ref,
                 content=stuff.content.model_dump(serialize_as_any=True),

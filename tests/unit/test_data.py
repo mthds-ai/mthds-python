@@ -590,3 +590,134 @@ class CompactSlotCases:
         item_count=2,
         item=ObjectItem(concept_ref="probe.Gadget", required=True, fields=[TextField(name="label", required=True)]),
     )
+
+
+class MethodFileCases:
+    """Vectors for the catalog serialization, pinned against the TypeScript twin.
+
+    `TWIN_SERIALIZED` is the exact string `serializeMethodFiles(TWIN_FILES)` printed when run from
+    `mthds-js/src/protocol/method_files.ts` (2026-09-12, node 24): compact separators, UTF-8 left as
+    is, the double quote, the backslash and the LF and TAB it happens to contain escaped and nothing
+    else. `BLANK_PREDICATE` is what the same run said of each code point — which single-character
+    contents `serializeMethodFiles` dropped and which `parseMethodFiles` read as "no source" — so
+    every disagreement between ECMAScript's `trim` and Python's `str.isspace` is stated as a case
+    rather than assumed away. It samples the set; `test_the_trim_set_is_ecmascripts_whole_trim_set`
+    is what actually holds the set complete, by deriving it.
+    """
+
+    TWIN_FILES: ClassVar[list[dict[str, str]]] = [
+        {
+            "name": "bundle.mthds",
+            "content": 'domain = "x"\n[concept.\u00c9t\u00e9]\n'
+            'description = "caf\u00e9 \u2014 \u00fcn\u00efc\u00f6d\u00e9 \u65e5\u672c \U0001f642"\n',
+        },
+        {"name": "funcs/price.py", "content": 'def price():\n\treturn "a\\\\b" + \'\\u00e9\' + "/" + "<tag>" + "&"\n'},
+    ]
+    TWIN_SERIALIZED: ClassVar[str] = (
+        '[{"name":"bundle.mthds","content":"domain = \\"x\\"\\n[concept.\u00c9t\u00e9]\\n'
+        'description = \\"caf\u00e9 \u2014 \u00fcn\u00efc\u00f6d\u00e9 \u65e5\u672c \U0001f642\\"\\n"},'
+        '{"name":"funcs/price.py","content":"def price():\\n\\treturn \\"a\\\\\\\\b\\" + \'\\\\u00e9\' + \\"/\\" + \\"<tag>\\" + \\"&\\"\\n"}]'
+    )
+
+    # (topic, single-character content, whether the twin treats it as blank)
+    BLANK_PREDICATE: ClassVar[list[tuple[str, str, bool]]] = [
+        ("U+0009 TAB", "\t", True),
+        ("U+000A LF", "\n", True),
+        ("U+000B VT", "\v", True),
+        ("U+000C FF", "\f", True),
+        ("U+000D CR", "\r", True),
+        ("U+0020 SPACE", " ", True),
+        ("U+00A0 NBSP", "\u00a0", True),
+        ("U+1680 OGHAM SPACE MARK", "\u1680", True),
+        ("U+2000 EN QUAD", "\u2000", True),
+        ("U+200A HAIR SPACE", "\u200a", True),
+        ("U+2028 LINE SEPARATOR", "\u2028", True),
+        ("U+2029 PARAGRAPH SEPARATOR", "\u2029", True),
+        ("U+202F NARROW NBSP", "\u202f", True),
+        ("U+205F MEDIUM MATHEMATICAL SPACE", "\u205f", True),
+        ("U+3000 IDEOGRAPHIC SPACE", "\u3000", True),
+        ("U+FEFF BOM — blank to the twin, not to str.isspace", "\ufeff", True),
+        ("U+001C FILE SEPARATOR — content to the twin, whitespace to str.isspace", "\x1c", False),
+        ("U+001D GROUP SEPARATOR — content to the twin, whitespace to str.isspace", "\x1d", False),
+        ("U+001E RECORD SEPARATOR — content to the twin, whitespace to str.isspace", "\x1e", False),
+        ("U+001F UNIT SEPARATOR — content to the twin, whitespace to str.isspace", "\x1f", False),
+        ("U+0085 NEXT LINE — content to the twin, whitespace to str.isspace", "\x85", False),
+        ("U+200B ZERO WIDTH SPACE — content on both sides", "\u200b", False),
+        ("U+180E MONGOLIAN VOWEL SEPARATOR — content on both sides", "\u180e", False),
+    ]
+
+    # (topic, source) — every one read by the twin as "no files"
+    NO_FILES_SOURCES: ClassVar[list[tuple[str, str | None]]] = [
+        ("the empty string", ""),
+        ("whitespace only", "   "),
+        ("a mix of every whitespace kind, the BOM included", " \n\t\r \ufeff "),
+        ("None, a field never set", None),
+        ("the empty JSON array", "[]"),
+        ("the empty JSON array with trailing whitespace", "[]  "),
+        ("the empty JSON array with leading whitespace", "  []"),
+    ]
+
+    # (topic, source) — every one refused by the twin with PipelineRequestError
+    CONTRACT_VIOLATIONS: ClassVar[list[tuple[str, str]]] = [
+        ("raw bundle text is the legacy shape, not the catalog array", "domain = 'x'"),
+        ("a BOM before the array is not JSON on either side", "\ufeff[]"),
+        ("a JSON object, even one shaped like an entry", '{"name":"a.py","content":"x"}'),
+        ("JSON null", "null"),
+        ("a JSON string", '"abc"'),
+        ("a JSON number", "1"),
+        ("a bare NaN, refused by the decoder now and by the array check regardless", "NaN"),
+        ("an entry missing content", '[{"name":"a.py"}]'),
+        ("an entry that is a bare string", '["a.py"]'),
+        ("an entry that is null", "[null]"),
+        ("an entry that is an array", "[[]]"),
+        ("an entry whose name is not a string", '[{"name":1,"content":"x"}]'),
+        ("an entry whose content is not a string", '[{"name":"a","content":1}]'),
+        ("an entry whose content is null", '[{"name":"a","content":null}]'),
+        ("one good entry does not excuse a bad one", '[{"name":"a","content":"x"},{"name":"b"}]'),
+        # `json.loads` accepts these three as a Python extension and the twin's `JSON.parse`
+        # throws on every one. A bare `NaN` above is caught by the array check whatever the
+        # decoder does; inside an ignored member nothing downstream would ever look, so these
+        # are the cases that actually pin `parse_constant`.
+        ("NaN inside an ignored extra member", '[{"name":"a","content":"x","extra":NaN}]'),
+        ("Infinity inside an ignored extra member", '[{"name":"a","content":"x","extra":Infinity}]'),
+        ("-Infinity nested in an ignored member's array", '[{"name":"a","content":"x","extra":[1,-Infinity]}]'),
+        ("Infinity as a whole entry", "[Infinity]"),
+    ]
+
+    # (topic, content, the exact string the twin's `JSON.stringify` printed for that one file)
+    # `json.dumps(ensure_ascii=False)` writes an unpaired surrogate raw, which is not UTF-8
+    # encodable at all, so these fail at the storage boundary rather than at the typed surface.
+    LONE_SURROGATES: ClassVar[list[tuple[str, str, str]]] = [
+        ("a lone high surrogate", "\ud800", '[{"name":"f","content":"\\ud800"}]'),
+        ("a lone low surrogate", "\udfff", '[{"name":"f","content":"\\udfff"}]'),
+        ("a lone surrogate between text", "a\ud800b", '[{"name":"f","content":"a\\ud800b"}]'),
+        ("an astral character stays raw, being one code point", "\U0001f642", '[{"name":"f","content":"\U0001f642"}]'),
+    ]
+
+    # (topic, content, the exact string the twin's `JSON.stringify` printed for that one file)
+    # A Python `str` addresses code points and can hold the two halves of a pair as two of them,
+    # where the twin — addressing UTF-16 code units — holds one astral character and writes it
+    # raw. The pair is combined before the dump, so these are the twin's bytes and not two
+    # escapes. Built with `chr` so no source encoding can quietly collapse a pair into one code
+    # point, which is exactly the mistake that hides this case.
+    SURROGATE_PAIRS: ClassVar[list[tuple[str, str, str]]] = [
+        ("a pair is the astral character it encodes", chr(0xD83D) + chr(0xDE42), '[{"name":"f","content":"\U0001f642"}]'),
+        ("the lowest pair", chr(0xD800) + chr(0xDC00), '[{"name":"f","content":"\U00010000"}]'),
+        ("the highest pair", chr(0xDBFF) + chr(0xDFFF), '[{"name":"f","content":"\U0010ffff"}]'),
+        (
+            "a lone high before a pair stays lone, the pair still combines",
+            chr(0xD800) + chr(0xD800) + chr(0xDC00),
+            '[{"name":"f","content":"\\ud800\U00010000"}]',
+        ),
+        ("a low before a high is two lone surrogates", chr(0xDC00) + chr(0xD800), '[{"name":"f","content":"\\udc00\\ud800"}]'),
+        (
+            "a pair followed by a lone low",
+            chr(0xD83D) + chr(0xDE42) + chr(0xDFFF),
+            '[{"name":"f","content":"\U0001f642\\udfff"}]',
+        ),
+    ]
+
+    # A JSON integer long enough to exceed `sys.get_int_max_str_digits()` makes Python's decoder
+    # raise a bare `ValueError` from `int()` — not a `JSONDecodeError` — where the twin, having one
+    # number type and no such limit, parses the same bytes. The limit is 4300 digits by default.
+    OVERSIZED_INTEGER_DIGITS: ClassVar[int] = 4301

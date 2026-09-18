@@ -2,39 +2,44 @@
 
 from typing import Any
 
-from pydantic import BaseModel
-
+from mthds.protocol.concept import ConceptAbstract
+from mthds.protocol.pipe_output import PipeOutputAbstract
+from mthds.protocol.stuff import StuffAbstract, StuffContentAbstract
+from mthds.protocol.working_memory import WorkingMemoryAbstract
 from mthds.runners.api.models import MAIN_STUFF_NAME, DictRunResultExecute
 
 
-class _StubContent(BaseModel):
+class _StubContent(StuffContentAbstract):
     value: str
 
 
-class _StubConcept(BaseModel):
-    concept_ref: str
+class _StubConcept(ConceptAbstract):
+    pass
 
 
-class _StubStuff(BaseModel):
-    concept: _StubConcept
-    content: _StubContent
+class _StubStuff(StuffAbstract[_StubConcept, _StubContent]):
+    pass
 
 
-class _StubWorkingMemory(BaseModel):
-    root: dict[str, _StubStuff]
-    aliases: dict[str, str]
+class _StubWorkingMemory(WorkingMemoryAbstract[_StubStuff]):
+    pass
 
 
-class _StubPipeOutput(BaseModel):
-    working_memory: _StubWorkingMemory
-    pipeline_run_id: str
+class _StubPipeOutput(PipeOutputAbstract[_StubWorkingMemory]):
+    pass
 
 
 def _pipe_output_with_run_id(run_id: str) -> Any:
     """A minimal pipe-output stub carrying a non-empty pipeline_run_id."""
     return _StubPipeOutput(
         working_memory=_StubWorkingMemory(
-            root={"main": _StubStuff(concept=_StubConcept(concept_ref="answer.Answer"), content=_StubContent(value="42"))},
+            root={
+                "main": _StubStuff(
+                    stuff_code="stuff_1",
+                    concept=_StubConcept(code="Answer", domain_code="answer"),
+                    content=_StubContent(value="42"),
+                )
+            },
             aliases={MAIN_STUFF_NAME: "main"},
         ),
         pipeline_run_id=run_id,
@@ -77,3 +82,11 @@ class TestDictRunResultExecuteFromPipeOutput:
 
         assert result.model_extra is not None
         assert result.model_extra["main_stuff_name"] == "main"
+
+    def test_concept_is_reduced_to_its_ref_string(self) -> None:
+        """The wire model carries the concept as `<domain>.<Code>` — the reduction this path
+        performs is `concept_ref`, the same property the protocol's field serializer delegates to.
+        """
+        result = DictRunResultExecute.from_pipe_output(pipe_output=_pipe_output_with_run_id("run_1"))
+
+        assert result.pipe_output.working_memory.root["main"].concept == "answer.Answer"
