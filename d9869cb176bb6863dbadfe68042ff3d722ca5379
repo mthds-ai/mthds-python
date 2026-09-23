@@ -1,0 +1,23 @@
+mthds/cli/commands/list_cmd.py
+  fc340cade77229cc 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.4",
+  "base_commit_sha": "d9869cb176bb6863dbadfe68042ff3d722ca5379",
+  "prompts": {
+    "fc340cade77229cc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c00b7541-65c2-4b32-ae84-0cfdbbe71640",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Louis Choquel <lchoquel@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}

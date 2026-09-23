@@ -1,0 +1,27 @@
+mthds/cli/commands/_lock_helpers.py
+  3f677b3730e2cb87 30
+mthds/cli/commands/add_cmd.py
+  3f677b3730e2cb87 58
+mthds/cli/commands/install_cmd.py
+  3f677b3730e2cb87 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.4",
+  "base_commit_sha": "cb6a5aa83833efa41cc9939910e610beb15e4e50",
+  "prompts": {
+    "3f677b3730e2cb87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0c6f441d-a3e0-4f71-8740-c7481bd5b00b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Louis Choquel <lchoquel@users.noreply.github.com>",
+      "messages": [],
+      "total_additions": 3,
+      "total_deletions": 3,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    }
+  }
+}
