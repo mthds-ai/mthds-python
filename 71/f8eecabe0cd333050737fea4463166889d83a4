@@ -1,0 +1,25 @@
+CHANGELOG.md
+  s_12b2af5fdd964a::t_57429d1c15c0c1 7
+docs/runners.md
+  s_12b2af5fdd964a::t_a51752c4bafc4c 201
+mthds/runners/api/user_agent.py
+  s_12b2af5fdd964a::t_bc31eb72a815eb 40-42,53-54,84-85,94-95,97
+tests/unit/test_user_agent.py
+  s_12b2af5fdd964a::t_40563965fc994a 43-56,72-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71f8eecabe0cd333050737fea4463166889d83a4",
+  "prompts": {},
+  "sessions": {
+    "s_12b2af5fdd964a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bb75e847-abe4-4171-a2ff-2b263b391b14",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "thomashebrard <thomas@pipelex.com>"
+    }
+  }
+}
