@@ -14,6 +14,7 @@ from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, Vali
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.exceptions import ClientAuthenticationError, RunStillRunningError
 from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
+from mthds.runners.api.user_agent import AppInfo, build_user_agent, mthds_python_token
 from mthds.runners.types import RunnerType
 
 if TYPE_CHECKING:
@@ -53,7 +54,22 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         api_key: str | None = None,
         base_url: str | None = None,
         request_timeout_seconds: float | None = None,
+        app_info: AppInfo | None = None,
     ):
+        """Build a client from explicit arguments, falling back to `~/.mthds/config` / env.
+
+        Args:
+            api_key: Bearer token; defaults to `MTHDS_API_KEY`.
+            base_url: Origin of the runner; defaults to `MTHDS_BASE_URL`.
+            request_timeout_seconds: Per-request ceiling; defaults to the blocking-execute ceiling.
+            app_info: The integrator's identity, placed in front of this library's token in
+                the `User-Agent` (see `mthds.runners.api.user_agent`).
+
+        Raises:
+            ClientAuthenticationError: If no API key or base URL can be resolved.
+            ValueError: If the assembled `User-Agent` is over the length limit.
+        """
+        self.init_user_agent(app_info)
         config = load_config()
 
         resolved_api_key = api_key or config["api_key"]
@@ -80,11 +96,34 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         """The runner type (the API client IS the API runner — parity D8)."""
         return RunnerType.API
 
+    # ── Client identification ──────────────────────────────────────────
+
+    @classmethod
+    def user_agent_sdk_tokens(cls) -> tuple[str, ...]:
+        """The SDK product tokens this client puts in its `User-Agent`, outermost first.
+
+        A subclass wrapping this transport prepends its own token and keeps the base's:
+        `return (product_token("pipelex-sdk-python", __version__), *super().user_agent_sdk_tokens())`.
+        """
+        return (mthds_python_token(),)
+
+    def init_user_agent(self, app_info: AppInfo | None) -> None:
+        """Set `app_info` and the `User-Agent` value every request of this client carries.
+
+        Called by `__init__`; a subclass whose own `__init__` does not call `super().__init__()`
+        calls this instead, so the header is still built (and `app_info` checked) at construction.
+
+        Raises:
+            ValueError: If the assembled `User-Agent` is over the length limit.
+        """
+        self.app_info = app_info
+        self.user_agent = build_user_agent(app_info, self.user_agent_sdk_tokens())
+
     # ── Lifecycle ──────────────────────────────────────────────────────
 
     def start_client(self) -> MthdsAPIClient:
         """Initialize the HTTP client for API calls."""
-        self.client = httpx.AsyncClient(headers={"Authorization": f"Bearer {self.api_key}"})
+        self.client = httpx.AsyncClient(headers={"Authorization": f"Bearer {self.api_key}", "User-Agent": self.user_agent})
         return self
 
     async def close(self) -> None:
@@ -124,7 +163,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             self.start_client()
             assert self.client is not None
 
-        headers = {"Accept": "application/json"}
+        # `User-Agent` is set per request too, so a subclass overriding `start_client` cannot drop it.
+        headers = {"Accept": "application/json", "User-Agent": self.user_agent}
         if content is not None:
             headers["Content-Type"] = "application/json"
         return await self.client.request(method, url, content=content, headers=headers, timeout=request_timeout)
