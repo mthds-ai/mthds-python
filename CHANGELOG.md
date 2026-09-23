@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Client identification — `MthdsAPIClient` sends a `User-Agent` on every request**, following the workspace spec `docs/specs/client-identification.md`: `[<app_info>] mthds-python/<version> python/<major.minor.micro> (<os>; <arch>)`, so the hosted platform can tell SDK traffic, and the integrator behind it, from other clients. The constructor accepts a Stripe-style `app_info: AppInfo | None` (`name`, optional `version`, `url` and `details`), rendered in front of the library's token and refused with `ValueError` when a field is not a valid token, the `url` is not visible ASCII free of whitespace, `(`, `)`, `;` and `\`, or the header would exceed 512 characters; an empty `version` or `url` counts as absent. The helpers live in the new `mthds.runners.api.user_agent`, and a subclass extends the header through `user_agent_sdk_tokens()` and `init_user_agent(app_info)` (see `docs/runners.md`).
+- **`mthds.version`** — `PACKAGE_NAME` and the package release `__version__`, read from the installed distribution metadata and guarded by a test against `pyproject.toml`. It is distinct from `MTHDS_STANDARD_VERSION` and `PROTOCOL_VERSION`.
+
 ## [v0.15.0] - 2026-09-18
 
 ### Added
