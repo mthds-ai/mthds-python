@@ -198,7 +198,7 @@ client = MthdsAPIClient(app_info=AppInfo(name="acme-invoicer", version="1.4.0", 
 # User-Agent: acme-invoicer/1.4.0 (batch; +https://acme.example) mthds-python/0.15.0 python/3.12.4 (linux; x86_64)
 ```
 
-`name` is required and, like `version`, must be an RFC 9110 token; each `details` entry is a `token` or `token=value` comment parameter; `url` renders last in the comment as `+url`. An invalid field raises `ValueError` when the `AppInfo` is built, and a header over 512 characters raises `ValueError` when the client is built; nothing is silently dropped or rewritten.
+`name` is required and, like `version`, must be an RFC 9110 token; each `details` entry is a `token` or `token=value` comment parameter; `url` must be visible ASCII with no whitespace, parenthesis, semicolon or backslash and renders last in the comment as `+url`; an empty `version` or `url` counts as absent. An invalid field raises `ValueError` when the `AppInfo` is built, and a header over 512 characters raises `ValueError` when the client is built; nothing is silently dropped or rewritten.
 
 The helpers live in `mthds.runners.api.user_agent`: `AppInfo`, `product_token(name, version)`, `render_app_info(app_info)`, `mthds_python_token()`, `runtime_token()` and `build_user_agent(app_info, sdk_tokens)`.
 

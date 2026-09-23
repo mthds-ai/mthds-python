@@ -37,8 +37,9 @@ _TCHAR_CLASS = r"[!#$%&'*+\-.^_`|~0-9A-Za-z]"
 _TOKEN_PATTERN = re.compile(rf"{_TCHAR_CLASS}+")
 # A comment parameter: `token` or `token=value`, where `value = token / ( name "/" version )`.
 _DETAIL_PATTERN = re.compile(rf"{_TCHAR_CLASS}+(={_TCHAR_CLASS}+(/{_TCHAR_CLASS}+)?)?")
-# A URL rendered as `+url` inside a comment: anything but whitespace and the comment's own delimiters.
-_URL_PATTERN = re.compile(r"[^\s();\\]+")
+# A URL rendered as `+url` inside a comment: visible ASCII (`!`..`~`) minus the comment's own delimiters
+# `(`, `)`, `;` and `\`, so a non-ASCII or control character is refused here rather than failing at send time.
+_URL_PATTERN = re.compile(r"[!-'*-:<-\[\]-~]+")
 
 
 def _is_token(value: str) -> bool:
@@ -49,7 +50,8 @@ class AppInfo(BaseModel):
     """The integrator's identity, placed in front of the SDK tokens (Stripe-style `appInfo`).
 
     Renders as `name/version (<details>; +url)`, dropping `/version` and the comment when
-    they are empty. Every field is validated at construction: an invalid value raises
+    they are empty. An empty `version` or `url` counts as absent (it is stored as None), and
+    empty `details` render nothing. Every field is validated at construction: an invalid value raises
     `ValueError` (pydantic's `ValidationError` is a `ValueError`), and is never silently
     dropped or rewritten.
 
@@ -79,6 +81,8 @@ class AppInfo(BaseModel):
     @field_validator("version")
     @classmethod
     def _validate_version(cls, value: str | None) -> str | None:
+        if value == "":
+            return None
         if value is not None and not _is_token(value):
             msg = f"app_info.version must be an RFC 9110 token (tchar only): {value!r}"
             raise ValueError(msg)
@@ -87,8 +91,10 @@ class AppInfo(BaseModel):
     @field_validator("url")
     @classmethod
     def _validate_url(cls, value: str | None) -> str | None:
+        if value == "":
+            return None
         if value is not None and _URL_PATTERN.fullmatch(value) is None:
-            msg = f"app_info.url must be a non-empty URL with no whitespace, '(', ')', ';' or '\\': {value!r}"
+            msg = f"app_info.url must be visible ASCII with no whitespace, '(', ')', ';' or '\\': {value!r}"
             raise ValueError(msg)
         return value
 

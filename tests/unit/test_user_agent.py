@@ -40,6 +40,20 @@ class TestUserAgent:
     def test_render_app_info(self, topic: str, app_info: AppInfo, expected: str) -> None:
         assert render_app_info(app_info) == expected, topic
 
+    @pytest.mark.parametrize(
+        ("topic", "fields"),
+        [
+            ("empty version", {"name": "acme", "version": ""}),
+            ("empty url", {"name": "acme", "url": ""}),
+            ("empty details", {"name": "acme", "details": []}),
+        ],
+    )
+    def test_empty_optional_field_counts_as_absent(self, topic: str, fields: dict[str, object]) -> None:
+        app_info = AppInfo.model_validate(fields)
+        assert app_info.version is None, topic
+        assert app_info.url is None, topic
+        assert render_app_info(app_info) == "acme", topic
+
     def test_details_accepts_a_list(self) -> None:
         """Pydantic coerces a list to the frozen tuple, so callers can pass either."""
         app_info = AppInfo.model_validate({"name": "acme", "details": ["one", "two=2"]})
@@ -53,10 +67,12 @@ class TestUserAgent:
             ("slash in name", {"name": "acme/1.0"}),
             ("parenthesis in name", {"name": "acme(x)"}),
             ("non-ascii name", {"name": "acmé"}),
-            ("empty version", {"name": "acme", "version": ""}),
             ("space in version", {"name": "acme", "version": "1.0 beta"}),
             ("slash in version", {"name": "acme", "version": "1/0"}),
-            ("empty url", {"name": "acme", "url": ""}),
+            ("non-ascii url", {"name": "acme", "url": "https://caf\u00e9.example"}),
+            ("nul in url", {"name": "acme", "url": "https://acme.example/\x00"}),
+            ("del in url", {"name": "acme", "url": "https://acme.example/\x7f"}),
+            ("backslash in url", {"name": "acme", "url": "https://acme.example\\x"}),
             ("space in url", {"name": "acme", "url": "https://acme.example/a b"}),
             ("parenthesis in url", {"name": "acme", "url": "https://acme.example/(x)"}),
             ("semicolon in url", {"name": "acme", "url": "https://acme.example/;x"}),
