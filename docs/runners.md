@@ -8,7 +8,7 @@ The protocol contract and its implementations live in separate packages:
 
 - `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResultExecute`, `RunResultStart`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `pipe_io_contracts.py` and `input_form.py` (the two validate artifacts the standard owns — see [The validate artifacts](#the-validate-artifacts-pipe_io_contracts-and-input_form) below), `method_files.py` (the catalog serialization of a stored method's source — see [The catalog serialization](#the-catalog-serialization-method_files) below), `options.py` (the run-source argument surface — see [Run sources: what may be combined](#run-sources-what-may-be-combined) below), `exceptions.py` (`PipelineRequestError`), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
 - `mthds/runners/` — every runner implementation, one subpackage per runner:
-    - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictConcept`, `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute` — the runners' concrete JSON materialization of the protocol's domain shapes), `exceptions.py` (API auth + the protocol's 202-degrade error, `RunStillRunningError`).
+    - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictConcept`, `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute` — the runners' concrete JSON materialization of the protocol's domain shapes), `exceptions.py` (API auth + the protocol's 202-degrade error, `RunStillRunningError`), `user_agent.py` (the `User-Agent` builder and `AppInfo` — see [Client identification](#client-identification-user-agent) below).
     - `pipelex/runner.py` — `PipelexRunner`, the local runner that shells out to the `pipelex` CLI.
     - `types.py` — `RunnerType`.
 
@@ -178,6 +178,30 @@ async with MthdsAPIClient() as client:
 
 - `start` carries the protocol's basic args only. Anything beyond them — including a client-supplied run identifier, where a server supports one — is server-specific and rides `extra`; see the server's own documentation for the extension args it accepts. The `pipeline_run_id` returned by `start` is always the authoritative one.
 
+## Client identification (`User-Agent`)
+
+Every request `MthdsAPIClient` sends carries a `User-Agent` built from RFC 9110 product tokens, outermost first, as the workspace spec `docs/specs/client-identification.md` fixes for every first-party client:
+
+```
+[<app_info>] mthds-python/<package version> python/<major.minor.micro> (<os>; <arch>)
+```
+
+The library's own token is `mthds-python` (the repo name, since the npm twin is also published as `mthds`) followed by `mthds.version.__version__`, which is read from the installed distribution rather than typed by hand. The runtime token closes the value, with `<os>` from `platform.system().lower()` and `<arch>` from `platform.machine()`. The value is computed once at construction, stored on `client.user_agent`, and set both as a default header of the `httpx.AsyncClient` and on every request `_send` issues, so no request path can miss it. The header is self-declared: the hosted platform uses it for analytics and diagnostics only, never for authorization, and it must never carry a secret, a user identifier, an email or a hostname.
+
+An integrator names itself with `app_info`, shaped like Stripe's `appInfo`:
+
+```python
+from mthds.runners.api.client import MthdsAPIClient
+from mthds.runners.api.user_agent import AppInfo
+
+client = MthdsAPIClient(app_info=AppInfo(name="acme-invoicer", version="1.4.0", url="https://acme.example", details=("batch",)))
+# User-Agent: acme-invoicer/1.4.0 (batch; +https://acme.example) mthds-python/0.15.0 python/3.12.4 (linux; x86_64)
+```
+
+`name` is required and, like `version`, must be an RFC 9110 token; each `details` entry is a `token` or `token=value` comment parameter; `url` renders last in the comment as `+url`. An invalid field raises `ValueError` when the `AppInfo` is built, and a header over 512 characters raises `ValueError` when the client is built; nothing is silently dropped or rewritten.
+
+The helpers live in `mthds.runners.api.user_agent`: `AppInfo`, `product_token(name, version)`, `render_app_info(app_info)`, `mthds_python_token()`, `runtime_token()` and `build_user_agent(app_info, sdk_tokens)`.
+
 ## Protected extension surface (for `pipelex-sdk`)
 
 `pipelex-sdk`'s `PipelexAPIClient` subclasses `MthdsAPIClient` to add the durable run lifecycle, the product surface, and a richer error layer on top of the protocol base. To make that cross-package coupling intentional rather than accidental, these single-underscore members are a **protected extension surface** — a subclass in `pipelex-sdk` may rely on them, and they will not be renamed or have their signatures changed without coordinating a `pipelex-sdk` release:
@@ -185,6 +209,7 @@ async with MthdsAPIClient() as client:
 - `_send(method, url, *, content, request_timeout)` — issue one HTTP request, return the raw `httpx.Response` with no status interpretation (the caller decides). The reusable transport primitive every endpoint composes from.
 - `_url(endpoint)` — compose `{base}/v1/{endpoint}`.
 - `_build_run_body(...)` and `_build_extensions(extra, *, protocol_args=...)` (module-level) — assemble the `execute` / `start` request body and validate the generic `extra` passthrough (rejecting protocol args smuggled through it).
+- `user_agent_sdk_tokens()` (a classmethod) and `init_user_agent(app_info)` — the client-identification seam. A subclass on the same transport overrides `user_agent_sdk_tokens` to prepend its own token and keep the base's, `return (product_token("pipelex-sdk-python", __version__), *super().user_agent_sdk_tokens())`, and a subclass whose `__init__` does not call `super().__init__()` calls `self.init_user_agent(app_info)` from it, which sets `self.app_info` and `self.user_agent`. A subclass that overrides `start_client` should put `self.user_agent` in its default headers; `_send` sets it per request regardless.
 - `_post_validate(mthds_contents, allow_signatures, extra)` — build + send the `/validate` request and return the raw 200-diagnostic `httpx.Response`, leaving the verdict-union parse to the caller. The base's own `validate()` parses it into the neutral `ValidationResult`; `pipelex-sdk` reuses this seam to parse the same body into its Pipelex-branded narrowing.
 
 Everything else (private methods not listed here, internal constants) is implementation detail and may change freely.
