@@ -43,9 +43,9 @@ build-backend = "hatchling.build"
 
 [project.urls]
 Homepage = "https://mthds.ai"
-Repository = "https://github.com/mthds-ai/mthds"
-Documentation = "https://docs.mthds.ai/"
-Changelog = "https://github.com/mthds-ai/mthds/releases"
+Repository = "https://github.com/mthds-ai/mthds-python"
+Documentation = "https://github.com/mthds-ai/mthds-python/tree/main/docs"
+Changelog = "https://github.com/mthds-ai/mthds-python/blob/main/CHANGELOG.md"
 
 [tool.pytest]
 minversion = "9.0"
