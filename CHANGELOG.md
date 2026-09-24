@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.16.1] - 2026-09-25
+
+### Fixed
+
+- **Project links on PyPI**: `Repository` and `Changelog` pointed at the standard's repository, `mthds-ai/mthds`, and `Documentation` at `docs.mthds.ai`, a host that does not resolve. They now point at this package's repository, its `docs/` directory and its `CHANGELOG.md`; `Homepage` still leads to the standard at `https://mthds.ai`.
+
 ## [v0.16.0] - 2026-09-23
 
 ### Added
