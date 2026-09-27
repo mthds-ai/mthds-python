@@ -4,11 +4,15 @@
 
 ### Added
 
-- **`ApiResponseError`, `ProblemDocument` and `UserAction`**: the typed error of a non-2xx answer, in `mthds.runners.api.exceptions`, and the lenient read of its RFC 9457 problem document, in `mthds.runners.api.problem`. The error carries the members the `mthds` npm package's `ApiResponseError` keeps — `type_uri` (the problem's `type`), `title`, `instance`, `server_message` (its `detail`), `error_type`, `request_id` (the `X-Request-ID` header when the body has none), `error_domain`, `retryable`, `user_action` and the refusal's `validation_errors` — plus the decoded `problem` whole, and its `str()` names the request, the status, the reason and the advised next step. It is generic over the diagnostic type of `validation_errors`, and a client built on `MthdsAPIClient` raises its own subclass from every inherited route by overriding the protected `_raise_api_response_error` (see `docs/runners.md`).
+- **`ApiResponseError`, `ProblemDocument` and `UserAction`**: the typed error of a non-2xx answer, in `mthds.runners.api.exceptions`, and the lenient read of its RFC 9457 problem document, in `mthds.runners.api.problem`. The error carries the members the `mthds` npm package's `ApiResponseError` keeps — `type_uri` (the problem's `type`), `title`, `instance`, `server_message` (its `detail`), `error_type`, `request_id` (the `X-Request-ID` header when the body has none), `error_domain`, `retryable`, `user_action` and the refusal's `validation_errors` — plus the decoded `problem` whole, the answer's `headers` and the `request_url`, and its `str()` names the request, the status, the reason and the advised next step. It is generic over the diagnostic type of `validation_errors`, and a client built on `MthdsAPIClient` raises its own subclass from every inherited route by overriding the protected `_raise_api_response_error` (see `docs/runners.md`).
 
 ### Changed
 
-- **`MthdsAPIClient` routes raise `ApiResponseError` instead of `httpx.HTTPStatusError` (Breaking)**: `execute`, `start`, `validate`, `models` and `version` raise it on any non-2xx answer, whatever the body, so the runner's reason, next step and diagnostics reach the caller instead of httpx's bare status line. A caller that caught `httpx.HTTPStatusError` catches `ApiResponseError` (or its base `PipelineRequestError`) and reads `exc.status` where it read `exc.response.status_code`; the 202 degrade of `execute` still raises `RunStillRunningError`.
+- **`MthdsAPIClient` routes raise `ApiResponseError` instead of `httpx.HTTPStatusError` (Breaking)**: `execute`, `start`, `validate`, `models` and `version` raise it on any non-2xx answer, whatever the body, so the runner's reason, next step and diagnostics reach the caller instead of httpx's bare status line. A caller that caught `httpx.HTTPStatusError` catches `ApiResponseError` (or its base `PipelineRequestError`) and reads `exc.status`, `exc.headers` and `exc.request_url` where it read `exc.response.status_code`, `exc.response.headers` and `exc.request.url`; the 202 degrade of `execute` still raises `RunStillRunningError`.
+
+### Fixed
+
+- **Request errors survive pickling and copying**: every `PipelineRequestError` subclass, `RunStillRunningError` and `ApiResponseError` included, is rebuilt from its message and attributes without calling its constructor again, so one raised in a process pool or sent through a task queue arrives as itself instead of as a `TypeError` about missing arguments.
 
 ## [v0.16.1] - 2026-09-25
 

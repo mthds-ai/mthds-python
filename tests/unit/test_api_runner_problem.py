@@ -75,6 +75,22 @@ class TestProblemDocument:
         assert document.error_type == "RunnerError"
         assert document.server_message == "The runner is shutting down"
 
+    @pytest.mark.parametrize(
+        ("topic", "body"),
+        [
+            ("empty detail string", '{"detail": "", "message": "The runner is shutting down", "error_type": "RunnerError"}'),
+            (
+                "empty detail object members",
+                '{"detail": {"error_type": "", "message": ""}, "message": "The runner is shutting down", "error_type": "RunnerError"}',
+            ),
+        ],
+    )
+    def test_an_empty_detail_gives_no_reason_and_falls_back(self, topic: str, body: str) -> None:
+        """An empty `detail` is no reason: the top-level `message` and `error_type` stand in."""
+        document = ProblemDocument.make_from_body(body)
+        assert document.server_message == "The runner is shutting down", topic
+        assert document.error_type == "RunnerError", topic
+
     def test_the_validation_items_keep_their_locators(self) -> None:
         """A refusal's items are the protocol's neutral diagnostics, the runner's locators on model_extra."""
         document = ProblemDocument.make_from_body(RefusedRunBodies.UNKNOWN_MODEL_AT_LOAD)

@@ -8,8 +8,8 @@ fix it: `input`, `config` or `runtime`), `retryable` (whether the same request c
 `user_action` (the next step) and, when it refuses to run an invalid method, `validation_errors[]`.
 
 `ProblemDocument` reads those members out of a response body, leniently: a member is kept only when
-it has the type the document gives it, so a malformed member reads as absent rather than as a wrong
-value, and a body that is not a problem document at all (an HTML gateway page, plain text, an empty
+it has the type the document gives it, and a text member only when it is not empty, so a malformed
+member reads as absent rather than as a wrong value, and a body that is not a problem document at all (an HTML gateway page, plain text, an empty
 body) reads as a document with no members. The whole decoded object stays on `members`, so a member
 this package does not name is never lost. `MthdsAPIClient` builds every `ApiResponseError` from it,
 and a client built on this one reads the same members through the same parse.
@@ -56,7 +56,7 @@ class ProblemDocument(BaseModel):
       its short human label, and the occurrence (a request path or a request URN).
     - `server_message`: the reason for this occurrence, the problem's `detail` string. Older answers
       nest it as `{"detail": {"error_type": ..., "message": ...}}` or put a top-level `message`; both
-      are read too.
+      are read too, the top-level `message` standing in when the `detail` gives no reason.
     - `error_type`: the runner's exception class name, from the same places.
     - `request_id`: the body's `request_id`, or the `X-Request-ID` response header when the body
       carries none (a gateway error page, a body that is no problem document).
@@ -120,14 +120,14 @@ class ProblemDocument(BaseModel):
         detail = root.get("detail")
         if isinstance(detail, dict):
             detail_object = cast("dict[str, Any]", detail)
-            error_type = _string_member(detail_object, "error_type")
-            server_message = _string_member(detail_object, "message")
-        elif isinstance(detail, str):
+            error_type = _non_empty_string_member(detail_object, "error_type")
+            server_message = _non_empty_string_member(detail_object, "message")
+        elif isinstance(detail, str) and detail:
             server_message = detail
         if error_type is None:
-            error_type = _string_member(root, "error_type")
+            error_type = _non_empty_string_member(root, "error_type")
         if server_message is None:
-            server_message = _string_member(root, "message")
+            server_message = _non_empty_string_member(root, "message")
 
         raw_retryable = root.get("retryable")
         return cls(
@@ -162,15 +162,10 @@ def _decode_object(body: str) -> dict[str, Any] | None:
     return cast("dict[str, Any]", parsed)
 
 
-def _string_member(members: dict[str, Any], key: str) -> str | None:
-    """A string member, or `None` when it is absent or not a string."""
-    value = members.get(key)
-    return value if isinstance(value, str) else None
-
-
 def _non_empty_string_member(members: dict[str, Any], key: str) -> str | None:
     """A non-empty string member, or `None` when it is absent, empty or not a string."""
-    return _string_member(members, key) or None
+    value = members.get(key)
+    return value if isinstance(value, str) and value else None
 
 
 def _user_action_of(value: Any) -> UserAction | None:

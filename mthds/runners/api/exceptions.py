@@ -66,8 +66,11 @@ class ApiResponseError(PipelineRequestError, Generic[ProblemDiagnosticT]):
       invalid bundle here: that is its `200` invalid verdict. A refusal whose diagnostics are not
       itemized carries `None`, so fall back to `server_message`.
     - **Everything else.** `problem` is the decoded document whole, so a member not named here stays
-      reachable; `response_body` is the raw text, `status` / `status_text` the transport's, and
-      `api_url` the runner's base URL.
+      reachable; `response_body` is the raw text, `status` / `status_text` the transport's,
+      `headers` the answer's headers (lower-case names, so `headers.get("retry-after")` reads the
+      delay a `429` or a `503` asks for), `request_url` the URL requested, and `api_url` the
+      runner's base URL. The error keeps this plain data and never the request itself, which
+      carries the API key.
 
     The class is generic over the item type of `validation_errors` (`ValidationDiagnostic` unless
     stated), so a client that narrows the items to its own diagnostic subclass raises
@@ -82,6 +85,8 @@ class ApiResponseError(PipelineRequestError, Generic[ProblemDiagnosticT]):
         status: int,
         status_text: str,
         response_body: str,
+        headers: dict[str, str] | None = None,
+        request_url: str | None = None,
         error_type: str | None = None,
         server_message: str | None = None,
         validation_errors: list[ProblemDiagnosticT] | None = None,
@@ -98,11 +103,13 @@ class ApiResponseError(PipelineRequestError, Generic[ProblemDiagnosticT]):
 
         Args:
             message: What failed and why, e.g. `API POST /v1/execute failed (422): <reason>`. The
-                next step is appended on its own line unless `message` already carries it.
+                next step is appended on its own line unless `message` already ends with it.
             api_url: The base URL of the runner that answered.
             status: The HTTP status code of the answer.
             status_text: The HTTP reason phrase of the answer.
             response_body: The answer's body, as text.
+            headers: The answer's headers, names in lower case.
+            request_url: The URL the request was sent to.
             error_type: The runner's exception class name.
             server_message: The problem's `detail`, the reason for this occurrence.
             validation_errors: The per-error diagnostics of a refused run.
@@ -120,6 +127,8 @@ class ApiResponseError(PipelineRequestError, Generic[ProblemDiagnosticT]):
         self.status = status
         self.status_text = status_text
         self.response_body = response_body
+        self.headers: dict[str, str] = headers or {}
+        self.request_url = request_url
         self.error_type = error_type
         self.server_message = server_message
         self.validation_errors = validation_errors
@@ -134,7 +143,7 @@ class ApiResponseError(PipelineRequestError, Generic[ProblemDiagnosticT]):
 
 
 def _with_next_step(message: str, user_action: UserAction | None) -> str:
-    """Append the advised next step to a message, unless there is none or the message already says it."""
-    if user_action is None or user_action.detail in message:
+    """Append the advised next step to a message, unless there is none or the message already ends with it."""
+    if user_action is None or message.rstrip().endswith(user_action.detail.strip()):
         return message
     return f"{message}\nNext step: {user_action.detail}"

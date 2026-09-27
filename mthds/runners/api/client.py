@@ -422,6 +422,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             status=response.status_code,
             status_text=response.reason_phrase,
             response_body=response.text,
+            headers=dict(response.headers),
+            request_url=self._url(endpoint),
             error_type=document.error_type,
             server_message=document.server_message,
             validation_errors=document.validation_errors,

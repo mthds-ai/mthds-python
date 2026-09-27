@@ -1,5 +1,9 @@
 """Tests for the protocol + runner error hierarchy (`mthds.protocol.exceptions`, `mthds.runners.api.exceptions`)."""
 
+import copy
+import pickle  # ruff: ignore[suspicious-pickle-import]  # the test round-trips its own errors, never untrusted bytes
+from typing import Any
+
 import httpx
 import pytest
 
@@ -56,6 +60,12 @@ class TestClientExceptions:
                 UserAction(kind="change_input", detail="Declare it as a list."),
                 "API POST /v1/start failed (422): The field is single. Declare it as a list.",
             ),
+            (
+                "next step's words inside the reason are not the next step",
+                "API POST /v1/start failed (503): Retry budget exhausted while calling the provider.",
+                UserAction(kind="wait_and_retry", detail="Retry"),
+                "API POST /v1/start failed (503): Retry budget exhausted while calling the provider.\nNext step: Retry",
+            ),
         ],
     )
     def test_api_response_error_message_ends_with_the_next_step(
@@ -95,3 +105,35 @@ class TestClientExceptions:
         assert (exc.request_id, exc.error_domain, exc.retryable) == ("req_1", "input", False)
         assert exc.problem == {"detail": "bad model"}
         assert exc.user_action is None
+
+    @pytest.mark.parametrize(
+        ("topic", "error"),
+        [
+            (
+                "api response error",
+                ApiResponseError(
+                    "API POST /v1/execute failed (422): Model handle 'gpt-5.1' was not found",
+                    api_url="http://localhost:8081",
+                    status=422,
+                    status_text="Unprocessable Entity",
+                    response_body="{}",
+                    headers={"retry-after": "17"},
+                    request_url="http://localhost:8081/v1/execute",
+                    validation_errors=[ValidationDiagnostic(category="pipe_validation", message="bad model")],
+                    user_action=UserAction(kind="change_model", detail="Change the model 'gpt-5.1'."),
+                    problem={"detail": "Model handle 'gpt-5.1' was not found"},
+                ),
+            ),
+            ("run still running", RunStillRunningError("still running", run_id="run_1", retry_after_seconds=10, location="/v1/runs/run_1")),
+            ("plain request error", PipelineRequestError("nothing to run")),
+        ],
+    )
+    def test_request_errors_survive_pickling_and_copying(self, topic: str, error: PipelineRequestError) -> None:
+        """A request error crosses a process boundary, or a deep copy, as itself: same class, same message, same members."""
+        unpickled: Any = pickle.loads(pickle.dumps(error))  # ruff: ignore[suspicious-pickle-usage]
+        rebuilt_errors: list[Any] = [unpickled, copy.deepcopy(error), copy.copy(error)]
+        for rebuilt in rebuilt_errors:
+            assert type(rebuilt) is type(error), topic
+            assert str(rebuilt) == str(error), topic
+            assert rebuilt.args == error.args, topic
+            assert vars(rebuilt) == vars(error), topic
