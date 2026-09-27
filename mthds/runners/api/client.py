@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, NoReturn, Self, cast
 from urllib.parse import quote
 
 import httpx
@@ -12,8 +12,9 @@ from mthds.config import load_config
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationResult, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
-from mthds.runners.api.exceptions import ClientAuthenticationError, RunStillRunningError
+from mthds.runners.api.exceptions import ApiResponseError, ClientAuthenticationError, RunStillRunningError
 from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
+from mthds.runners.api.problem import ProblemDocument
 from mthds.runners.api.user_agent import AppInfo, build_user_agent, mthds_python_token
 from mthds.runners.types import RunnerType
 
@@ -205,6 +206,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 protocol arg.
             RunStillRunningError: If the server answers 202 (the protocol's optional
                 async degrade) — the run continues server-side; resume by `run_id`.
+            ApiResponseError: If the server answers non-2xx — a refusal to run an invalid
+                method (`422`, its diagnostics on `validation_errors`), a failed run, auth,
+                or a server fault — with the problem document's members typed.
         """
         _assert_run_sources(pipe_code=pipe_code, mthds_contents=mthds_contents, extra=extra, route="execute")
 
@@ -221,7 +225,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         content = to_json(body)
         response = await self._send("POST", self._url("execute"), content=content, request_timeout=self.request_timeout_seconds)
         self._raise_if_execute_degraded(response)
-        response.raise_for_status()
+        if not response.is_success:
+            self._raise_api_response_error(method="POST", endpoint="execute", response=response)
         return DictRunResultExecute.model_validate(response.json())
 
     @override
@@ -258,6 +263,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         Raises:
             PipelineRequestError: If nothing to run was named, or if `extra` carries a
                 protocol arg.
+            ApiResponseError: If the server answers non-2xx — a refusal to run an invalid
+                method (`422`, its diagnostics on `validation_errors`), auth, or a server
+                fault — with the problem document's members typed.
         """
         _assert_run_sources(pipe_code=pipe_code, mthds_contents=mthds_contents, extra=extra, route="start")
 
@@ -273,7 +281,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         )
         content = to_json(body)
         response = await self._send("POST", self._url("start"), content=content, request_timeout=self.request_timeout_seconds)
-        response.raise_for_status()
+        if not response.is_success:
+            self._raise_api_response_error(method="POST", endpoint="start", response=response)
         return RunResultStart.model_validate(response.json())
 
     async def _post_validate(self, mthds_contents: list[str], allow_signatures: bool, extra: dict[str, Any] | None) -> httpx.Response:
@@ -281,16 +290,17 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         The shared transport + body-building seam for `validate`: builds the request body
         (the protocol's basic args plus the generic `extra` extension passthrough, guarded
-        against a smuggled protocol arg), sends it, and raises on a no-verdict non-2xx. The
-        200 body — a produced verdict discriminated on `is_valid` — is left for the caller to
-        parse into its own verdict union (the protocol-neutral `ValidationResult` here; the
-        `pipelex-sdk` subclass narrows it to its Pipelex-branded report types). A documented
-        protected extension seam, alongside `_send` / `_url` / `_build_run_body`.
+        against a smuggled protocol arg), sends it, and raises `ApiResponseError` on a
+        no-verdict non-2xx. The 200 body — a produced verdict discriminated on `is_valid` —
+        is left for the caller to parse into its own verdict union (the protocol-neutral
+        `ValidationResult` here; the `pipelex-sdk` subclass narrows it to its Pipelex-branded
+        report types). A documented protected extension seam, alongside `_send` / `_url` /
+        `_build_run_body`.
 
         Raises:
             PipelineRequestError: if `extra` carries a protocol arg (`mthds_contents` or
                 `allow_signatures`) — pass it as a named parameter instead.
-            httpx.HTTPStatusError: a no-verdict response (request-shape 422, 401/403, or 5xx).
+            ApiResponseError: a no-verdict response (request-shape 422, 401/403, or 5xx).
         """
         body: dict[str, Any] = {"mthds_contents": mthds_contents, "allow_signatures": allow_signatures}
         body.update(_build_extensions(extra, protocol_args=_VALIDATE_REQUEST_ARGS))
@@ -301,7 +311,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             content=content,
             request_timeout=self.request_timeout_seconds,
         )
-        response.raise_for_status()
+        if not response.is_success:
+            self._raise_api_response_error(method="POST", endpoint="validate", response=response)
         return response
 
     @override
@@ -316,7 +327,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         `/validate` is 200-diagnostic: a produced verdict — valid or invalid — rides a
         200 body discriminated on `is_valid`. A non-2xx response means no verdict could
         be produced (request shape, auth, server fault) and surfaces as an
-        `httpx.HTTPStatusError`; an invalid bundle does NOT raise.
+        `ApiResponseError`; an invalid bundle does NOT raise.
 
         Args:
             mthds_contents: MTHDS contents to load (always a list, even for one file)
@@ -345,7 +356,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 `is_valid` (the discriminant cannot be tagged), or a tagged arm missing
                 a required field. A malformed 200 is a server bug, surfaced raw rather
                 than wrapped or mistaken for a valid verdict.
-            httpx.HTTPStatusError: a no-verdict response (request-shape 422, 401/403,
+            ApiResponseError: a no-verdict response (request-shape 422, 401/403,
                 or 5xx) — never an invalid bundle, which is a 200 `InvalidValidationReport`.
         """
         response = await self._post_validate(mthds_contents, allow_signatures, extra)
@@ -361,10 +372,14 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         Returns:
             ModelDeck with the models this runner can route to (base fields
             + any implementation extensions).
+
+        Raises:
+            ApiResponseError: If the server answers non-2xx.
         """
         endpoint = f"models?type={quote(category, safe='')}" if category is not None else "models"
         response = await self._send("GET", self._url(endpoint), content=None, request_timeout=self.request_timeout_seconds)
-        response.raise_for_status()
+        if not response.is_success:
+            self._raise_api_response_error(method="GET", endpoint=endpoint, response=response)
         return ModelDeck.model_validate(response.json())
 
     @override
@@ -373,10 +388,55 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         Returns:
             VersionInfo — the handshake for feature detection (hosted extensions or not).
+
+        Raises:
+            ApiResponseError: If the server answers non-2xx.
         """
         response = await self._send("GET", self._url("version"), content=None, request_timeout=self.request_timeout_seconds)
-        response.raise_for_status()
+        if not response.is_success:
+            self._raise_api_response_error(method="GET", endpoint="version", response=response)
         return VersionInfo.model_validate(response.json())
+
+    def _raise_api_response_error(self, *, method: str, endpoint: str, response: httpx.Response) -> NoReturn:
+        """Raise the typed `ApiResponseError` for a non-2xx answer, its problem document's members parsed.
+
+        Every route calls this on a non-2xx answer, so it is the one place an answer becomes an error.
+        A documented protected extension seam: a client built on this one overrides it to raise its own
+        subclass of `ApiResponseError` (one that narrows `validation_errors`, or carries members of its
+        own), and every inherited route then raises that subclass.
+
+        Args:
+            method: The HTTP method of the request, for the message (`POST`).
+            endpoint: The endpoint below the protocol prefix, query included, exactly as the route sent it
+                (`execute`, `models?type=llm`): it names the request in the message and gives `request_url`.
+            response: The runner's non-2xx answer.
+
+        Raises:
+            ApiResponseError: Always.
+        """
+        document = ProblemDocument.make_from_response(response)
+        reason = _failure_reason(document, response)
+        msg = f"API {method} /{self._API_PREFIX}/{endpoint} failed ({response.status_code}): {reason}"
+        raise ApiResponseError(
+            msg,
+            api_url=self.base_url,
+            status=response.status_code,
+            status_text=response.reason_phrase,
+            response_body=response.text,
+            headers=dict(response.headers),
+            request_url=self._url(endpoint),
+            error_type=document.error_type,
+            server_message=document.server_message,
+            validation_errors=document.validation_errors,
+            type_uri=document.type_uri,
+            title=document.title,
+            instance=document.instance,
+            request_id=document.request_id,
+            error_domain=document.error_domain,
+            retryable=document.retryable,
+            user_action=document.user_action,
+            problem=document.members,
+        )
 
     def _raise_if_execute_degraded(self, response: httpx.Response) -> None:
         """Map the protocol's optional 202 execute degrade to a typed error.
@@ -521,6 +581,25 @@ def _build_extensions(extra: dict[str, Any] | None, *, protocol_args: frozenset[
         msg = f"extra carries protocol args {sorted(protocol_overlap)} — pass them as named parameters instead."
         raise PipelineRequestError(msg)
     return extensions
+
+
+# How much of a body that is no problem document the error's message quotes; `response_body` keeps it whole.
+_REASON_BODY_LIMIT = 500
+
+
+def _failure_reason(document: ProblemDocument, response: httpx.Response) -> str:
+    """The reason a non-2xx answer gives, in the order a person is best served by.
+
+    The problem's `detail`, else its `title`, else the raw body (cut short, since a gateway's HTML
+    page can be long), else the status text.
+    """
+    for candidate in (document.server_message, document.title):
+        if candidate and candidate.strip():
+            return candidate
+    body = response.text.strip()
+    if body:
+        return body if len(body) <= _REASON_BODY_LIMIT else f"{body[:_REASON_BODY_LIMIT]}…"
+    return response.reason_phrase or "no reason given"
 
 
 def _parse_retry_after(headers: httpx.Headers) -> int | None:
