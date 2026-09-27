@@ -79,6 +79,8 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         Raises:
             RunStillRunningError: If the server answers 202 (the protocol's
                 optional async degrade) instead of a final result.
+            ApiResponseError: If the server answers non-2xx (the API runner), with
+                the members of its problem document typed.
             ClientAuthenticationError: If an API token is missing for API execution.
         """
         ...
@@ -115,6 +117,8 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             (no output yet)
 
         Raises:
+            ApiResponseError: If the server answers non-2xx (the API runner), with
+                the members of its problem document typed.
             ClientAuthenticationError: If an API token is missing for API execution.
         """
         ...

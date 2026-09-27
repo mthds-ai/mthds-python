@@ -246,7 +246,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.4" },
     { name = "semantic-version", specifier = ">=2.10.0,<3.0.0" },
     { name = "tomlkit", specifier = ">=0.12.0" },
-    { name = "typing-extensions", specifier = ">=4.0.0" },
+    { name = "typing-extensions", specifier = ">=4.12.2" },
 ]
 provides-extras = ["dev"]
 
