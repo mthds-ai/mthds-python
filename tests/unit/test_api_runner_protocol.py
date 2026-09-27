@@ -12,13 +12,14 @@ from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import InvalidValidationReport, ModelCategory, ModelDeck, ValidationReport, VersionInfo
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.client import MthdsAPIClient
+from mthds.runners.api.exceptions import ApiResponseError
 from tests.unit.test_data import ExecuteWireResponses
 
 _BASE_URL = "http://localhost:8081"
 
 
 def _response(status_code: int, *, json: object = None, headers: dict[str, str] | None = None) -> httpx.Response:
-    """Build a constructed httpx.Response with a request attached (so raise_for_status works)."""
+    """Build a constructed httpx.Response with a request attached."""
     request = httpx.Request("GET", f"{_BASE_URL}/x")
     if json is None:
         return httpx.Response(status_code, headers=headers or {}, request=request)
@@ -134,8 +135,8 @@ class TestMthdsAPIClientProtocol:
         assert report.validation_errors[0].category == "pipe_validation"
         assert (report.validation_errors[0].model_extra or {})["pipe_code"] == "summarize"
 
-    def test_validate_no_verdict_response_raises_http_error(self, mocker: MockerFixture) -> None:
-        """A request-shape 422 (no verdict could be produced) surfaces as an HTTP error, not a report.
+    def test_validate_no_verdict_response_raises_api_response_error(self, mocker: MockerFixture) -> None:
+        """A request-shape 422 (no verdict could be produced) surfaces as an ApiResponseError, not a report.
 
         The 422 is the server's verdict on the request shape; this client does no local
         validation of the request beyond the `extra` protocol-arg guard.
@@ -144,8 +145,11 @@ class TestMthdsAPIClientProtocol:
         body = {"type": "about:blank", "title": "Malformed request", "status": 422}
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(422, json=body)))
 
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(ApiResponseError) as exc_info:
             asyncio.run(client.validate(["domain = "]))
+        assert exc_info.value.status == 422
+        assert exc_info.value.title == "Malformed request"
+        assert str(exc_info.value) == "API POST /v1/validate failed (422): Malformed request"
 
     def test_validate_extra_rejects_protocol_arg(self) -> None:
         """A protocol arg smuggled through `extra` is rejected client-side (mirrors the execute/start guard)."""
