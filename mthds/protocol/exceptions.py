@@ -8,10 +8,11 @@ from typing_extensions import override
 class PipelineRequestError(Exception):
     """Raised when a request to an MTHDS runner is malformed or fails client-side.
 
-    Every subclass survives pickling and copying, whatever its constructor asks for: the error is
-    rebuilt from its message and its attributes without calling `__init__` again, so a subclass
-    whose constructor takes required or keyword-only arguments still crosses a process boundary
-    (a process pool, a task queue) as itself rather than as a `TypeError`.
+    A subclass survives pickling and copying whatever its `__init__` asks for: the error is rebuilt
+    from its message and its instance attributes without calling `__init__` again, so a subclass
+    whose `__init__` takes required or keyword-only arguments still crosses a process boundary (a
+    process pool, a task queue) as itself rather than as a `TypeError`. A subclass that defines its
+    own `__new__` or keeps state in `__slots__` provides its own `__reduce__`.
     """
 
     @override

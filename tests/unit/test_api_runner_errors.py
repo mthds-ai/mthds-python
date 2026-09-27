@@ -226,14 +226,19 @@ class TestMthdsAPIClientErrors:
         assert str(exc) == "API GET /v1/models?type=llm failed (401): Invalid API key"
 
     def test_the_answers_headers_and_the_requested_url_stay_on_the_error(self, mocker: MockerFixture) -> None:
-        """A rate-limited answer keeps its `Retry-After`, and the error names the URL requested, never the request itself."""
-        response = _response(429, text='{"detail":"Too many requests"}', headers={"Retry-After": "17", "X-Request-ID": "req_rate"})
+        """A rate-limited answer keeps its `Retry-After`; the error names the URL but keeps nothing of the request, which carries the key."""
+        request = httpx.Request("POST", f"{_BASE_URL}/v1/start", headers={"Authorization": "Bearer test-token"})
+        response = httpx.Response(
+            429, text='{"detail":"Too many requests"}', headers={"Retry-After": "17", "X-Request-ID": "req_rate"}, request=request
+        )
         exc = self._raised(self._client(), mocker, response, _ROUTE_CALLS[1][1])
 
         assert exc.headers["retry-after"] == "17"
         assert exc.request_url == f"{_BASE_URL}/v1/start"
         assert exc.request_id == "req_rate"
-        assert "authorization" not in exc.headers
+        for value in vars(exc).values():
+            assert not isinstance(value, (httpx.Request, httpx.Response))
+        assert "test-token" not in repr(vars(exc))
 
     def test_a_202_on_execute_still_raises_run_still_running(self, mocker: MockerFixture) -> None:
         """The protocol's async degrade keeps its own error, ahead of the non-2xx handling."""

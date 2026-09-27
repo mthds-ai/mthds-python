@@ -407,7 +407,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         Args:
             method: The HTTP method of the request, for the message (`POST`).
-            endpoint: The endpoint below the protocol prefix, for the message (`execute`, `models?type=llm`).
+            endpoint: The endpoint below the protocol prefix, query included, exactly as the route sent it
+                (`execute`, `models?type=llm`): it names the request in the message and gives `request_url`.
             response: The runner's non-2xx answer.
 
         Raises:
