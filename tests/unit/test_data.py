@@ -690,13 +690,16 @@ class CompactSlotCases:
         NumberField(name="position", required=False, integer=False),
     ]
 
-    VERDICT_NATIVES: ClassVar[list[tuple[str, InputFormField, bool]]] = [
+    # Each case carries the compact slot it projects to, so a `YesNo` that regressed to
+    # `{"yes_no": false}` fails here rather than only in the byte-parity corpus.
+    VERDICT_NATIVES: ClassVar[list[tuple[str, InputFormField, bool, Any]]] = [
         (
             "a Choice keeps its envelope: a bare option key would read exactly as a Text does",
             ObjectField(
                 name="choice_in", concept_ref="native.Choice", required=True, presence=PresenceMarker.PLAIN, gating=True, fields=CHOICE_PAYLOAD
             ),
             True,
+            {"concept": "native.Choice", "content": {"choice": "choice_value", "confidence": 0.0, "probabilities": {}}},
         ),
         (
             "a Rating keeps it too: a bare level would read exactly as a Number does",
@@ -704,10 +707,12 @@ class CompactSlotCases:
                 name="rating_in", concept_ref="native.Rating", required=True, presence=PresenceMarker.PLAIN, gating=True, fields=RATING_PAYLOAD
             ),
             True,
+            {"concept": "native.Rating", "content": {"level": 0, "confidence": 0.0, "probabilities": {}, "position": 0.0}},
         ),
         (
             "a YesNo does not: its input is a boolean, its probability being what a judging model reports",
             BooleanField(name="yes_no_in", concept_ref="native.YesNo", required=True, presence=PresenceMarker.PLAIN, gating=True),
+            False,
             False,
         ),
     ]
