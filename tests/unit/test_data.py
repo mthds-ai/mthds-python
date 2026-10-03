@@ -87,6 +87,24 @@ class ExecuteWireResponses:
     }
 
 
+class ModelDeckWireBodies:
+    """`GET /models` 200 bodies, among them one a runner of a later protocol minor may send."""
+
+    # One entry per way a deck entry's `type` can read: a category this package knew before
+    # `judgment`, `judgment` itself, a category no protocol version this package knows defines,
+    # and no category at all. The unknown value stands for a later minor's category, so it is
+    # deliberately not a word any MTHDS settings family uses today.
+    MIXED_CATEGORIES: ClassVar[dict[str, Any]] = {
+        "models": [
+            {"name": "gpt-test", "type": "llm"},
+            {"name": "judge-test", "type": "judgment"},
+            {"name": "speech-test", "type": "speech_to_text"},
+            {"name": "untyped-test"},
+        ],
+        "aliases": {"best": "gpt-test"},
+    }
+
+
 class InputFormWireNodes:
     """Hand-written field descriptors probing the closed shapes of `mthds.protocol.input_form`.
 

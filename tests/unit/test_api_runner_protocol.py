@@ -13,7 +13,7 @@ from mthds.protocol.models import InvalidValidationReport, ModelCategory, ModelD
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.client import MthdsAPIClient
 from mthds.runners.api.exceptions import ApiResponseError
-from tests.unit.test_data import ExecuteWireResponses
+from tests.unit.test_data import ExecuteWireResponses, ModelDeckWireBodies
 
 _BASE_URL = "http://localhost:8081"
 
@@ -177,13 +177,33 @@ class TestMthdsAPIClientProtocol:
         assert deck.model_extra is not None
         assert deck.model_extra["aliases"] == {"best": "gpt-test"}
 
-    def test_models_category_filter_rides_querystring(self, mocker: MockerFixture) -> None:
+    def test_models_keeps_a_category_it_does_not_know(self, mocker: MockerFixture) -> None:
+        """A deck from a runner of a later protocol minor, carrying a category this package does not know,
+        comes back whole instead of failing the call.
+        """
+        client = self._client()
+        mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=ModelDeckWireBodies.MIXED_CATEGORIES)))
+
+        deck = asyncio.run(client.models())
+        assert [model.type for model in deck.models] == [ModelCategory.LLM, ModelCategory.JUDGMENT, "speech_to_text", None]
+
+    @pytest.mark.parametrize(
+        ("category", "expected_query"),
+        [
+            (ModelCategory.LLM, "type=llm"),
+            (ModelCategory.EXTRACT, "type=extract"),
+            (ModelCategory.IMG_GEN, "type=img_gen"),
+            (ModelCategory.SEARCH, "type=search"),
+            (ModelCategory.JUDGMENT, "type=judgment"),
+        ],
+    )
+    def test_models_category_filter_rides_querystring(self, mocker: MockerFixture, category: ModelCategory, expected_query: str) -> None:
         """A category filter is sent as ?type=<category>."""
         client = self._client()
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json={})))
 
-        asyncio.run(client.models(ModelCategory.LLM))
-        assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/models?type=llm"
+        asyncio.run(client.models(category))
+        assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/models?{expected_query}"
 
     # ── version ──────────────────────────────────────────────────
 

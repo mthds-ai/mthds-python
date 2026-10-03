@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from mthds.protocol.working_memory import WorkingMemoryAbstract
 
 
-PROTOCOL_VERSION: Final[str] = "0.6.0"
+PROTOCOL_VERSION: Final[str] = "0.7.0"
 """The MTHDS Protocol version this SDK implements.
 
 This is a copy of a cut made by the standard, and the only place this library
@@ -156,11 +156,14 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         """The model deck this runner can route to.
 
         Args:
-            category: Optional deck filter (`llm`, `extract`, `img_gen`, `search`).
+            category: Optional deck filter (`llm`, `extract`, `img_gen`,
+                `search`, `judgment`). The filter is closed: a runner answers a
+                category it does not define with a `422`.
 
         Returns:
             ModelDeck with the models this runner can route to (base fields
-            + any implementation extensions).
+            + any implementation extensions). An entry whose category this
+            package does not recognize is kept with its raw `type` string.
         """
         ...
 

@@ -1,6 +1,6 @@
 # Protocol parity fixtures
 
-`input_form.json` and `pipe_io_contracts.json` are one real payload pair produced by the reference engine's own derivation, committed here **byte-for-byte** and committed identically in `mthds-js` — as is everything else in this directory, `README.md` aside, which `conformance/scripts/check-protocol-fixture-parity.py` compares between the two mirrors file by file. That identity is the Stage 2.3 parity of the input-form program (`wip/input-form/plan.md` at the workspace root): the same bytes parse strictly against `mthds.protocol` in Python and type-check against `mthds/protocol` in TypeScript, so the two clients mirror each other by measurement rather than by intent. Do not edit these files — a change is a new capture, landed in both repos.
+`input_form.json` and `pipe_io_contracts.json` are one real payload pair produced by the reference engine's own derivation, committed here **byte-for-byte** and committed identically in `mthds-js` — as is everything else in this directory, `README.md` aside, which `conformance/scripts/check-protocol-fixture-parity.py` compares between the two mirrors file by file. That identity is the Stage 2.3 parity of the input-form program (L-260826-cba809): the same bytes parse strictly against `mthds.protocol` in Python and type-check against `mthds/protocol` in TypeScript, so the two clients mirror each other by measurement rather than by intent. Do not edit these files — a change is a new capture, landed in both repos.
 
 ## Provenance
 
