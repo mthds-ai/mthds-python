@@ -53,6 +53,8 @@ class ExecuteWireResponses:
             "working_memory_raw": {"root": {}, "aliases": {}},
             "graph_spec": {"nodes": [], "edges": []},
             "graph_assembly_error": None,
+            "pipe_io_artifacts": None,
+            "pipe_io_artifacts_error": None,
             "tokens_usages": [],
             "usage_assembly_error": None,
         },
