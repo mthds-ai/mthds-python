@@ -13,7 +13,7 @@ class TestVersions:
         # (https://mthds.ai/latest/spec/versioning/), so a value moving here without a
         # cut moving there is exactly what this asserts against.
         assert MTHDS_STANDARD_VERSION == "2.0.0"
-        assert PROTOCOL_VERSION == "0.6.0"
+        assert PROTOCOL_VERSION == "0.7.0"
         assert is_valid_semver(MTHDS_STANDARD_VERSION)
         assert is_valid_semver(PROTOCOL_VERSION)
 

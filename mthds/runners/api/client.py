@@ -367,11 +367,15 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         """The model deck the runner can route to — `GET /v1/models[?type=]`.
 
         Args:
-            category: Optional filter (`llm`, `extract`, `img_gen`, `search`).
+            category: Optional filter (`llm`, `extract`, `img_gen`, `search`,
+                `judgment`). A runner of an earlier protocol version answers a
+                category it does not define with a `422`.
 
         Returns:
             ModelDeck with the models this runner can route to (base fields
-            + any implementation extensions).
+            + any implementation extensions). An entry whose category this
+            package does not recognize is kept with its raw `type` string
+            rather than failing the call.
 
         Raises:
             ApiResponseError: If the server answers non-2xx.

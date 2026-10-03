@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **`ModelCategory.JUDGMENT`**: the protocol's `judgment` model category, the models a `PipeJudge` names through `JudgmentSetting`, so `models(ModelCategory.JUDGMENT)` filters a runner's deck to them and a deck entry reporting `judgment` reads as the enum member.
+
+### Changed
+
+- **Protocol `0.7.0`: `ModelInfo.type` keeps a category this package does not know (Breaking)**: `PROTOCOL_VERSION` is `0.7.0`, the protocol cut that adds `judgment` and requires a client reading a model list not to fail it on a category it does not recognize. `ModelInfo.type` is now `ModelCategory | str | None`, so such an entry keeps its raw string instead of failing `ModelDeck` validation, and with it the whole `MthdsAPIClient.models()` call; a known category still reads as its `ModelCategory` member. Code that treats `type` as a `ModelCategory` handles the `str` case too.
+
 ## [v0.17.0] - 2026-09-27
 
 ### Added
