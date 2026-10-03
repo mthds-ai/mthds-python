@@ -67,21 +67,41 @@ class RunResultStart(BaseModel):
 
 
 class ModelCategory(StrEnum):
-    """Model categories accepted by the protocol's `GET /models?type=` filter."""
+    """The protocol's model categories: what a deck entry's `type` reports and the `GET /models?type=` filter accepts.
+
+    A category is a settings family of the language — the inline settings a model
+    serves, and so the pipes that can name it: `llm` (`LLMSetting`, named by
+    `PipeLLM` and `PipeStructure`), `extract` (`ExtractSetting`, `PipeExtract`),
+    `img_gen` (`ImgGenSetting`, `PipeImgGen`), `search` (`SearchSetting`,
+    `PipeSearch`) and `judgment` (`JudgmentSetting`, `PipeJudge`). A settings
+    family the standard adds brings a category in the next protocol minor.
+    """
 
     LLM = "llm"
     EXTRACT = "extract"
     IMG_GEN = "img_gen"
     SEARCH = "search"
+    JUDGMENT = "judgment"
 
 
 class ModelInfo(BaseModel):
-    """One entry of the model deck (`ModelDeck.models[]`) — base fields + extensions."""
+    """One entry of the model deck (`ModelDeck.models[]`) — base fields + extensions.
+
+    `type` is an open read of the entry's category, under the protocol's reader
+    rule: "A client reading a model list MUST NOT fail it because an entry carries
+    a category it does not recognize; it keeps that entry with its raw value or
+    leaves it out." This package keeps it: a category it knows reads as its
+    `ModelCategory` member, and one it does not — a category a runner of a later
+    protocol minor reports — keeps its raw string, so a consumer handles the
+    `str` case rather than the whole deck failing. The union is validated left to
+    right on purpose: pydantic's default smart mode would keep every string,
+    known or not, as a plain `str`.
+    """
 
     model_config = ConfigDict(extra="allow")
 
     name: str
-    type: ModelCategory | None = None
+    type: Annotated[ModelCategory | str | None, Field(union_mode="left_to_right")] = None
 
 
 class ModelDeck(BaseModel):
