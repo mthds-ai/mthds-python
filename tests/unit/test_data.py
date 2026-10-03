@@ -3,25 +3,30 @@
 from typing import Any, ClassVar
 
 from mthds.protocol.input_form import (
+    BooleanField,
     DateField,
     ImageItem,
     InputFormField,
     ListField,
+    NumberField,
     ObjectField,
     ObjectItem,
     TextField,
     TextItem,
+    UnknownField,
 )
 from mthds.protocol.pipe_io_contracts import PresenceMarker
 
 
 class ExecuteWireResponses:
-    """Captured `/v1/execute` 200 bodies in the wire forms a compliant runner may return."""
+    """`/v1/execute` 200 bodies: the shapes a compliant runner returns, and one it must not."""
 
-    # The hosted pipelex-api runner's shape (captured live against api-dev on 2026-07-03):
-    # the full PipeOutput dump — per-stuff `stuff_code` / `stuff_name` and `concept` as the
-    # full object, pipe-output extras (`graph_spec`, `tokens_usages`, `working_memory_raw`,
-    # assembly errors), and run-lifecycle extras at the top level.
+    # The hosted pipelex-api runner's shape: the full PipeOutput dump, every stuff naming its
+    # concept by its ref string, with per-stuff `stuff_code` / `stuff_name`, the working
+    # memory's `absences`, pipe-output extras (`graph_spec`, `tokens_usages`,
+    # `working_memory_raw`, assembly errors) and run-lifecycle extras at the top level. The key
+    # set follows the blocking response conformance captured from the hosted plane; the values
+    # are hand-built, the real capture being `tests/fixtures/hosted_run/`.
     HOSTED_FULL_DUMP: ClassVar[dict[str, Any]] = {
         "pipeline_run_id": "run_7f3a",
         "created_at": "2026-07-03T09:15:01.000000+00:00",
@@ -35,40 +40,30 @@ class ExecuteWireResponses:
                     "text": {
                         "stuff_code": "a1b2c3d4",
                         "stuff_name": "text",
-                        "concept": {
-                            "code": "Text",
-                            "domain_code": "native",
-                            "description": "A text",
-                            "structure_class_name": "TextContent",
-                            "refines": None,
-                        },
+                        "concept": "native.Text",
                         "content": {"text": "Marie Curie joined the University of Paris in 1906."},
                     },
                     "extracted_entities": {
                         "stuff_code": "e5f6a7b8",
                         "stuff_name": "extracted_entities",
-                        "concept": {
-                            "code": "ExtractedEntities",
-                            "domain_code": "extract_entities",
-                            "description": "Entities extracted from a text",
-                            "structure_class_name": "extract_entities__ExtractedEntities",
-                            "refines": None,
-                        },
+                        "concept": "extract_entities.ExtractedEntities",
                         "content": {"entities": [{"name": "Marie Curie", "kind": "person"}]},
                     },
                 },
                 "aliases": {"main_stuff": "extracted_entities"},
+                "absences": {},
             },
             "working_memory_raw": {"root": {}, "aliases": {}},
             "graph_spec": {"nodes": [], "edges": []},
             "graph_assembly_error": None,
+            "pipe_io_artifacts": None,
+            "pipe_io_artifacts_error": None,
             "tokens_usages": [],
             "usage_assembly_error": None,
         },
     }
 
-    # The reduced form this SDK's own serialization (`from_pipe_output`) emits:
-    # `concept` as the namespaced ref string, base fields only.
+    # The reduced form this SDK's own serialization (`from_pipe_output`) emits: base fields only.
     REDUCED: ClassVar[dict[str, Any]] = {
         "pipeline_run_id": "run_7f3a",
         "pipe_output": {
@@ -85,6 +80,88 @@ class ExecuteWireResponses:
         },
         "main_stuff_name": "extracted_entities",
     }
+
+    # What the hosted runner sent before the runtime stopped dumping the concept object onto the
+    # wire, abridged from a body captured against api-dev on 2026-07-03: the concept's whole
+    # definition riding the stuff in place of its ref. The standard names a stuff's concept by its
+    # ref string, so this body is refused, at the `concept` of the stuff that carries the object.
+    CONCEPT_OBJECT: ClassVar[dict[str, Any]] = {
+        "pipeline_run_id": "run_7f3a",
+        "pipe_output": {
+            "pipeline_run_id": "run_7f3a",
+            "working_memory": {
+                "root": {
+                    "extracted_entities": {
+                        "stuff_code": "e5f6a7b8",
+                        "stuff_name": "extracted_entities",
+                        "concept": {
+                            "code": "ExtractedEntities",
+                            "domain_code": "extract_entities",
+                            "description": "Entities extracted from a text",
+                            "structure_class_name": "extract_entities__ExtractedEntities",
+                            "refines": None,
+                        },
+                        "content": {"entities": [{"name": "Marie Curie", "kind": "person"}]},
+                    },
+                },
+                "aliases": {"main_stuff": "extracted_entities"},
+            },
+        },
+    }
+
+
+class HostedRunCapture:
+    """What the real hosted working memory in `tests/fixtures/hosted_run/` holds."""
+
+    FILE_NAME: ClassVar[str] = "hosted-working-memory.json"
+
+    # Every slot of the captured working memory, mapped to the concept ref it names. Between them
+    # they cover a native concept, two domain concepts refining `Text` and a structured one, so a
+    # narrower re-capture fails here rather than quietly testing less.
+    EXPECTED_CONCEPT_REFS: ClassVar[dict[str, str]] = {
+        "topic": "native.Text",
+        "joke": "joke_judge.Joke",
+        "verdict": "joke_judge.FunninessVerdict",
+        "analysis": "joke_judge.JokeAnalysis",
+    }
+    MAIN_STUFF_SLOT: ClassVar[str] = "analysis"
+    EXTENSION_FIELDS: ClassVar[frozenset[str]] = frozenset({"stuff_code", "stuff_name"})
+
+
+class CliWorkingMemoryDumps:
+    """Working memories as `pipelex run --working-memory-path` writes them, and two it must not."""
+
+    # The runtime's `smart_dump()`: each stuff names its concept by its ref string beside its
+    # `stuff_code` and `stuff_name`.
+    REF_STRING: ClassVar[dict[str, Any]] = {
+        "root": {
+            "answer": {
+                "stuff_code": "k3Rt9",
+                "stuff_name": "answer",
+                "concept": "answer.Answer",
+                "content": {"text": "Because."},
+            },
+        },
+        "aliases": {"main_stuff": "answer"},
+    }
+
+    # Each case is a malformed `answer` stuff, which the local runner refuses at its `concept`
+    # rather than inventing a ref for it.
+    MALFORMED_CONCEPT_CASES: ClassVar[list[tuple[str, dict[str, Any]]]] = [
+        (
+            "concept-object",
+            {
+                "stuff_code": "k3Rt9",
+                "stuff_name": "answer",
+                "concept": {"code": "Answer", "domain_code": "answer", "description": "An answer"},
+                "content": {"text": "Because."},
+            },
+        ),
+        (
+            "concept-missing",
+            {"stuff_code": "k3Rt9", "stuff_name": "answer", "content": {"text": "Because."}},
+        ),
+    ]
 
 
 class ModelDeckWireBodies:
@@ -595,6 +672,47 @@ class CompactSlotCases:
                 gating=False,
                 item=ObjectItem(concept_ref="probe.Gadget", required=True, fields=[TextField(name="label", required=True)]),
             ),
+            False,
+        ),
+    ]
+
+    # The verdict natives the standard pinned at 3.0.0, with their fields as the input-form descriptor
+    # states them: a `dict` member is `unknown`, and `integer` is a `number` with `integer: true`.
+    CHOICE_PAYLOAD: ClassVar[list[InputFormField]] = [
+        TextField(name="choice", required=True),
+        NumberField(name="confidence", required=False, integer=False),
+        UnknownField(name="probabilities", required=False),
+    ]
+    RATING_PAYLOAD: ClassVar[list[InputFormField]] = [
+        NumberField(name="level", required=True, integer=True),
+        NumberField(name="confidence", required=False, integer=False),
+        UnknownField(name="probabilities", required=False),
+        NumberField(name="position", required=False, integer=False),
+    ]
+
+    # Each case carries the compact slot it projects to, so a `YesNo` that regressed to
+    # `{"yes_no": false}` fails here rather than only in the byte-parity corpus.
+    VERDICT_NATIVES: ClassVar[list[tuple[str, InputFormField, bool, Any]]] = [
+        (
+            "a Choice keeps its envelope: a bare option key would read exactly as a Text does",
+            ObjectField(
+                name="choice_in", concept_ref="native.Choice", required=True, presence=PresenceMarker.PLAIN, gating=True, fields=CHOICE_PAYLOAD
+            ),
+            True,
+            {"concept": "native.Choice", "content": {"choice": "choice_value", "confidence": 0.0, "probabilities": {}}},
+        ),
+        (
+            "a Rating keeps it too: a bare level would read exactly as a Number does",
+            ObjectField(
+                name="rating_in", concept_ref="native.Rating", required=True, presence=PresenceMarker.PLAIN, gating=True, fields=RATING_PAYLOAD
+            ),
+            True,
+            {"concept": "native.Rating", "content": {"level": 0, "confidence": 0.0, "probabilities": {}, "position": 0.0}},
+        ),
+        (
+            "a YesNo does not: its input is a boolean, its probability being what a judging model reports",
+            BooleanField(name="yes_no_in", concept_ref="native.YesNo", required=True, presence=PresenceMarker.PLAIN, gating=True),
+            False,
             False,
         ),
     ]

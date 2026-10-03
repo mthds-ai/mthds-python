@@ -1,0 +1,9 @@
+# Hosted-run capture
+
+`hosted-working-memory.json` is what the hosted plane really delivered for a run: the `working_memory.json` artifact of a run of the catalog method `joke_judge`, fetched from storage on `api-dev.pipelex.com` on 2026-09-19, after the deploy that carried `pipelex` 0.60.0 into the hosted plane. It is not hand-written, and that is the point. `DictStuffAbstract.concept` is a plain string because the runtime names a stuff's concept by its ref string on the wire, and a fixture written by hand would only prove that this repo agrees with itself.
+
+The file is a byte-for-byte copy of `conformance/tests/hosted_run/fixtures/hosted-working-memory.json` as committed in `conformance` at `5596e69`, whose `fixtures/README.md` holds the full provenance and the recipe for taking a new capture. Do not edit it: a change is a new capture.
+
+The method was chosen because its working memory covers the cases that matter together: a native concept (`native.Text`), two domain concepts refining `Text` (`joke_judge.Joke`, `joke_judge.JokeAnalysis`) and a domain concept with a structure of its own (`joke_judge.FunninessVerdict`). The stuffs also carry the runtime's extension fields `stuff_code` and `stuff_name`, and the working memory its `absences`, so the capture exercises the models' extension-openness at the same time.
+
+Only the delivered working memory is copied, not the blocking `/v1/execute` body that `conformance` captured beside it. That body's pipe output also carries the run's graph and token usage, which name the hosted plane's model routing and its per-call costs, and those do not belong in a public repository. The working memory is the part `DictStuffAbstract.concept` governs, and the run envelope around it is covered by the hand-built bodies in `tests/unit/test_data.py`.

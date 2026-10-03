@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.19.0] - 2026-10-04
+
+### Changed
+
+- **Standard version `3.0.0` (Breaking)**: `MTHDS_STANDARD_VERSION` moved from `2.0.0` to `3.0.0`, since this package now obeys the standard's `2.1.0` rule that a stuff's `concept` on the wire is the concept's crate key, and the inputs-template projection takes the `3.0.0` verdict natives through the descriptor's own kinds: a compact template keeps the `{concept, content}` envelope of a `Choice` or `Rating` slot, and leaves a `YesNo` slot a bare boolean. A manifest's `mthds_version` is evaluated against `3.0.0`, so `>=2.0.0` and `^3.0.0` pass while `^2.0.0`, `~2.0.0` or an exact `2.0.0` no longer does, and `pipelex` stamps the crates it normalizes with `3.0.0`. `PROTOCOL_VERSION` is unchanged.
+
+### Removed
+
+- **`DictConcept`, and the concept object as a stuff's `concept` (Breaking)**: `DictStuffAbstract.concept` is a `str` again, the concept's ref string, which is what the standard puts on the wire and what the hosted runner now emits. A stuff carrying the concept object in its place, or no concept at all, now fails validation at its `concept`, in a `/v1/execute` body and in the working memory `PipelexRunner.execute` reads from the CLI alike, where the local runner used to reduce the object to a ref and turn a missing concept into the ref `"None"`. Code that read `stuff.concept.code` or `stuff.concept.domain_code` reads the ref string from `stuff.concept`, or from `stuff.concept_ref`, which returns the same string.
+
 ## [v0.18.0] - 2026-10-03
 
 ### Added

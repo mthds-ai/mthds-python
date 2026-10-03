@@ -64,6 +64,17 @@ class TestInputsTemplateRendering:
         compact = project_inputs_template(descriptor=PipeInputFormDescriptor(fields=[field]), explicit=False)
         assert (ENVELOPE_CONTENT_KEY in compact[field.name]) is expected, topic
 
+    @pytest.mark.parametrize(("topic", "field", "keeps", "compact"), CompactSlotCases.VERDICT_NATIVES)
+    def test_a_verdict_native_keeps_its_envelope_unless_it_is_a_yes_or_no(self, topic: str, field: InputFormField, keeps: bool, compact: Any):
+        # The standard's 3.0.0 natives reach the projection through the descriptor's own kinds, with
+        # no table naming them: `Choice` and `Rating` as `object`s, `YesNo` still as a `boolean`. The
+        # shared corpus captures neither new native, so the rule is held here.
+        assert PipeInputFormDescriptor(fields=[field]).fields == [field], topic
+        assert keeps_envelope(node=field) is keeps, topic
+        compact_slot = project_inputs_template(descriptor=PipeInputFormDescriptor(fields=[field]), explicit=False)[field.name]
+        assert compact_slot == compact, topic
+        assert type(compact_slot) is type(compact), topic
+
     @pytest.mark.parametrize("explicit", [False, True])
     def test_each_element_of_a_fixed_count_slot_is_its_own_value(self, explicit: bool):
         # A `Concept[N]` slot renders N elements that are identical in content, and a template is a
