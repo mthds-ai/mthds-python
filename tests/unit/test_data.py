@@ -3,14 +3,17 @@
 from typing import Any, ClassVar
 
 from mthds.protocol.input_form import (
+    BooleanField,
     DateField,
     ImageItem,
     InputFormField,
     ListField,
+    NumberField,
     ObjectField,
     ObjectItem,
     TextField,
     TextItem,
+    UnknownField,
 )
 from mthds.protocol.pipe_io_contracts import PresenceMarker
 
@@ -669,6 +672,42 @@ class CompactSlotCases:
                 gating=False,
                 item=ObjectItem(concept_ref="probe.Gadget", required=True, fields=[TextField(name="label", required=True)]),
             ),
+            False,
+        ),
+    ]
+
+    # The verdict natives the standard pinned at 3.0.0, with their fields as the input-form descriptor
+    # states them: a `dict` member is `unknown`, and `integer` is a `number` with `integer: true`.
+    CHOICE_PAYLOAD: ClassVar[list[InputFormField]] = [
+        TextField(name="choice", required=True),
+        NumberField(name="confidence", required=False, integer=False),
+        UnknownField(name="probabilities", required=False),
+    ]
+    RATING_PAYLOAD: ClassVar[list[InputFormField]] = [
+        NumberField(name="level", required=True, integer=True),
+        NumberField(name="confidence", required=False, integer=False),
+        UnknownField(name="probabilities", required=False),
+        NumberField(name="position", required=False, integer=False),
+    ]
+
+    VERDICT_NATIVES: ClassVar[list[tuple[str, InputFormField, bool]]] = [
+        (
+            "a Choice keeps its envelope: a bare option key would read exactly as a Text does",
+            ObjectField(
+                name="choice_in", concept_ref="native.Choice", required=True, presence=PresenceMarker.PLAIN, gating=True, fields=CHOICE_PAYLOAD
+            ),
+            True,
+        ),
+        (
+            "a Rating keeps it too: a bare level would read exactly as a Number does",
+            ObjectField(
+                name="rating_in", concept_ref="native.Rating", required=True, presence=PresenceMarker.PLAIN, gating=True, fields=RATING_PAYLOAD
+            ),
+            True,
+        ),
+        (
+            "a YesNo does not: its input is a boolean, its probability being what a judging model reports",
+            BooleanField(name="yes_no_in", concept_ref="native.YesNo", required=True, presence=PresenceMarker.PLAIN, gating=True),
             False,
         ),
     ]
