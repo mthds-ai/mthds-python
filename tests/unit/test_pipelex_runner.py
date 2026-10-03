@@ -6,10 +6,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pytest_mock import MockerFixture
 
 from mthds.runners.pipelex.runner import PipelexRunner, PipelexRunnerError
+from tests.unit.test_data import CliWorkingMemoryDumps
 
 if TYPE_CHECKING:
     from mthds.protocol.pipeline_inputs import PipelineInputs
@@ -103,3 +104,55 @@ class TestPipelexRunner:
         assert inputs_path.exists()
         on_disk = json.loads(inputs_path.read_text(encoding="utf-8"))
         assert on_disk == {"input": {"question": "why?", "score": 0.5}}
+
+    def test_execute_maps_the_cli_working_memory(self, mocker: MockerFixture, tmp_path: Path) -> None:
+        """The working memory the CLI writes maps onto the wire shape: each stuff keeps its
+        concept ref and its content, and its runtime fields are dropped.
+        """
+        _patch_cli_writing_working_memory(mocker, tmp_path, CliWorkingMemoryDumps.REF_STRING)
+
+        result = asyncio.run(PipelexRunner().execute(pipe_code="answer"))
+
+        answer = result.pipe_output.working_memory.root["answer"]
+        assert answer.concept == "answer.Answer"
+        assert answer.content == {"text": "Because."}
+        assert answer.model_extra == {}
+        assert result.model_extra is not None
+        assert result.model_extra["main_stuff_name"] == "answer"
+
+    @pytest.mark.parametrize(
+        ("topic", "malformed_stuff"),
+        CliWorkingMemoryDumps.MALFORMED_CONCEPT_CASES,
+    )
+    def test_execute_refuses_a_stuff_without_a_concept_ref(
+        self,
+        mocker: MockerFixture,
+        tmp_path: Path,
+        topic: str,
+        malformed_stuff: dict[str, Any],
+    ) -> None:
+        """A stuff whose concept is not its ref string fails validation at that stuff's `concept`,
+        as on the API path, instead of reaching the caller under an invented ref.
+        """
+        working_memory = {"root": {"answer": malformed_stuff}, "aliases": {"main_stuff": "answer"}}
+        _patch_cli_writing_working_memory(mocker, tmp_path, working_memory)
+
+        with pytest.raises(ValidationError) as exc_info:
+            asyncio.run(PipelexRunner().execute(pipe_code="answer"))
+
+        errors = exc_info.value.errors()
+        assert [(error["loc"], error["type"]) for error in errors] == [(("root", "answer", "concept"), "string_type")], topic
+
+
+def _patch_cli_writing_working_memory(mocker: MockerFixture, tmp_path: Path, working_memory: dict[str, Any]) -> None:
+    """Stand in for the `pipelex` CLI: a run that succeeds and writes `working_memory` where it was asked to."""
+    mocker.patch("mthds.runners.pipelex.runner._ensure_pipelex", return_value="pipelex")
+    mocker.patch("mthds.runners.pipelex.runner.tempfile.mkdtemp", return_value=str(tmp_path))
+    mocker.patch("mthds.runners.pipelex.runner.shutil.rmtree")
+
+    def write_working_memory(cmd: list[str], **_kwargs: Any) -> Any:
+        working_memory_path = Path(cmd[cmd.index("--working-memory-path") + 1])
+        working_memory_path.write_text(json.dumps(working_memory), encoding="utf-8")
+        return mocker.Mock(returncode=0)
+
+    mocker.patch("mthds.runners.pipelex.runner.run_subprocess", side_effect=write_working_memory)
