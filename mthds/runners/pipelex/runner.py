@@ -198,6 +198,10 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         Raises:
             PipelexRunnerError: If pipelex execution fails, or if extension
                 args are passed (the CLI runner accepts none).
+            pydantic.ValidationError: If the working memory the CLI wrote does not
+                fit the wire shape — a stuff carrying anything but its concept's ref
+                string under `concept`, as a `pipelex` built on an mthds older than
+                0.15.0 writes it. Surfaced raw, as a malformed body is on the API path.
         """
         if extra:
             msg = f"The pipelex CLI runner defines no extension args; got {sorted(extra)}."
