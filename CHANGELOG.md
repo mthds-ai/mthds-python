@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Standard version `2.1.1` (Breaking)**: `MTHDS_STANDARD_VERSION` moved from `2.0.0` to `2.1.1`, since this package now obeys the standard's `2.1.0` rule that a stuff's `concept` on the wire is the concept's crate key, and `2.1.1` changes nothing normative. A manifest's `mthds_version` is evaluated against `2.1.1`, so `>=2.0.0` and `^2.0.0` still pass while an exact `2.0.0` or a `~2.0.0` no longer does, and `pipelex` stamps the crates it normalizes with `2.1.1`. `PROTOCOL_VERSION` is unchanged.
+- **Standard version `3.0.0` (Breaking)**: `MTHDS_STANDARD_VERSION` moved from `2.0.0` to `3.0.0`, since this package now obeys the standard's `2.1.0` rule that a stuff's `concept` on the wire is the concept's crate key, and the inputs-template projection takes the `3.0.0` verdict natives through the descriptor's own kinds: a compact template keeps the `{concept, content}` envelope of a `Choice` or `Rating` slot, and leaves a `YesNo` slot a bare boolean. A manifest's `mthds_version` is evaluated against `3.0.0`, so `>=2.0.0` and `^3.0.0` pass while `^2.0.0`, `~2.0.0` or an exact `2.0.0` no longer does, and `pipelex` stamps the crates it normalizes with `3.0.0`. `PROTOCOL_VERSION` is unchanged.
 
 ### Removed
 
