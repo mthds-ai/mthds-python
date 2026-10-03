@@ -83,10 +83,12 @@ def _run_result_from_working_memory_dump(raw_memory: dict[str, Any]) -> DictRunR
     """Map the CLI's working-memory dump onto the SDK's DictRunResultExecute shape.
 
     `pipelex run ... --working-memory-path` writes the runtime's full working
-    memory (`{root: {name: {stuff_code, stuff_name, concept: {...}, content}},
-    aliases}`). The SDK's wire shape keeps only `{concept: <ref string>,
-    content}` per stuff — the same reduction the API runner performs
-    server-side.
+    memory (`{root: {name: {stuff_code, stuff_name, concept, content}},
+    aliases}`), each stuff naming its concept by its ref string. The SDK's wire
+    shape keeps only `{concept, content}` per stuff. The concept is passed
+    through as written, so a stuff that carries anything but its ref string —
+    the concept object, or no concept at all — is refused here exactly as it is
+    on the API path.
 
     Args:
         raw_memory: The parsed working-memory JSON written by the CLI.
@@ -94,22 +96,16 @@ def _run_result_from_working_memory_dump(raw_memory: dict[str, Any]) -> DictRunR
     Returns:
         DictRunResultExecute for the completed local run (no run id — local runs are
         not tracked).
+
+    Raises:
+        ValidationError: If a stuff's `concept` is missing or is not a string.
     """
     dict_root: dict[str, dict[str, Any]] = {}
     raw_root_obj = raw_memory.get("root", {})
     raw_root: dict[str, Any] = cast("dict[str, Any]", raw_root_obj) if isinstance(raw_root_obj, dict) else {}
     for stuff_name, stuff_raw in raw_root.items():
         stuff: dict[str, Any] = cast("dict[str, Any]", stuff_raw) if isinstance(stuff_raw, dict) else {}
-        concept_raw = stuff.get("concept")
-        concept_ref: str
-        if isinstance(concept_raw, dict):
-            concept_dict = cast("dict[str, Any]", concept_raw)
-            code = str(concept_dict.get("code", ""))
-            domain_code = concept_dict.get("domain_code")
-            concept_ref = f"{domain_code}.{code}" if domain_code else code
-        else:
-            concept_ref = str(concept_raw)
-        dict_root[stuff_name] = {"concept": concept_ref, "content": stuff.get("content")}
+        dict_root[stuff_name] = {"concept": stuff.get("concept"), "content": stuff.get("content")}
 
     aliases_obj = raw_memory.get("aliases", {})
     aliases: dict[str, str] = cast("dict[str, str]", aliases_obj) if isinstance(aliases_obj, dict) else {}

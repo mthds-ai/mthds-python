@@ -125,6 +125,42 @@ class HostedRunCapture:
     EXTENSION_FIELDS: ClassVar[frozenset[str]] = frozenset({"stuff_code", "stuff_name"})
 
 
+class CliWorkingMemoryDumps:
+    """Working memories as `pipelex run --working-memory-path` writes them, and two it must not."""
+
+    # The runtime's `smart_dump()`: each stuff names its concept by its ref string beside its
+    # `stuff_code` and `stuff_name`.
+    REF_STRING: ClassVar[dict[str, Any]] = {
+        "root": {
+            "answer": {
+                "stuff_code": "k3Rt9",
+                "stuff_name": "answer",
+                "concept": "answer.Answer",
+                "content": {"text": "Because."},
+            },
+        },
+        "aliases": {"main_stuff": "answer"},
+    }
+
+    # Each case is a malformed `answer` stuff, which the local runner refuses at its `concept`
+    # rather than inventing a ref for it.
+    MALFORMED_CONCEPT_CASES: ClassVar[list[tuple[str, dict[str, Any]]]] = [
+        (
+            "concept-object",
+            {
+                "stuff_code": "k3Rt9",
+                "stuff_name": "answer",
+                "concept": {"code": "Answer", "domain_code": "answer", "description": "An answer"},
+                "content": {"text": "Because."},
+            },
+        ),
+        (
+            "concept-missing",
+            {"stuff_code": "k3Rt9", "stuff_name": "answer", "content": {"text": "Because."}},
+        ),
+    ]
+
+
 class ModelDeckWireBodies:
     """`GET /models` 200 bodies, among them one a runner of a later protocol minor may send."""
 

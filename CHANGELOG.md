@@ -4,7 +4,7 @@
 
 ### Removed
 
-- **`DictConcept`, and the concept object as a stuff's `concept` (Breaking)**: `DictStuffAbstract.concept` is a `str` again, the concept's ref string, which is what the standard puts on the wire and what the hosted runner now emits. A `/v1/execute` body or a working memory whose stuff carries the concept object in its place fails validation at that stuff's `concept` instead of parsing into `DictConcept`, which is gone. Code that read `stuff.concept.code` or `stuff.concept.domain_code` reads the ref string from `stuff.concept`, or from `stuff.concept_ref`, which returns the same string.
+- **`DictConcept`, and the concept object as a stuff's `concept` (Breaking)**: `DictStuffAbstract.concept` is a `str` again, the concept's ref string, which is what the standard puts on the wire and what the hosted runner now emits. A stuff carrying the concept object in its place, or no concept at all, now fails validation at its `concept`, in a `/v1/execute` body and in the working memory `PipelexRunner.execute` reads from the CLI alike, where the local runner used to reduce the object to a ref and turn a missing concept into the ref `"None"`. Code that read `stuff.concept.code` or `stuff.concept.domain_code` reads the ref string from `stuff.concept`, or from `stuff.concept_ref`, which returns the same string.
 
 ## [v0.18.0] - 2026-10-03
 
