@@ -1,9 +1,9 @@
 """Tests for the ~/.mthds/config dotenv dialect against the shared conformance fixture.
 
 The vendored ``tests/fixtures/config_dialect_cases.json`` is a byte-identical copy of the
-canonical case file in ``conformance/tests/mthds/fixtures/`` (the dialect is pinned by
-``docs/specs/mthds-config-file.md`` in the workspace repo, and the conformance repo's
-``check-fixture-drift`` guard keeps the copies in sync). Running the cases here keeps this
+canonical case file in ``conformance/tests/mthds/fixtures/``. The dialect is pinned by
+``conformance/specs/mthds-config-file.md``, beside that fixture in the conformance repo, whose
+``check-fixture-drift`` guard keeps the copies in sync. Running the cases here keeps this
 repo's own fast suite catching parser regressions without the conformance repo checked out.
 """
 
