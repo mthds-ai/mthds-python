@@ -1,5 +1,5 @@
 {
-  "description": "Shared test cases for the ~/.mthds/config dotenv dialect, pinned by docs/specs/mthds-config-file.md. The canonical copy lives at conformance/tests/mthds/fixtures/config_dialect_cases.json; mthds-python (tests/fixtures/config_dialect_cases.json) and mthds-js (tests/fixtures/config-dialect-cases.json) vendor byte-identical copies, gated by conformance/scripts/check-config-dialect-fixture.py. Edit the canonical copy first, then propagate.",
+  "description": "Shared test cases for the ~/.mthds/config dotenv dialect, pinned by conformance/specs/mthds-config-file.md. The canonical copy lives at conformance/tests/mthds/fixtures/config_dialect_cases.json; mthds-python (tests/fixtures/config_dialect_cases.json) and mthds-js (tests/fixtures/config-dialect-cases.json) vendor byte-identical copies, gated by conformance/scripts/check-config-dialect-fixture.py. Edit the canonical copy first, then propagate.",
   "parse_cases": [
     {
       "name": "empty_file",

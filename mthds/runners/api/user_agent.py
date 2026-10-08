@@ -1,7 +1,8 @@
 """Client identification — the `User-Agent` every `MthdsAPIClient` request carries.
 
-Implements the workspace spec `docs/specs/client-identification.md`: the header is a
-sequence of RFC 9110 product tokens, outermost first —
+Implements the spec `conformance/specs/client-identification.md`, which lives in the
+conformance repo beside the test that verifies it: the header is a sequence of RFC 9110
+product tokens, outermost first —
 
     [<app_info>] <sdk tokens...> python/<major.minor.micro> (<os>; <arch>)
 
