@@ -214,7 +214,7 @@ def _render_path(*, path: tuple[str, ...]) -> str:
 
 
 def _render_key(*, key: str) -> str:
-    """A bare key where TOML allows one, a quoted key otherwise — a dotted input name included."""
+    """A bare key where TOML allows one, a quoted key otherwise, such as a key carrying a dot or a space."""
     if key and all(character in _BARE_KEY_CHARACTERS for character in key):
         return key
     return _render_string(text=key)

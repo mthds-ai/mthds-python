@@ -114,7 +114,7 @@ def _check_item_count_pairing(*, multiplicity: IOMultiplicity, item_count: int |
 class PipeInputContract(BaseModel):
     """One declared input slot: the concept it expects, its presence, its plurality and the JSON Schema of its content.
 
-    Keyed in `PipeIOContract.inputs` by the authored input name, dotted names included.
+    Keyed in `PipeIOContract.inputs` by the authored input name, a plain name.
     Every member is required: `item_count` is always on the wire, `null` off the fixed arm.
     Closed shape (`extra="forbid"`): an unknown member is version drift, rejected at the parse.
     """
