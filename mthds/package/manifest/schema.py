@@ -33,7 +33,7 @@ ADDRESS_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+/[a-zA-Z0-9._/-]
 
 RESERVED_DOMAINS: frozenset[str] = frozenset({"native", "mthds", "pipelex"})
 
-MTHDS_STANDARD_VERSION: Final[str] = "3.0.0"
+MTHDS_STANDARD_VERSION: Final[str] = "4.0.0"
 """The MTHDS standard version this library implements.
 
 This is a copy of a cut made by the standard, and the only place this library
