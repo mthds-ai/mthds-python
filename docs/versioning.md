@@ -13,7 +13,7 @@ The first two are **copies of a cut made by the standard**, not decisions this p
 
 Two properties of the rule are worth knowing before you read a version out of this package:
 
-- **The two numbers are independent.** The protocol version never tracks the standard version. A release of the standard that leaves the routes alone leaves `PROTOCOL_VERSION` exactly where it is, which is why `0.7.0` and `3.0.0` are as far apart as they are.
+- **The two numbers are independent.** The protocol version never tracks the standard version. A release of the standard that leaves the routes alone leaves `PROTOCOL_VERSION` exactly where it is, which is why `0.7.0` and `4.0.0` are as far apart as they are.
 - **The standard version moves on every release of the specification**, including one that changes nothing normative. So the number rising is not by itself evidence that anything you depend on changed; the standard's changelog is. The corollary is that the pinned native set is identified by the standard version in which it *last changed*, and an implementation of version `V` materializes the set pinned at the greatest version less than or equal to `V`.
 
 ## `mthds_version` in a manifest is a constraint

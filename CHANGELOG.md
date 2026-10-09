@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.20.0] - 2026-10-09
+
+### Changed
+
+- **Standard version `4.0.0` (Breaking)**: `MTHDS_STANDARD_VERSION` moved from `3.0.0` to `4.0.0`, the cut in which an input name is a plain name on every pipe and a PipeSequence gains the binding step; this package reads no input name, `batch_over` or sequence step, so the claim is the only behaviour that moves, and `PipeInputContract`'s docstring no longer describes dotted input names. A manifest's `mthds_version` is evaluated against `4.0.0`, so `>=3.0.0` and `^4.0.0` pass while `^3.0.0`, `~3.0.0` or an exact `3.0.0` no longer does, and `pipelex` stamps the crates it normalizes with `4.0.0`. The native set stays pinned at `3.0.0`, and `PROTOCOL_VERSION` is unchanged.
+
 ## [v0.19.0] - 2026-10-04
 
 ### Changed

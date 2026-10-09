@@ -212,7 +212,7 @@ async with MthdsAPIClient() as client:
 
 ## Client identification (`User-Agent`)
 
-Every request `MthdsAPIClient` sends carries a `User-Agent` built from RFC 9110 product tokens, outermost first, as the workspace spec `docs/specs/client-identification.md` fixes for every first-party client:
+Every request `MthdsAPIClient` sends carries a `User-Agent` built from RFC 9110 product tokens, outermost first. The spec `conformance/specs/client-identification.md`, which lives in the `conformance` repo beside the test that verifies it, fixes this form for every first-party client:
 
 ```
 [<app_info>] mthds-python/<package version> python/<major.minor.micro> (<os>; <arch>)
