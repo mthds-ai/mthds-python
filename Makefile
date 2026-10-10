@@ -46,44 +46,46 @@ make env                      - Create python virtual env
 make lock                     - Refresh uv.lock without updating anything
 make install                  - Create local virtualenv & install all dependencies
 make update                   - Upgrade dependencies via uv
-make validate                 - Run the setup sequence to validate the config and libraries
 make build                    - Build the wheels
+make li                       - Shorthand -> lock install
 
 make test                     - Run unit tests
 make test-with-prints         - Run unit tests with prints
 make t                        - Shorthand -> test
 make tp                       - Shorthand -> test-with-prints
 make gha-tests                - Run tests for GitHub Actions (exit on first failure, quiet)
+make agent-test               - Run unit tests quietly, with full output only on failure
 
-make format                   - format with ruff format
-make lint                     - lint with ruff check
+make format                   - Format with ruff format
+make lint                     - Lint with ruff check
 make pyright                  - Check types with pyright
 make mypy                     - Check types with mypy
+make pylint                   - Lint with pylint
 
-make up                       - Shorthand -> update-gateway-models up-kit-configs rules
 make cleanenv                 - Remove virtual env and lock files
 make cleanderived             - Remove extraneous compiled files, caches, logs, etc.
-make cleanall                 - Remove all -> cleanenv + cleanderived
+make cleanall                 - Remove all -> cleanderived + cleanenv
 
-make merge-check-ruff-lint    - Run ruff merge check without updating files
-make merge-check-ruff-format  - Run ruff merge check without updating files
-make merge-check-mypy         - Run mypy merge check without updating files
-make merge-check-pyright	  - Run pyright merge check without updating files
+make merge-check-ruff-lint    - Run ruff lint check without updating files
+make merge-check-ruff-format  - Run ruff format check without updating files
+make merge-check-mypy         - Run mypy merge check
+make merge-check-pyright      - Run pyright merge check
+make merge-check-pylint       - Run pylint merge check
 
 make check-unused-imports     - Check for unused imports without fixing
 make fix-unused-imports       - Fix unused imports with ruff
 make fui                      - Shorthand -> fix-unused-imports
 make check-TODOs              - Check for TODOs
 
-make check                    - Shorthand -> format lint mypy
-make c                        - Shorthand -> check
-make cc                       - Shorthand -> cleanderived check
-make li                       - Shorthand -> lock install
+make c                        - Shorthand -> format lint pyright mypy
+make cc                       - Shorthand -> cleanderived c
+make check                    - Shorthand -> cc check-unused-imports pylint
+make agent-check              - Shorthand -> fix-unused-imports format lint pyright mypy
 
 endef
 export HELP
 
-.PHONY: all help env env-verbose check-uv check-uv-verbose lock install update build test test-with-prints t tp gha-tests agent-test format lint pyright mypy pylint merge-check-ruff-format merge-check-ruff-lint merge-check-pyright merge-check-mypy merge-check-pylint check-unused-imports fix-unused-imports check-TODOs check-uv cleanderived cleanenv cleanall c cc li
+.PHONY: all help env env-verbose check-uv check-uv-verbose lock install update build test test-with-prints t tp gha-tests agent-test format lint pyright mypy pylint merge-check-ruff-format merge-check-ruff-lint merge-check-pyright merge-check-mypy merge-check-pylint check-unused-imports fix-unused-imports check-TODOs cleanderived cleanenv cleanall c cc check agent-check li
 
 all help:
 	@echo "$$HELP"
@@ -297,7 +299,7 @@ c: format lint pyright mypy
 	@echo "> done: c = check"
 
 cc: cleanderived c
-	@echo "> done: cc = cleanderived format lint pyright pylint mypy"
+	@echo "> done: cc = cleanderived format lint pyright mypy"
 
 check: cc check-unused-imports pylint
 	@echo "> done: check"
