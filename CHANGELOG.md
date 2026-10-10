@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **Standard version `5.0.0` (Breaking)**: `MTHDS_STANDARD_VERSION` moved from `4.0.0` to `5.0.0`, the cut in which a PipeJudge judges the evidence its `prompt` presents and asks its `question` or several `questions`, yes/no criteria declare both answers, and the native set is re-pinned at `5.0.0` with an optional `label` on `Rating`; this package reads no PipeJudge field, and the inputs-template projection takes a `Rating` slot's fields from the descriptor the runner sends, so the claim is the only code that moves, and a compact `Rating` slot's template carries `"label": "label_value"` between `level` and `confidence` once the runner's descriptor states the new field. A manifest's `mthds_version` is evaluated against `5.0.0`, so `>=4.0.0` and `^5.0.0` pass while `^4.0.0`, `~4.0.0`, `4.*` or an exact `4.0.0` no longer does, and `pipelex` stamps the crates it normalizes with `5.0.0`, whose natives are the set pinned at `5.0.0`. `PROTOCOL_VERSION` is unchanged.
+
 ## [v0.20.0] - 2026-10-09
 
 ### Changed
