@@ -5,6 +5,7 @@ the behaviour on a form the capture holds no example of — a pipe that declares
 or the entry point's own contract on the format it is asked for. Those are stated here.
 """
 
+import json
 from typing import Any
 
 import pytest
@@ -74,6 +75,10 @@ class TestInputsTemplateRendering:
         compact_slot = project_inputs_template(descriptor=PipeInputFormDescriptor(fields=[field]), explicit=False)[field.name]
         assert compact_slot == compact, topic
         assert type(compact_slot) is type(compact), topic
+        # The order too, which a dict comparison ignores: the pinned native set fixes each field's
+        # place, and the TypeScript twin compares this rendered JSON byte for byte.
+        rendered = render_inputs_template(descriptor=PipeInputFormDescriptor(fields=[field]), explicit=False, output_format=InputsTemplateFormat.JSON)
+        assert rendered == json.dumps({field.name: compact}, indent=2, ensure_ascii=False), topic
 
     @pytest.mark.parametrize("explicit", [False, True])
     def test_each_element_of_a_fixed_count_slot_is_its_own_value(self, explicit: bool):
