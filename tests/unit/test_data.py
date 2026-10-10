@@ -676,7 +676,7 @@ class CompactSlotCases:
         ),
     ]
 
-    # The verdict natives the standard pinned at 3.0.0, with their fields as the input-form descriptor
+    # The verdict natives the standard pinned at 5.0.0, with their fields as the input-form descriptor
     # states them: a `dict` member is `unknown`, and `integer` is a `number` with `integer: true`.
     CHOICE_PAYLOAD: ClassVar[list[InputFormField]] = [
         TextField(name="choice", required=True),
@@ -685,6 +685,7 @@ class CompactSlotCases:
     ]
     RATING_PAYLOAD: ClassVar[list[InputFormField]] = [
         NumberField(name="level", required=True, integer=True),
+        TextField(name="label", required=False),
         NumberField(name="confidence", required=False, integer=False),
         UnknownField(name="probabilities", required=False),
         NumberField(name="position", required=False, integer=False),
@@ -707,7 +708,7 @@ class CompactSlotCases:
                 name="rating_in", concept_ref="native.Rating", required=True, presence=PresenceMarker.PLAIN, gating=True, fields=RATING_PAYLOAD
             ),
             True,
-            {"concept": "native.Rating", "content": {"level": 0, "confidence": 0.0, "probabilities": {}, "position": 0.0}},
+            {"concept": "native.Rating", "content": {"level": 0, "label": "label_value", "confidence": 0.0, "probabilities": {}, "position": 0.0}},
         ),
         (
             "a YesNo does not: its input is a boolean, its probability being what a judging model reports",
