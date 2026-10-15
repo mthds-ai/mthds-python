@@ -22,9 +22,7 @@ class TreeRefusalCode(StrEnum):
     PATH_COLLISION = "path_collision"
     EMPTY_TREE = "empty_tree"
     LONE_FILE_EXCLUDED = "lone_file_excluded"
-    # Not in the corpus vocabulary yet: the standard makes a `.gitignore` file whose bytes are
-    # not UTF-8 an error naming its path, and this is the code this package gives it until the
-    # corpus names one.
+    # A `.gitignore` file in the tree whose bytes are not UTF-8, named by its tree path.
     GITIGNORE_NOT_UTF8 = "gitignore_not_utf8"
     # Reading a map of file entries.
     DUPLICATE_KEY = "duplicate_key"

@@ -1101,6 +1101,248 @@
       "function_names": []
     },
     {
+      "id": "gitignore-byte-order-mark",
+      "description": "A .gitignore file is read as UTF-8 skipping a leading byte order mark, as git skips it, so the pattern on its first line still matches: debug.log is kept out by it, and a reference to it names that rule.",
+      "requires": [],
+      "handed_over": ".",
+      "entries": [
+        {
+          "path": "METHODS.toml",
+          "type": "file",
+          "text": "[package]\nname = \"gitignore_bom\"\naddress = \"github.com/acme/gitignore-bom\"\nversion = \"1.0.0\"\ndescription = \"The gitignore bom method\"\n"
+        },
+        {
+          "path": "main.mthds",
+          "type": "file",
+          "text": "domain = \"gitignore_bom\"\n"
+        },
+        {
+          "path": ".gitignore",
+          "type": "file",
+          "text": "\ufeff*.log\n"
+        },
+        {
+          "path": "debug.log",
+          "type": "file",
+          "text": "debug\n"
+        },
+        {
+          "path": "notes.txt",
+          "type": "file",
+          "text": "notes\n"
+        }
+      ],
+      "expected": {
+        "root": ".",
+        "files": [
+          {
+            "path": "METHODS.toml",
+            "sha256": "11063de19a6969a86da1d3e402bfc810cc644947045b0c219da077d54adb3f52",
+            "size": 134
+          },
+          {
+            "path": "main.mthds",
+            "sha256": "d8c9f303fb7ca65965b7c5fd6018c55ea4d99f886542d43abe744f3af3abced1",
+            "size": 25
+          },
+          {
+            "path": "notes.txt",
+            "sha256": "444e0fffbd825e9610ff5b199485707a0c895339ae80c15cc8a8aee41b106fda",
+            "size": 6
+          }
+        ],
+        "digest": "sha256:b691181bf5401f8d31ef0b54febf168bddefdb58090fcee8dfe6bf6802773324"
+      },
+      "references": [
+        {
+          "holder": "main.mthds",
+          "reference": "debug.log",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "debug.log"
+              ],
+              "resolved": "debug.log",
+              "excluded_by": "gitignore"
+            }
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "notes.txt",
+          "context": "path",
+          "expected": {
+            "tree_path": "notes.txt"
+          }
+        }
+      ],
+      "function_names": []
+    },
+    {
+      "id": "gitignore-not-utf8",
+      "description": "A .gitignore file the membership rule reads is read as UTF-8, and one whose bytes are not UTF-8, here a pattern written in Latin-1, is an error naming its path from the root, never skipped silently.",
+      "requires": [],
+      "handed_over": ".",
+      "entries": [
+        {
+          "path": "METHODS.toml",
+          "type": "file",
+          "text": "[package]\nname = \"gitignore_not_utf8\"\naddress = \"github.com/acme/gitignore-not-utf8\"\nversion = \"1.0.0\"\ndescription = \"The gitignore not utf8 method\"\n"
+        },
+        {
+          "path": "main.mthds",
+          "type": "file",
+          "text": "domain = \"gitignore_not_utf8\"\n"
+        },
+        {
+          "path": "drafts/.gitignore",
+          "type": "file",
+          "base64": "Y2Fm6S50eHQK"
+        },
+        {
+          "path": "drafts/notes.txt",
+          "type": "file",
+          "text": "notes\n"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "gitignore_not_utf8",
+          "names": [
+            "drafts/.gitignore"
+          ]
+        }
+      },
+      "references": [],
+      "function_names": []
+    },
+    {
+      "id": "gitignore-not-utf8-in-excluded-directories",
+      "description": "A .gitignore file inside an excluded directory is never read, so one whose bytes are not UTF-8 is no error there: in a directory a pattern excludes, in a dot directory and in a default directory.",
+      "requires": [],
+      "handed_over": ".",
+      "entries": [
+        {
+          "path": "METHODS.toml",
+          "type": "file",
+          "text": "[package]\nname = \"gitignore_excluded\"\naddress = \"github.com/acme/gitignore-excluded\"\nversion = \"1.0.0\"\ndescription = \"The gitignore excluded method\"\n"
+        },
+        {
+          "path": "main.mthds",
+          "type": "file",
+          "text": "domain = \"gitignore_excluded\"\n"
+        },
+        {
+          "path": ".gitignore",
+          "type": "file",
+          "text": "build/\n"
+        },
+        {
+          "path": "build/.gitignore",
+          "type": "file",
+          "base64": "Y2Fm6S50eHQK"
+        },
+        {
+          "path": "build/out.txt",
+          "type": "file",
+          "text": "out\n"
+        },
+        {
+          "path": ".cache/.gitignore",
+          "type": "file",
+          "base64": "Y2Fm6S50eHQK"
+        },
+        {
+          "path": ".cache/state.txt",
+          "type": "file",
+          "text": "state\n"
+        },
+        {
+          "path": "node_modules/.gitignore",
+          "type": "file",
+          "base64": "Y2Fm6S50eHQK"
+        },
+        {
+          "path": "node_modules/pkg.js",
+          "type": "file",
+          "text": "module.exports = 1;\n"
+        },
+        {
+          "path": "notes.txt",
+          "type": "file",
+          "text": "notes\n"
+        }
+      ],
+      "expected": {
+        "root": ".",
+        "files": [
+          {
+            "path": "METHODS.toml",
+            "sha256": "b5c0422309d29c168d085b33503b2c8a2e310d29ebeb8d9c60361cee9d23da50",
+            "size": 149
+          },
+          {
+            "path": "main.mthds",
+            "sha256": "29e7cb7bf07f6eb47a9c9160b4bf96c3e4c1ad1f30fcdc0c9e3f9311027ab546",
+            "size": 30
+          },
+          {
+            "path": "notes.txt",
+            "sha256": "444e0fffbd825e9610ff5b199485707a0c895339ae80c15cc8a8aee41b106fda",
+            "size": 6
+          }
+        ],
+        "digest": "sha256:ccb00cfdf344b6d686da5bb8835445ead6eaa2a95f2635dccd86d55da70d2edb"
+      },
+      "references": [],
+      "function_names": []
+    },
+    {
+      "id": "gitignore-not-utf8-where-only-files-are-ignored",
+      "description": "A .gitignore file in a directory whose files a pattern ignores, as build/* does, is read, since the pattern excludes the files and not the directory, so its bytes that are not UTF-8 are an error naming its path.",
+      "requires": [],
+      "handed_over": ".",
+      "entries": [
+        {
+          "path": "METHODS.toml",
+          "type": "file",
+          "text": "[package]\nname = \"gitignore_files_ignored\"\naddress = \"github.com/acme/gitignore-files-ignored\"\nversion = \"1.0.0\"\ndescription = \"The gitignore files ignored method\"\n"
+        },
+        {
+          "path": "main.mthds",
+          "type": "file",
+          "text": "domain = \"gitignore_files_ignored\"\n"
+        },
+        {
+          "path": ".gitignore",
+          "type": "file",
+          "text": "build/*\n"
+        },
+        {
+          "path": "build/.gitignore",
+          "type": "file",
+          "base64": "Y2Fm6S50eHQK"
+        },
+        {
+          "path": "build/out.txt",
+          "type": "file",
+          "text": "out\n"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "gitignore_not_utf8",
+          "names": [
+            "build/.gitignore"
+          ]
+        }
+      },
+      "references": [],
+      "function_names": []
+    },
+    {
       "id": "info-exclude-is-ignored",
       "description": "A repository's info/exclude does not count, even when the root is the top of that repository.",
       "requires": [],
@@ -1594,6 +1836,62 @@
       "function_names": []
     },
     {
+      "id": "lone-file-colon-without-manifest",
+      "description": "A .mthds file named alone with no METHODS.toml, whose name holds a colon: its one-file tree's only path is not a tree path, so it is refused naming the file's name.",
+      "requires": [],
+      "handed_over": "drafts/a:b.mthds",
+      "entries": [
+        {
+          "path": "drafts/a:b.mthds",
+          "type": "file",
+          "text": "domain = \"colon\"\n"
+        },
+        {
+          "path": "drafts/README.md",
+          "type": "file",
+          "text": "# Drafts\n"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "invalid_tree_path",
+          "names": [
+            "a:b.mthds"
+          ]
+        }
+      },
+      "references": [],
+      "function_names": []
+    },
+    {
+      "id": "lone-file-control-character-without-manifest",
+      "description": "A .mthds file named alone with no METHODS.toml, whose name holds a tab, a control character: its one-file tree's only path is not a tree path, so it is refused naming the file's name.",
+      "requires": [],
+      "handed_over": "drafts/a\tb.mthds",
+      "entries": [
+        {
+          "path": "drafts/a\tb.mthds",
+          "type": "file",
+          "text": "domain = \"tab\"\n"
+        },
+        {
+          "path": "drafts/README.md",
+          "type": "file",
+          "text": "# Drafts\n"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "invalid_tree_path",
+          "names": [
+            "a\tb.mthds"
+          ]
+        }
+      },
+      "references": [],
+      "function_names": []
+    },
+    {
       "id": "lone-file-excluded-by-gitignore",
       "description": "A .mthds file named alone that a .gitignore file under its root ignores is refused, naming the rule.",
       "requires": [],
@@ -1727,6 +2025,35 @@
       "function_names": []
     },
     {
+      "id": "lone-file-named-pipe-without-manifest",
+      "description": "A .mthds file named alone with no METHODS.toml that is a named pipe: its one-file tree would hold a special file, which is an error naming the file's name.",
+      "requires": [
+        "named_pipes"
+      ],
+      "handed_over": "notes/greet.mthds",
+      "entries": [
+        {
+          "path": "notes/greet.mthds",
+          "type": "fifo"
+        },
+        {
+          "path": "notes/README.md",
+          "type": "file",
+          "text": "# Notes\n"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "special_file",
+          "names": [
+            "greet.mthds"
+          ]
+        }
+      },
+      "references": [],
+      "function_names": []
+    },
+    {
       "id": "lone-file-nearest-manifest",
       "description": "A .mthds file named alone is rooted at the nearest METHODS.toml at or above its directory, not at an outer one.",
       "requires": [],
@@ -1826,6 +2153,36 @@
           }
         ],
         "digest": "sha256:01e9f7daf076606810ed9cbf7ef0df716441f2e9a3062ec613b15873a40ca1da"
+      },
+      "references": [],
+      "function_names": []
+    },
+    {
+      "id": "lone-file-symlink-without-manifest",
+      "description": "A .mthds file named alone with no METHODS.toml that is a symbolic link: its one-file tree would hold a link, which is an error naming the file's name, never followed to the file it points at.",
+      "requires": [
+        "symbolic_links"
+      ],
+      "handed_over": "notes/greet.mthds",
+      "entries": [
+        {
+          "path": "notes/real.mthds",
+          "type": "file",
+          "text": "domain = \"greet\"\n"
+        },
+        {
+          "path": "notes/greet.mthds",
+          "type": "symlink",
+          "target": "real.mthds"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "symbolic_link",
+          "names": [
+            "greet.mthds"
+          ]
+        }
       },
       "references": [],
       "function_names": []
@@ -2949,6 +3306,19 @@
               "resolved": "assets/"
             }
           }
+        },
+        {
+          "holder": "greet.mthds",
+          "reference": "./",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_in_one_file_tree",
+              "names": [
+                "./"
+              ]
+            }
+          }
         }
       ],
       "function_names": [
@@ -3277,7 +3647,7 @@
     },
     {
       "id": "python-modules",
-      "description": "A PipeFunc's function_name split at its last dot, its module found as <path>.py or <path>/__init__.py among the tree's files, never both.",
+      "description": "A PipeFunc's function_name normalized to NFC and split at its last dot, each segment an identifier that is not a keyword and that NFKC leaves unchanged, its module found as <path>.py or <path>/__init__.py among the tree's files, never both: a decomposed name finds its module, and a segment holding a ligature or a fullwidth letter is refused even when the tree holds a file of that spelling.",
       "requires": [],
       "handed_over": ".",
       "entries": [
@@ -3340,6 +3710,11 @@
           "path": "deep/a/b.py",
           "type": "file",
           "text": "def run():\n    return 7\n"
+        },
+        {
+          "path": "\ufb01les.py",
+          "type": "file",
+          "text": "def load():\n    return 8\n"
         }
       ],
       "expected": {
@@ -3399,9 +3774,14 @@
             "path": "tools/__init__.py",
             "sha256": "0e5b21a6bf8be0bb1ded3c44e69b8ad0c05bfd2a9ce0740d173d45fbcb0ec8fe",
             "size": 24
+          },
+          {
+            "path": "\ufb01les.py",
+            "sha256": "233078b5781a96e242a74adff09e1dac161192a155a5ac0e6e0f9e4c200596cd",
+            "size": 25
           }
         ],
-        "digest": "sha256:104c61aceb0853b8d6e525ab77874a8398d7a6727548539879ef265421765619"
+        "digest": "sha256:244f17aa835d2770e650a72763ebc708128319b4697114dd1daf7194a31e4f05"
       },
       "references": [],
       "function_names": [
@@ -3600,12 +3980,41 @@
               ]
             }
           }
+        },
+        {
+          "function_name": "cafe\u0301.brew",
+          "expected": {
+            "module": "caf\u00e9.py",
+            "function": "brew"
+          }
+        },
+        {
+          "function_name": "\ufb01les.load",
+          "expected": {
+            "refusal": {
+              "code": "function_name_invalid_segment",
+              "names": [
+                "\ufb01les.load"
+              ]
+            }
+          }
+        },
+        {
+          "function_name": "\uff46uncs.shout",
+          "expected": {
+            "refusal": {
+              "code": "function_name_invalid_segment",
+              "names": [
+                "\uff46uncs.shout"
+              ]
+            }
+          }
         }
       ]
     },
     {
       "id": "references-corners",
-      "description": "References in the corners the standard settles, refused at the first of its seven steps that fails: in a bundle field the empty reference is not a tree path, and a scheme, the a: of a:b.png included, an absolute path or a backslash makes a reference malformed; in a template only a relative URL with a path is a file reference, so a scheme, an authority or no path leaves it alone, the query and fragment take no part, and a malformed percent-escape, or a percent-decoding that fails or yields a separator or a control character, makes it malformed; a reference is normalized to NFC, resolved lexically before its result is checked, so an empty segment a .. removes is no fault, and one resolving to a directory, or to the root, which passes the result check and is cited as '.', is not in the tree.",
+      "description": "References in the corners the standard settles, refused at the first of its seven steps that fails: in a bundle field the empty reference is not a tree path, and a scheme, the a: of a:b.png included, an absolute path or a backslash makes a reference malformed; in a template only a relative URL with a path is a file reference, so a scheme, an authority or no path leaves it alone, the query and fragment take no part, and a malformed percent-escape, or a percent-decoding that fails or yields a separator or a control character, makes it malformed; a reference is normalized to NFC, resolved lexically before its result is checked, so an empty segment a .. removes is no fault, and one resolving to a directory, or to the root, with or without a trailing /, which passes the result check and is cited as '.', is not in the tree.",
       "requires": [],
       "handed_over": ".",
       "entries": [
@@ -3821,6 +4230,76 @@
               "names": [
                 "../.."
               ]
+            }
+          }
+        },
+        {
+          "holder": "templates/letter.html",
+          "reference": "../",
+          "context": "url",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "../"
+              ],
+              "resolved": "."
+            }
+          }
+        },
+        {
+          "holder": "templates/letter.html",
+          "reference": "../",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "../"
+              ],
+              "resolved": "."
+            }
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "./",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "./"
+              ],
+              "resolved": "."
+            }
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "./",
+          "context": "url",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "./"
+              ],
+              "resolved": "."
+            }
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "images/../",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "images/../"
+              ],
+              "resolved": "."
             }
           }
         },
