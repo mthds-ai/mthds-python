@@ -17,7 +17,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
+from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from typing_extensions import override
@@ -31,6 +31,12 @@ from mthds.method_tree.vocabulary import TreeRefusalCode
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+# How deeply a map of file entries may nest, a bound of this receiver's own: a map nests two
+# levels deep, and Python's own decoder gives up at a depth that varies from one version to the
+# next (none at all from 3.14 on), so the receiver bounds it below every decoder's limit and
+# answers the same on every supported Python.
+MAX_JSON_DEPTH = 64
 
 BASE64_KEY = "base64"
 SHA256_KEY = "sha256"
@@ -184,6 +190,24 @@ def _parse_keeping_pairs(document: str) -> Any:
     return json.loads(document, object_pairs_hook=_JsonObject, parse_constant=_refuse_json_constant)
 
 
+def _json_depth(parsed: Any) -> int:
+    """How deeply a decoded document nests arrays and objects, a scalar at the top being depth zero; walked without recursion."""
+    deepest = 0
+    pending: list[tuple[Any, int]] = [(parsed, 0)]
+    while pending:
+        node, depth = pending.pop()
+        children: list[Any]
+        if isinstance(node, _JsonObject):
+            children = [value for _key, value in node.pairs]
+        elif isinstance(node, list):
+            children = cast("list[Any]", node)
+        else:
+            continue
+        deepest = max(deepest, depth + 1)
+        pending.extend((child, depth + 1) for child in children)
+    return deepest
+
+
 def excluded_name_violation(key: str) -> bool:
     """Whether a tree path names a file the membership rule could never admit.
 
@@ -229,13 +253,18 @@ def read_file_map(document: str, *, blob_store: BlobStore | None = None) -> File
         MethodTreeRefusedError: When the standard refuses the map; its `refusal.code` says why.
         TreeSourceError: When `document` is not JSON text holding an object.
     """
+    too_deep = f"The map of file entries is not JSON text this receiver can read: it nests deeper than {MAX_JSON_DEPTH} levels."
     try:
         parsed = _parse_keeping_pairs(document)
-    except (ValueError, RecursionError) as exc:
-        # `ValueError` covers a syntax error, a constant JSON does not hold, and an integer longer
-        # than Python converts; `RecursionError` covers nesting deeper than the decoder follows.
+    except RecursionError as exc:
+        # Python 3.13 and earlier give up on deep nesting at a depth of their own, above the bound.
+        raise TreeSourceError(too_deep) from exc
+    except ValueError as exc:
+        # A syntax error, a constant JSON does not hold, or an integer longer than Python converts.
         msg = f"The map of file entries is not JSON text this receiver can read: {exc}"
         raise TreeSourceError(msg) from exc
+    if _json_depth(parsed) > MAX_JSON_DEPTH:
+        raise TreeSourceError(too_deep)
     if not isinstance(parsed, _JsonObject):
         msg = "The map of file entries must be a JSON object."
         raise TreeSourceError(msg)

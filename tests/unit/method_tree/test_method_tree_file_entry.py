@@ -6,7 +6,15 @@ from pydantic import ValidationError
 
 from mthds.method_tree.digest import sha256_hex
 from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeSourceError
-from mthds.method_tree.file_entry import Base64FileEntry, HashFileEntry, InMemoryBlobStore, encode_file_entry, encode_file_map, read_file_map
+from mthds.method_tree.file_entry import (
+    MAX_JSON_DEPTH,
+    Base64FileEntry,
+    HashFileEntry,
+    InMemoryBlobStore,
+    encode_file_entry,
+    encode_file_map,
+    read_file_map,
+)
 from mthds.method_tree.lister import list_method_tree
 from mthds.method_tree.vocabulary import TreeRefusalCode
 
@@ -66,7 +74,8 @@ class TestMethodTreeFileEntry:
         "document",
         [
             pytest.param('{"a.txt": {"sha256": "' + "a" * 64 + '", "size": ' + "9" * 5000 + "}}", id="an integer longer than Python converts"),
-            pytest.param("[" * 100_000 + "]" * 100_000, id="nesting deeper than the decoder follows"),
+            pytest.param("[" * 100_000 + "]" * 100_000, id="nesting deeper than some decoders follow"),
+            pytest.param('{"a.txt": ' + "[" * MAX_JSON_DEPTH + "]" * MAX_JSON_DEPTH + "}", id="nesting just past the receiver's bound"),
             pytest.param('{"a.txt": {"sha256": "' + "a" * 64 + '", "size": NaN}}', id="NaN"),
             pytest.param('{"a.txt": {"sha256": "' + "a" * 64 + '", "size": -Infinity}}', id="-Infinity"),
         ],
@@ -91,3 +100,10 @@ class TestMethodTreeFileEntry:
             read_file_map('{"a.txt": ' + entry + "}", blob_store=InMemoryBlobStore([b"hi"]))
         assert refused.value.refusal.code == TreeRefusalCode.MALFORMED_ENTRY
         assert refused.value.refusal.names == ["a.txt"]
+
+    def test_nesting_within_the_bound_is_read_as_an_entry(self):
+        """Nesting the decoder follows on every supported Python ends in the standard's refusal, not a source error."""
+        nested = "[" * (MAX_JSON_DEPTH - 1) + "]" * (MAX_JSON_DEPTH - 1)
+        with pytest.raises(MethodTreeRefusedError) as refused:
+            read_file_map('{"a.txt": ' + nested + "}")
+        assert refused.value.refusal.code == TreeRefusalCode.MALFORMED_ENTRY
