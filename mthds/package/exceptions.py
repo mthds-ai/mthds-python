@@ -18,6 +18,10 @@ class ManifestValidationError(ManifestError):
     pass
 
 
+class ManifestReadError(ManifestError):
+    """Raised when a manifest, or a directory on the way to it, cannot be read, or a `METHODS.toml` is not a regular file."""
+
+
 class VCSFetchError(MthdsPackageError):
     """Raised when a git clone or tag listing operation fails."""
 

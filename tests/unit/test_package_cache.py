@@ -1,9 +1,13 @@
+import shutil
 from pathlib import Path
 
 import pytest
+from pytest_mock import MockerFixture
 
+from mthds.method_tree import written_tree
 from mthds.package.exceptions import PackageCacheError
 from mthds.package.package_cache import (
+    CACHE_LAYOUT,
     get_cached_package_path,
     get_default_cache_root,
     is_cached,
@@ -25,7 +29,14 @@ class TestPackageCache:
 
     def test_get_cached_package_path_valid(self, tmp_path: Path):
         result = get_cached_package_path("github.com/org/repo", "1.0.0", tmp_path)
-        assert result == (tmp_path / "github.com/org/repo" / "1.0.0").resolve()
+        assert result == (tmp_path / CACHE_LAYOUT / "github.com/org/repo" / "1.0.0").resolve()
+
+    def test_copy_written_by_the_old_layout_is_not_cached(self, tmp_path: Path):
+        """A copy at the pre-7.0.0 place, the clone minus .git/, is never read back, so the package is fetched again."""
+        legacy_copy = tmp_path / "github.com" / "org" / "repo" / "1.0.0"
+        legacy_copy.mkdir(parents=True)
+        (legacy_copy / "METHODS.toml").write_text("content")
+        assert is_cached("github.com/org/repo", "1.0.0", tmp_path) is False
 
     def test_get_cached_package_path_traversal_address(self, tmp_path: Path):
         with pytest.raises(PackageCacheError, match="Path traversal"):
@@ -41,12 +52,12 @@ class TestPackageCache:
         assert is_cached("github.com/org/repo", "1.0.0", tmp_path) is False
 
     def test_is_cached_empty_dir(self, tmp_path: Path):
-        pkg_path = tmp_path / "github.com" / "org" / "repo" / "1.0.0"
+        pkg_path = get_cached_package_path("github.com/org/repo", "1.0.0", tmp_path)
         pkg_path.mkdir(parents=True)
         assert is_cached("github.com/org/repo", "1.0.0", tmp_path) is False
 
     def test_is_cached_dir_with_file(self, tmp_path: Path):
-        pkg_path = tmp_path / "github.com" / "org" / "repo" / "1.0.0"
+        pkg_path = get_cached_package_path("github.com/org/repo", "1.0.0", tmp_path)
         pkg_path.mkdir(parents=True)
         (pkg_path / "METHODS.toml").write_text("content")
         assert is_cached("github.com/org/repo", "1.0.0", tmp_path) is True
@@ -100,6 +111,73 @@ class TestPackageCache:
         cache_root = tmp_path / "cache"
         result = store_in_cache(source, "github.com/org/repo", "2.0.0", cache_root)
         assert (result / "data.mthds").exists()
+
+    def test_store_in_cache_writes_the_method_tree_only(self, tmp_path: Path):
+        """The cached copy is the package's tree as written: what the membership rule keeps out is never copied."""
+        source = tmp_path / "source"
+        (source / "node_modules" / "dep").mkdir(parents=True)
+        (source / "node_modules" / "dep" / "index.js").write_text("module")
+        (source / "samples").mkdir()
+        (source / "samples" / "big.csv").write_text("a,b")
+        (source / "main.mthds").write_text("content")
+        (source / ".gitignore").write_text("samples/\n")
+
+        result = store_in_cache(source, "github.com/org/repo", "3.0.0", tmp_path / "cache")
+
+        assert sorted(path.relative_to(result).as_posix() for path in result.rglob("*")) == ["main.mthds"]
+
+    def test_store_in_cache_refuses_a_symbolic_link_in_the_tree(self, tmp_path: Path):
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "main.mthds").write_text("content")
+        (source / "link.mthds").symlink_to(source / "main.mthds")
+
+        with pytest.raises(PackageCacheError, match="symbolic link"):
+            store_in_cache(source, "github.com/org/repo", "3.0.0", tmp_path / "cache")
+
+    def test_store_replaces_a_cached_copy_whole(self, tmp_path: Path):
+        """Storing over a cached copy leaves the new tree alone: no file of the old copy survives."""
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "main.mthds").write_text("content")
+        cache_root = tmp_path / "cache"
+        cached = get_cached_package_path("github.com/org/repo", "1.0.0", cache_root)
+        cached.mkdir(parents=True)
+        (cached / "stale.mthds").write_text("from an earlier copy")
+
+        result = store_in_cache(source, "github.com/org/repo", "1.0.0", cache_root)
+
+        assert sorted(path.relative_to(result).as_posix() for path in result.rglob("*")) == ["main.mthds"]
+        assert sorted(path.name for path in result.parent.iterdir()) == ["1.0.0"]
+
+    def test_interrupted_store_is_not_cached_and_a_retry_stores_the_tree(self, tmp_path: Path, mocker: MockerFixture):
+        """A store that fails part way leaves no copy under the version's name, so `is_cached` stays false until a retry completes."""
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "a.mthds").write_text("a")
+        (source / "b.mthds").write_text("b")
+        cache_root = tmp_path / "cache"
+        real_copyfile = shutil.copyfile
+        copied: list[Path] = []
+
+        def copy_then_fail(source_file: Path, target: Path) -> Path:
+            if copied:
+                msg = "disk full"
+                raise OSError(msg)
+            copied.append(target)
+            return real_copyfile(source_file, target)
+
+        mocker.patch.object(written_tree.shutil, "copyfile", side_effect=copy_then_fail)
+        with pytest.raises(PackageCacheError, match="disk full"):
+            store_in_cache(source, "github.com/org/repo", "1.0.0", cache_root)
+        assert is_cached("github.com/org/repo", "1.0.0", cache_root) is False
+        cached = get_cached_package_path("github.com/org/repo", "1.0.0", cache_root)
+        assert list(cached.parent.iterdir()) == []
+
+        mocker.stopall()
+        result = store_in_cache(source, "github.com/org/repo", "1.0.0", cache_root)
+        assert is_cached("github.com/org/repo", "1.0.0", cache_root) is True
+        assert sorted(path.relative_to(result).as_posix() for path in result.rglob("*")) == ["a.mthds", "b.mthds"]
 
     # --- remove_cached_package ---
 

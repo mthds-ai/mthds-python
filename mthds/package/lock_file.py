@@ -1,11 +1,12 @@
-"""Lock file model, hash computation, TOML I/O, generation, and verification.
+"""Lock file model, digest computation, TOML I/O, generation, and verification.
 
-The lock file (``methods.lock``) records exact resolved versions and SHA-256
-integrity hashes for remote dependencies, enabling reproducible builds.
+The lock file (``methods.lock``) records, for each remote dependency, the exact resolved version
+and the tree digest of the package's tree (``mthds/docs/spec/lock-format.md``), enabling
+reproducible installs. A lock written before standard 7.0.0 records a ``hash`` instead, computed
+by an algorithm that concatenated paths and contents with no separator; such a lock is refused at
+parse, and its ``hash`` is never verified.
 """
 
-import hashlib
-import re
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,14 +14,15 @@ import tomlkit
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from mthds._utils.toml_utils import TomlError, load_toml_from_content
+from mthds.method_tree.digest import DIGEST_PREFIX, is_tree_digest
+from mthds.method_tree.exceptions import MethodTreeError
+from mthds.method_tree.written_tree import written_tree_digest
 from mthds.package.exceptions import IntegrityError, LockFileError
 from mthds.package.manifest.schema import is_valid_semver
 from mthds.package.package_cache import get_cached_package_path
 
 LOCK_FILENAME = "methods.lock"
-HASH_PREFIX = "sha256:"
-
-_HASH_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+LEGACY_HASH_FIELD = "hash"
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +36,7 @@ class LockedPackage(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     version: str
-    hash: str
+    digest: str
     source: str
 
     @field_validator("version")
@@ -45,13 +47,13 @@ class LockedPackage(BaseModel):
             raise ValueError(msg)
         return version
 
-    @field_validator("hash")
+    @field_validator("digest")
     @classmethod
-    def validate_hash(cls, hash_value: str) -> str:
-        if not _HASH_PATTERN.match(hash_value):
-            msg = f"Invalid hash '{hash_value}'. Must be '{HASH_PREFIX}' followed by exactly 64 hex characters."
+    def validate_digest(cls, digest: str) -> str:
+        if not is_tree_digest(digest):
+            msg = f"Invalid digest '{digest}'. Must be '{DIGEST_PREFIX}' followed by exactly 64 lowercase hex characters."
             raise ValueError(msg)
-        return hash_value
+        return digest
 
     @field_validator("source")
     @classmethod
@@ -71,50 +73,33 @@ class LockFile(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Hash computation
+# Digest computation
 # ---------------------------------------------------------------------------
 
 
-def compute_directory_hash(directory: Path) -> str:
-    """Compute a deterministic SHA-256 hash of a directory's contents.
+def compute_package_digest(directory: Path) -> str:
+    """Compute the tree digest of a package's tree written out to disk, such as its cached copy.
 
-    Collects all regular files recursively, skips any path containing ``.git``
-    in parts, sorts by POSIX-normalized relative path, and feeds each file's
-    relative path string (UTF-8) + raw bytes into a single hasher.
+    Every regular file of the copy is a file of the tree at its path, and the membership rule is
+    not applied again (``mthds/docs/spec/lock-format.md``, "Verification").
 
     Args:
-        directory: The directory to hash.
+        directory: The directory holding the written tree.
 
     Returns:
-        A string in the form ``sha256:<64 hex chars>``.
+        ``sha256:`` followed by the tree digest.
 
     Raises:
-        LockFileError: If the directory does not exist.
+        LockFileError: If the directory does not exist or does not hold a valid written tree.
     """
     if not directory.is_dir():
         msg = f"Directory '{directory}' does not exist or is not a directory"
         raise LockFileError(msg)
-
-    hasher = hashlib.sha256()
-
-    # Collect all regular files, skip .git
-    file_paths: list[Path] = []
-    for file_path in directory.rglob("*"):
-        if not file_path.is_file():
-            continue
-        if ".git" in file_path.relative_to(directory).parts:
-            continue
-        file_paths.append(file_path)
-
-    # Sort by POSIX-normalized relative path for cross-platform determinism
-    file_paths.sort(key=lambda path: path.relative_to(directory).as_posix())
-
-    for file_path in file_paths:
-        relative_posix = file_path.relative_to(directory).as_posix()
-        hasher.update(relative_posix.encode("utf-8"))
-        hasher.update(file_path.read_bytes())
-
-    return f"{HASH_PREFIX}{hasher.hexdigest()}"
+    try:
+        return written_tree_digest(directory)
+    except MethodTreeError as exc:
+        msg = f"Cannot compute the tree digest of '{directory}': {exc.message}"
+        raise LockFileError(msg) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +134,12 @@ def parse_lock_file(content: str) -> LockFile:
             msg = f"Lock file entry for '{address}' must be a table, got {type(entry).__name__}"
             raise LockFileError(msg)
         entry_dict = cast("dict[str, Any]", entry)
+        if LEGACY_HASH_FIELD in entry_dict:
+            msg = (
+                f"The lock file entry for '{address}' records a `hash`, so this lock predates tree digests (MTHDS standard 7.0.0) "
+                "and cannot be verified. Run `lock` to regenerate it."
+            )
+            raise LockFileError(msg)
         try:
             packages[str(address)] = LockedPackage(**entry_dict)
         except ValidationError as exc:
@@ -175,7 +166,7 @@ def serialize_lock_file(lock_file: LockFile) -> str:
         locked = lock_file.packages[address]
         table = tomlkit.table()
         table.add("version", locked.version)
-        table.add("hash", locked.hash)
+        table.add("digest", locked.digest)
         table.add("source", locked.source)
         doc.add(address, table)
 
@@ -215,12 +206,12 @@ def generate_lock_file(
 
         address = resolved.address
         version = resolved.manifest.version
-        hash_value = compute_directory_hash(resolved.package_root)
+        digest = compute_package_digest(resolved.package_root)
         source = f"https://{address}"
 
         packages[address] = LockedPackage(
             version=version,
-            hash=hash_value,
+            digest=digest,
             source=source,
         )
 
@@ -245,7 +236,7 @@ def verify_locked_package(
         cache_root: Override for the cache root directory.
 
     Raises:
-        IntegrityError: If the cached package is missing or its hash does not match.
+        IntegrityError: If the cached package is missing or its tree digest does not match.
     """
     # Extract version to locate cached dir
     cached_path = get_cached_package_path(address, locked.version, cache_root)
@@ -254,9 +245,13 @@ def verify_locked_package(
         msg = f"Cached package '{address}@{locked.version}' not found at '{cached_path}'"
         raise IntegrityError(msg)
 
-    actual_hash = compute_directory_hash(cached_path)
-    if actual_hash != locked.hash:
-        msg = f"Integrity check failed for '{address}@{locked.version}': expected {locked.hash}, got {actual_hash}"
+    try:
+        actual_digest = compute_package_digest(cached_path)
+    except LockFileError as exc:
+        msg = f"Integrity check failed for '{address}@{locked.version}': {exc.message}"
+        raise IntegrityError(msg) from exc
+    if actual_digest != locked.digest:
+        msg = f"Integrity check failed for '{address}@{locked.version}': expected the tree digest {locked.digest}, got {actual_digest}"
         raise IntegrityError(msg)
 
 
@@ -271,7 +266,7 @@ def verify_lock_file(
         cache_root: Override for the cache root directory.
 
     Raises:
-        IntegrityError: If any cached package is missing or has a hash mismatch.
+        IntegrityError: If any cached package is missing or its tree digest does not match.
     """
     for address, locked in lock_file.packages.items():
         verify_locked_package(locked, address, cache_root)

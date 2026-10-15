@@ -6,10 +6,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from mthds.package.discovery import MANIFEST_FILENAME, find_package_manifest
+from mthds.package.discovery import MANIFEST_FILENAME, read_package_manifest_at
 from mthds.package.exceptions import (
     DependencyResolveError,
     ManifestError,
+    ManifestReadError,
     PackageCacheError,
     TransitiveDependencyError,
     VCSFetchError,
@@ -89,21 +90,25 @@ def determine_exported_pipes(manifest: MethodsManifest | None) -> set[str] | Non
 
 
 def _find_manifest_in_dir(directory: Path) -> MethodsManifest | None:
-    """Read and parse a METHODS.toml from a directory root.
+    """Read and parse the METHODS.toml at a package's root directory, never looking above it.
 
     Args:
-        directory: The directory to look for METHODS.toml in.
+        directory: The package's root directory.
 
     Returns:
         The parsed manifest, or None if absent or unparseable.
+
+    Raises:
+        DependencyResolveError: If the directory or its METHODS.toml cannot be read, or that
+            METHODS.toml is not a regular file.
     """
-    manifest_path = directory / MANIFEST_FILENAME
-    if not manifest_path.is_file():
-        return None
     try:
-        return find_package_manifest(manifest_path)
+        return read_package_manifest_at(directory)
+    except ManifestReadError as exc:
+        msg = f"Cannot read the manifest of the package at '{directory}': {exc.message}"
+        raise DependencyResolveError(msg) from exc
     except ManifestError as exc:
-        logger.warning("Could not parse METHODS.toml in '%s': %s", directory, exc)
+        logger.warning("Could not parse %s in '%s': %s", MANIFEST_FILENAME, directory, exc)
         return None
 
 

@@ -1,0 +1,8 @@
+{
+  "source_repository": "Pipelex/conformance",
+  "source_path": "tests/method_tree/fixtures/method-tree-corpus.json",
+  "source_commit": "bed5555d4d45c942a2b439d183aeb4072659b865",
+  "files": {
+    "method_tree_corpus.json": "88d082f2a1203e72685d0c0571581412991ea58aef90faf15c0a8d9c9ff58c8d"
+  }
+}
