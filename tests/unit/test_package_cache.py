@@ -1,7 +1,10 @@
+import shutil
 from pathlib import Path
 
 import pytest
+from pytest_mock import MockerFixture
 
+from mthds.method_tree import written_tree
 from mthds.package.exceptions import PackageCacheError
 from mthds.package.package_cache import (
     CACHE_LAYOUT,
@@ -131,6 +134,50 @@ class TestPackageCache:
 
         with pytest.raises(PackageCacheError, match="symbolic link"):
             store_in_cache(source, "github.com/org/repo", "3.0.0", tmp_path / "cache")
+
+    def test_store_replaces_a_cached_copy_whole(self, tmp_path: Path):
+        """Storing over a cached copy leaves the new tree alone: no file of the old copy survives."""
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "main.mthds").write_text("content")
+        cache_root = tmp_path / "cache"
+        cached = get_cached_package_path("github.com/org/repo", "1.0.0", cache_root)
+        cached.mkdir(parents=True)
+        (cached / "stale.mthds").write_text("from an earlier copy")
+
+        result = store_in_cache(source, "github.com/org/repo", "1.0.0", cache_root)
+
+        assert sorted(path.relative_to(result).as_posix() for path in result.rglob("*")) == ["main.mthds"]
+        assert sorted(path.name for path in result.parent.iterdir()) == ["1.0.0"]
+
+    def test_interrupted_store_is_not_cached_and_a_retry_stores_the_tree(self, tmp_path: Path, mocker: MockerFixture):
+        """A store that fails part way leaves no copy under the version's name, so `is_cached` stays false until a retry completes."""
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "a.mthds").write_text("a")
+        (source / "b.mthds").write_text("b")
+        cache_root = tmp_path / "cache"
+        real_copyfile = shutil.copyfile
+        copied: list[Path] = []
+
+        def copy_then_fail(source_file: Path, target: Path) -> Path:
+            if copied:
+                msg = "disk full"
+                raise OSError(msg)
+            copied.append(target)
+            return real_copyfile(source_file, target)
+
+        mocker.patch.object(written_tree.shutil, "copyfile", side_effect=copy_then_fail)
+        with pytest.raises(PackageCacheError, match="disk full"):
+            store_in_cache(source, "github.com/org/repo", "1.0.0", cache_root)
+        assert is_cached("github.com/org/repo", "1.0.0", cache_root) is False
+        cached = get_cached_package_path("github.com/org/repo", "1.0.0", cache_root)
+        assert list(cached.parent.iterdir()) == []
+
+        mocker.stopall()
+        result = store_in_cache(source, "github.com/org/repo", "1.0.0", cache_root)
+        assert is_cached("github.com/org/repo", "1.0.0", cache_root) is True
+        assert sorted(path.relative_to(result).as_posix() for path in result.rglob("*")) == ["a.mthds", "b.mthds"]
 
     # --- remove_cached_package ---
 

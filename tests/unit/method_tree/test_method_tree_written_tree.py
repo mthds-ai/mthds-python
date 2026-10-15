@@ -1,3 +1,4 @@
+import shutil
 import stat
 from pathlib import Path
 
@@ -84,3 +85,47 @@ class TestMethodTreeWrittenTree:
         assert refused.value.refusal.code == TreeRefusalCode.NORMALIZATION_COLLISION
         assert refused.value.refusal.names == expected_names
         hash_spy.assert_not_called()
+
+    def test_destination_already_holding_files_is_refused(self, tmp_path: Path):
+        """Writing over a directory that holds files would mix two trees, so it is refused and the directory left untouched."""
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "main.mthds").write_text('domain = "letters"\n', encoding="utf-8")
+        destination = tmp_path / "copy"
+        destination.mkdir()
+        (destination / "stale.txt").write_text("from an earlier tree", encoding="utf-8")
+        with pytest.raises(FileExistsError, match="not an empty directory"):
+            write_tree(list_method_tree(source), destination=destination)
+        assert sorted(path.name for path in destination.iterdir()) == ["stale.txt"]
+        assert sorted(path.name for path in tmp_path.iterdir()) == ["copy", "source"]
+
+    def test_interrupted_write_leaves_no_tree_and_a_retry_writes_it_whole(self, tmp_path: Path, mocker: MockerFixture):
+        """A write that fails part way leaves nothing under the destination's name, nor beside it, and the next write is the whole tree."""
+        source = tmp_path / "source"
+        source.mkdir()
+        for name in ("a.txt", "b.txt", "c.txt"):
+            (source / name).write_text(name, encoding="utf-8")
+        tree = list_method_tree(source)
+        real_copyfile = shutil.copyfile
+        copied: list[Path] = []
+
+        def copy_then_fail(source_file: Path, target: Path) -> Path:
+            if copied:
+                msg = "disk full"
+                raise OSError(msg)
+            copied.append(target)
+            return real_copyfile(source_file, target)
+
+        mocker.patch.object(written_tree.shutil, "copyfile", side_effect=copy_then_fail)
+        destination = tmp_path / "copy"
+        with pytest.raises(OSError, match="disk full"):
+            write_tree(tree, destination=destination)
+        assert copied
+        assert not destination.exists()
+        assert sorted(path.name for path in tmp_path.iterdir()) == ["source"]
+
+        mocker.stopall()
+        write_tree(tree, destination=destination)
+        written = read_written_tree(destination)
+        assert written.tree_paths == ["a.txt", "b.txt", "c.txt"]
+        assert written.digest == tree.digest

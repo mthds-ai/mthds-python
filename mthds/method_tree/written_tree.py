@@ -10,6 +10,7 @@ are left out of the copy.
 
 from __future__ import annotations
 
+import secrets
 import shutil
 from typing import TYPE_CHECKING
 
@@ -26,21 +27,56 @@ if TYPE_CHECKING:
 
 
 def write_tree(tree: MethodTree, *, destination: Path) -> None:
-    """Copy the files of a tree listed from a directory to `destination`, each at its tree path, and nothing else.
+    """Write the files of a tree listed from a directory as the directory `destination`, each at its tree path, and nothing else.
+
+    The files are written into a fresh hidden directory beside `destination`, which takes the name
+    `destination` only once every file is written: an interrupted write never leaves a partial tree
+    under that name, and what it leaves beside it starts with a dot. `destination` must not exist,
+    or be an empty directory. A directory already holding files is refused rather than replaced or
+    written into: files of both trees would mix, and replacing it would delete what a caller may
+    not mean to lose, so a caller replacing a tree it owns, such as the package cache, removes the
+    old one first.
 
     Each file keeps its permission bits, so a script the package marks executable stays so; the
     digest does not cover them.
 
     Raises:
         ValueError: When the tree was not listed from a directory.
+        FileExistsError: When `destination` exists and is not an empty directory.
         OSError: When a file cannot be read or written.
     """
-    for tree_file in tree.files:
-        target = destination.joinpath(*tree_file.path.split("/"))
-        target.parent.mkdir(parents=True, exist_ok=True)
-        source = tree.file_location(tree_file.path)
-        shutil.copyfile(source, target)
-        shutil.copymode(source, target)
+    _refuse_occupied_destination(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = destination.parent / f".{destination.name}.{secrets.token_hex(8)}.writing"
+    staging.mkdir()
+    is_in_place = False
+    try:
+        for tree_file in tree.files:
+            target = staging.joinpath(*tree_file.path.split("/"))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = tree.file_location(tree_file.path)
+            shutil.copyfile(source, target)
+            shutil.copymode(source, target)
+        if destination.is_dir():
+            # `rmdir` removes only an empty directory, so a file written there meanwhile is never lost.
+            destination.rmdir()
+        staging.rename(destination)
+        is_in_place = True
+    finally:
+        if not is_in_place:
+            shutil.rmtree(staging, ignore_errors=True)
+
+
+def _refuse_occupied_destination(destination: Path) -> None:
+    if not destination.exists() and not destination.is_symlink():
+        return
+    if destination.is_dir() and not destination.is_symlink() and not any(destination.iterdir()):
+        return
+    msg = (
+        f"Cannot write a method tree at '{destination}': it already exists and is not an empty directory, "
+        "and a written tree holds nothing but its files."
+    )
+    raise FileExistsError(msg)
 
 
 def read_written_tree(directory: Path) -> MethodTree:

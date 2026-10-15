@@ -11,9 +11,10 @@ standard 7.0.0 sit at ``{cache_root}/{address}/{version}/`` and held the whole c
 this module never looks there, so such a package is fetched again, and the old copies can be
 deleted.
 
-Uses a staging directory + atomic rename for safe writes.
+Writes go through a hidden sibling directory renamed into place once complete.
 """
 
+import secrets
 import shutil
 from pathlib import Path
 
@@ -95,8 +96,9 @@ def store_in_cache(
     The tree is listed from ``source_dir`` under the membership rule, rooted at that directory,
     and only its files are written, each at its tree path: the cached copy is the tree as written,
     which a later digest reads back without applying the rule again. ``.git/`` and everything else
-    the rule excludes is left out. Uses a staging directory (``{path}.staging``) and an atomic
-    rename for safe writes.
+    the rule excludes is left out. The tree is written into a hidden sibling directory and renamed
+    into place once complete, and a copy already cached is moved aside and deleted first, so the
+    version's directory only ever holds one whole tree.
 
     Args:
         source_dir: The directory to copy from (e.g. a fresh clone).
@@ -116,27 +118,18 @@ def store_in_cache(
         msg = f"Failed to store package '{address}@{version}' in cache: {exc.message}"
         raise PackageCacheError(msg) from exc
     final_path = get_cached_package_path(address, version, cache_root)
-    staging_path = final_path.parent / f"{final_path.name}.staging"
 
     try:
-        # Clean up any leftover staging dir
-        if staging_path.exists():
-            shutil.rmtree(staging_path)
-
-        # Write the package's tree into staging, each file at its tree path
-        staging_path.mkdir(parents=True)
-        write_tree(tree, destination=staging_path)
-
-        # Ensure parent exists and perform atomic rename
-        final_path.parent.mkdir(parents=True, exist_ok=True)
+        # A cached copy is replaced whole: the old one is moved aside under a hidden name, in one
+        # rename, and only then deleted, so no reader ever sees a mix of the old tree and the new.
         if final_path.exists():
-            shutil.rmtree(final_path)
-        staging_path.rename(final_path)
-
+            retired_path = final_path.parent / f".{final_path.name}.{secrets.token_hex(8)}.retired"
+            final_path.rename(retired_path)
+            shutil.rmtree(retired_path)
+        # `write_tree` writes into a hidden sibling and renames it into place once complete, so an
+        # interrupted store leaves no copy under the version's name and `is_cached` stays false.
+        write_tree(tree, destination=final_path)
     except OSError as exc:
-        # Clean up staging on failure
-        if staging_path.exists():
-            shutil.rmtree(staging_path, ignore_errors=True)
         msg = f"Failed to store package '{address}@{version}' in cache: {exc}"
         raise PackageCacheError(msg) from exc
 
