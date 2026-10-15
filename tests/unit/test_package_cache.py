@@ -4,6 +4,7 @@ import pytest
 
 from mthds.package.exceptions import PackageCacheError
 from mthds.package.package_cache import (
+    CACHE_LAYOUT,
     get_cached_package_path,
     get_default_cache_root,
     is_cached,
@@ -25,7 +26,14 @@ class TestPackageCache:
 
     def test_get_cached_package_path_valid(self, tmp_path: Path):
         result = get_cached_package_path("github.com/org/repo", "1.0.0", tmp_path)
-        assert result == (tmp_path / "github.com/org/repo" / "1.0.0").resolve()
+        assert result == (tmp_path / CACHE_LAYOUT / "github.com/org/repo" / "1.0.0").resolve()
+
+    def test_copy_written_by_the_old_layout_is_not_cached(self, tmp_path: Path):
+        """A copy at the pre-7.0.0 place, the clone minus .git/, is never read back, so the package is fetched again."""
+        legacy_copy = tmp_path / "github.com" / "org" / "repo" / "1.0.0"
+        legacy_copy.mkdir(parents=True)
+        (legacy_copy / "METHODS.toml").write_text("content")
+        assert is_cached("github.com/org/repo", "1.0.0", tmp_path) is False
 
     def test_get_cached_package_path_traversal_address(self, tmp_path: Path):
         with pytest.raises(PackageCacheError, match="Path traversal"):
@@ -41,12 +49,12 @@ class TestPackageCache:
         assert is_cached("github.com/org/repo", "1.0.0", tmp_path) is False
 
     def test_is_cached_empty_dir(self, tmp_path: Path):
-        pkg_path = tmp_path / "github.com" / "org" / "repo" / "1.0.0"
+        pkg_path = get_cached_package_path("github.com/org/repo", "1.0.0", tmp_path)
         pkg_path.mkdir(parents=True)
         assert is_cached("github.com/org/repo", "1.0.0", tmp_path) is False
 
     def test_is_cached_dir_with_file(self, tmp_path: Path):
-        pkg_path = tmp_path / "github.com" / "org" / "repo" / "1.0.0"
+        pkg_path = get_cached_package_path("github.com/org/repo", "1.0.0", tmp_path)
         pkg_path.mkdir(parents=True)
         (pkg_path / "METHODS.toml").write_text("content")
         assert is_cached("github.com/org/repo", "1.0.0", tmp_path) is True

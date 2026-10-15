@@ -55,7 +55,7 @@ class ExclusionRule(StrEnum):
 
     @property
     def names_directory(self) -> bool:
-        """Whether a refusal citing this rule also names the excluded directory, as the standard asks for these two."""
+        """Whether a refusal citing this rule also names the excluded directory, as the standard asks for these rules."""
         match self:
             case ExclusionRule.NESTED_REPOSITORY | ExclusionRule.NESTED_PACKAGE:
                 return True

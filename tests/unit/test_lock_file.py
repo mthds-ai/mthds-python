@@ -17,6 +17,7 @@ from mthds.package.lock_file import (
     verify_locked_package,
 )
 from mthds.package.manifest.schema import MethodsManifest
+from mthds.package.package_cache import get_cached_package_path
 
 
 class TestLockFile:
@@ -39,6 +40,7 @@ class TestLockFile:
             "sha256:" + "A" * 64,
             "md5:" + "a" * 64,
             "tooshort",
+            "sha256:" + "a" * 64 + "\n",
         ],
     )
     def test_locked_package_invalid_digest(self, bad_digest: str):
@@ -214,7 +216,7 @@ class TestLockFile:
 
     def test_verify_locked_package_digest_mismatch(self, tmp_path: Path):
         # Create cached dir with content
-        pkg_path = tmp_path / "github.com" / "org" / "repo" / "1.0.0"
+        pkg_path = get_cached_package_path("github.com/org/repo", "1.0.0", tmp_path)
         pkg_path.mkdir(parents=True)
         (pkg_path / "file.txt").write_text("hello")
 
@@ -229,7 +231,7 @@ class TestLockFile:
             verify_locked_package(locked, "github.com/org/repo", tmp_path)
 
     def test_verify_locked_package_correct(self, tmp_path: Path):
-        pkg_path = tmp_path / "github.com" / "org" / "repo" / "1.0.0"
+        pkg_path = get_cached_package_path("github.com/org/repo", "1.0.0", tmp_path)
         pkg_path.mkdir(parents=True)
         (pkg_path / "file.txt").write_text("hello")
 
@@ -245,7 +247,7 @@ class TestLockFile:
     # --- verify_lock_file ---
 
     def test_verify_lock_file_all_pass(self, tmp_path: Path):
-        pkg_path = tmp_path / "github.com" / "org" / "repo" / "1.0.0"
+        pkg_path = get_cached_package_path("github.com/org/repo", "1.0.0", tmp_path)
         pkg_path.mkdir(parents=True)
         (pkg_path / "file.txt").write_text("hello")
         actual_digest = compute_package_digest(pkg_path)

@@ -4,9 +4,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from mthds.package.discovery import MANIFEST_FILENAME
+from mthds.package.discovery import MANIFEST_FILENAME, read_package_manifest_at
 from mthds.package.exceptions import ManifestError
-from mthds.package.manifest.parser import parse_methods_toml
 from mthds.package.manifest.schema import MethodsManifest
 
 
@@ -34,18 +33,12 @@ def make_package_from_directory(package_root: Path) -> MethodsPackage:
     Raises:
         ManifestError: If METHODS.toml is missing, unreadable, or invalid
     """
-    manifest_path = package_root / MANIFEST_FILENAME
-    if not manifest_path.is_file():
+    # The manifest is a regular file named exactly METHODS.toml at the root, letter case included,
+    # whatever the file system: `Path.is_file` would follow a link and match `methods.toml`.
+    manifest = read_package_manifest_at(package_root)
+    if manifest is None:
         msg = f"No {MANIFEST_FILENAME} found in {package_root}"
         raise ManifestError(msg)
-
-    try:
-        content = manifest_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        msg = f"Could not read {manifest_path}: {exc}"
-        raise ManifestError(msg) from exc
-
-    manifest = parse_methods_toml(content)
 
     mthds_files = sorted(str(mthds_path.relative_to(package_root)) for mthds_path in package_root.rglob("*.mthds") if mthds_path.is_file())
 

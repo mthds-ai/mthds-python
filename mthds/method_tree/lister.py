@@ -44,6 +44,7 @@ from mthds.method_tree.discovery import (
     holds_manifest,
     holds_venv_marker,
     kind_of_exact_name,
+    on_disk_name,
     read_directory,
 )
 from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeLimitError, TreeRefusal, TreeSourceError
@@ -56,7 +57,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 HASH_CHUNK_BYTES = 1 << 20
-LINE_BREAKS = ("\n", "\r")
 
 
 class _Candidate(NamedTuple):
@@ -109,10 +109,13 @@ def list_method_tree(handed_over: Path, *, limits: TreeLimits | None = None) -> 
             directory = handed_over.resolve(strict=True)
             root = find_manifest_directory(directory) or directory
             return _TreeWalk(root=root, limits=active_limits).list_tree(lone_file=None)
-        lone_file = handed_over.absolute().parent.resolve(strict=True) / handed_over.name
+        parent = handed_over.absolute().parent.resolve(strict=True)
     except OSError as exc:
         msg = f"Cannot list a method tree from '{handed_over}': {exc}"
         raise TreeSourceError(msg) from exc
+    # The file's name as its directory holds it: a case-insensitive file system also finds
+    # `Main.mthds` for `main.mthds`, and the tree path must not follow the caller's spelling.
+    lone_file = parent / on_disk_name(parent, handed_over.name)
     if not lone_file.name.endswith(BUNDLE_SUFFIX):
         msg = f"Cannot list a method tree from '{handed_over}': a file named alone must be a {BUNDLE_SUFFIX} bundle."
         raise TreeSourceError(msg)
@@ -402,11 +405,11 @@ class _TreeWalk:
                 msg = f"The [package] exclude field of '{manifest_location}' must be an array of strings."
                 raise TreeSourceError(msg)
             patterns.append(pattern)
-        for pattern in patterns:
-            if any(line_break in pattern for line_break in LINE_BREAKS):
-                msg = f"The [package] exclude pattern {pattern!r} of '{manifest_location}' holds a line break, which no pattern may hold."
-                raise TreeSourceError(msg)
-        return PatternList.make_from_entries(patterns, base="")
+        try:
+            return PatternList.make_from_entries(patterns, base="")
+        except ValueError as exc:
+            msg = f"Cannot read the [package] exclude field of '{manifest_location}': {exc}"
+            raise TreeSourceError(msg) from exc
 
     # ── Refusals judged on the whole listing ───────────────────────────────
 
@@ -428,8 +431,14 @@ class _TreeWalk:
             raise MethodTreeRefusedError(msg, refusal=TreeRefusal(code=TreeRefusalCode.NORMALIZATION_COLLISION, names=names))
 
     def _lone_file_tree_path(self, lone_file: Path) -> str:
-        relative = lone_file.relative_to(self.root)
-        return "/".join(nfc(part) for part in relative.parts)
+        """The lone file's tree path, each name on the way taken as the file system holds it, not as the caller spelled it."""
+        current = self.root
+        held_names: list[str] = []
+        for part in lone_file.relative_to(self.root).parts:
+            raw_name = on_disk_name(current, part)
+            held_names.append(nfc(raw_name))
+            current /= raw_name
+        return "/".join(held_names)
 
     def _refuse_lone_file(self, lone_file: Path, *, tree_path: str, root_exclusion: TreeExclusion | None) -> None:
         exclusion = root_exclusion or self.excluded_files.get(tree_path)

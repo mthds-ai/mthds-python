@@ -5,9 +5,10 @@ import pytest
 from pydantic import ValidationError
 
 from mthds.method_tree.digest import sha256_hex
+from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeSourceError
 from mthds.method_tree.file_entry import Base64FileEntry, HashFileEntry, InMemoryBlobStore, encode_file_entry, encode_file_map, read_file_map
 from mthds.method_tree.lister import list_method_tree
-from mthds.method_tree.written_tree import read_written_tree, write_tree
+from mthds.method_tree.vocabulary import TreeRefusalCode
 
 
 class TestMethodTreeFileEntry:
@@ -41,6 +42,7 @@ class TestMethodTreeFileEntry:
             pytest.param({"sha256": "a" * 64, "size": True}, id="a boolean size"),
             pytest.param({"sha256": "A" * 64, "size": 13}, id="an uppercase hash"),
             pytest.param({"sha256": "a" * 64, "size": 13, "url": "https://example.com"}, id="a key of no form"),
+            pytest.param({"sha256": "a" * 64 + "\n", "size": 13}, id="a hash followed by a line feed"),
         ],
     )
     def test_hash_entry_is_strict(self, fields: dict[str, object]):
@@ -60,18 +62,32 @@ class TestMethodTreeFileEntry:
         assert reading.tree.digest == tree.digest
         assert reading.contents == contents
 
-    def test_written_tree_reads_back_with_the_listed_digest(self, tmp_path: Path):
-        """A tree written out holds its files at their tree paths and nothing else, and reads back with the same digest."""
-        source = tmp_path / "source"
-        (source / "templates").mkdir(parents=True)
-        (source / "templates" / "letter.html").write_text("<p>Dear</p>\n", encoding="utf-8")
-        (source / "main.mthds").write_text('domain = "letters"\n', encoding="utf-8")
-        (source / ".env").write_text("SECRET=1\n", encoding="utf-8")
-        tree = list_method_tree(source)
-        destination = tmp_path / "copy"
-        destination.mkdir()
-        write_tree(tree, destination=destination)
-        assert not (destination / ".env").exists()
-        written = read_written_tree(destination)
-        assert written.tree_paths == ["main.mthds", "templates/letter.html"]
-        assert written.digest == tree.digest
+    @pytest.mark.parametrize(
+        "document",
+        [
+            pytest.param('{"a.txt": {"sha256": "' + "a" * 64 + '", "size": ' + "9" * 5000 + "}}", id="an integer longer than Python converts"),
+            pytest.param("[" * 100_000 + "]" * 100_000, id="nesting deeper than the decoder follows"),
+            pytest.param('{"a.txt": {"sha256": "' + "a" * 64 + '", "size": NaN}}', id="NaN"),
+            pytest.param('{"a.txt": {"sha256": "' + "a" * 64 + '", "size": -Infinity}}', id="-Infinity"),
+        ],
+    )
+    def test_document_this_receiver_cannot_read_is_a_source_error(self, document: str):
+        """Hostile JSON text ends in the documented source error, never in a bare ValueError or RecursionError."""
+        with pytest.raises(TreeSourceError, match="not JSON text this receiver can read"):
+            read_file_map(document)
+
+    @pytest.mark.parametrize(
+        "entry",
+        [
+            pytest.param('{"sha256": "' + "a" * 64 + '\\n", "size": 2}', id="a hash followed by a line feed"),
+            pytest.param('{"sha256": "' + "a" * 64 + '", "size": 2.0}', id="a size written with a fraction"),
+            pytest.param('{"sha256": "' + "a" * 64 + '", "size": 2e0}', id="a size written with an exponent"),
+            pytest.param('{"base64": "aGl="}', id="Base64 whose padding bits are not zero"),
+            pytest.param('{"base64": "aGk=", "size": 2}', id="a key of no form"),
+        ],
+    )
+    def test_malformed_entry_is_refused(self, entry: str):
+        with pytest.raises(MethodTreeRefusedError) as refused:
+            read_file_map('{"a.txt": ' + entry + "}", blob_store=InMemoryBlobStore([b"hi"]))
+        assert refused.value.refusal.code == TreeRefusalCode.MALFORMED_ENTRY
+        assert refused.value.refusal.names == ["a.txt"]

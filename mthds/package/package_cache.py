@@ -1,7 +1,15 @@
 """Local package cache for fetched remote MTHDS dependencies.
 
-Cache layout: ``{cache_root}/{address}/{version}/``
-(e.g. ``~/.mthds/packages/github.com/org/repo/1.0.0/``).
+Cache layout: ``{cache_root}/{CACHE_LAYOUT}/{address}/{version}/``
+(e.g. ``~/.mthds/packages/v2/github.com/org/repo/1.0.0/``), each version directory holding the
+package's method tree as written.
+
+The layout is versioned because a cached copy is read back as written: a copy that an older
+layout wrote is never read, since its files are not the package's tree. Copies written before
+standard 7.0.0 sit at ``{cache_root}/{address}/{version}/`` and held the whole clone minus
+``.git/``, its ``.gitignore`` files, ``__pycache__`` directories and symbolic links included;
+this module never looks there, so such a package is fetched again, and the old copies can be
+deleted.
 
 Uses a staging directory + atomic rename for safe writes.
 """
@@ -13,6 +21,9 @@ from mthds.method_tree.exceptions import MethodTreeError
 from mthds.method_tree.lister import list_method_tree_at_root
 from mthds.method_tree.written_tree import write_tree
 from mthds.package.exceptions import PackageCacheError
+
+CACHE_LAYOUT = "v2"
+"""The cache layout's version, the first directory under the cache root; bump it whenever what a cached copy holds changes."""
 
 
 def get_default_cache_root() -> Path:
@@ -42,9 +53,9 @@ def get_cached_package_path(
     Raises:
         PackageCacheError: If the resolved path escapes the cache root (path traversal).
     """
-    root = (cache_root or get_default_cache_root()).resolve()
-    resolved = (root / address / version).resolve()
-    if not resolved.is_relative_to(root):
+    layout_root = (cache_root or get_default_cache_root()).resolve() / CACHE_LAYOUT
+    resolved = (layout_root / address / version).resolve()
+    if not resolved.is_relative_to(layout_root):
         msg = f"Path traversal detected: address '{address}' and version '{version}' resolve outside cache root"
         raise PackageCacheError(msg)
     return resolved

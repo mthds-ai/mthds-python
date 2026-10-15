@@ -21,8 +21,19 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
 DIGEST_PREFIX = "sha256:"
-SHA256_HEX_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-TREE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+# Matched with `fullmatch` only: `$` would also accept a trailing line feed.
+SHA256_HEX_PATTERN = re.compile(r"[0-9a-f]{64}")
+TREE_DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def is_sha256_hex(value: str) -> bool:
+    """Whether `value` is a SHA-256 in lowercase hexadecimal, and nothing else."""
+    return SHA256_HEX_PATTERN.fullmatch(value) is not None
+
+
+def is_tree_digest(value: str) -> bool:
+    """Whether `value` is a tree digest, `sha256:` and a SHA-256 in lowercase hexadecimal, and nothing else."""
+    return TREE_DIGEST_PATTERN.fullmatch(value) is not None
 
 
 def sha256_hex(data: bytes) -> str:

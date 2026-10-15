@@ -3,7 +3,7 @@
 The membership rule reads the tree's `.gitignore` files and the manifest's `[package] exclude`
 patterns "with git's own semantics" and matches them "byte for byte, letter case included, as git
 matches with `core.ignoreCase` off" (`mthds/docs/spec/method-tree.md`, "The Membership Rule").
-This module is a port of the two pieces of git that define those semantics, so that no library's
+This module is a port of the pieces of git that define those semantics, so that no library's
 reading of `.gitignore` can differ from git's:
 
 - `dir.c`: how a pattern file is split into patterns (`add_patterns_from_buffer`,
@@ -22,9 +22,30 @@ paths, as the standard asks.
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from mthds.method_tree.tree_path import nfc
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+EXCLUDE_LINE_BREAKS = ("\n", "\r")
+
+
+def check_exclude_patterns(patterns: Sequence[str]) -> None:
+    """Refuse a `[package] exclude` list holding an entry with a line break, the one rule its entries follow.
+
+    Each entry is one pattern, read as one line of a `core.excludesFile`, so a line break would
+    smuggle a second pattern into it. The manifest's model and the lister both apply this rule.
+
+    Raises:
+        ValueError: Naming the first entry holding a line break.
+    """
+    for index_pattern, pattern in enumerate(patterns):
+        if any(line_break in pattern for line_break in EXCLUDE_LINE_BREAKS):
+            msg = f"The exclude pattern {pattern!r} at index {index_pattern} holds a line break; each entry is one pattern of one line."
+            raise ValueError(msg)
+
 
 # The return values of git's `dowild`.
 _WM_MATCH = 0
@@ -440,7 +461,12 @@ class PatternList:
 
     @classmethod
     def make_from_entries(cls, entries: list[str], *, base: str) -> PatternList:
-        """Read the entries of `[package] exclude`, each one line of a `core.excludesFile`, normalized to NFC."""
+        """Read the entries of `[package] exclude`, each one line of a `core.excludesFile`, normalized to NFC.
+
+        Raises:
+            ValueError: When an entry holds a line break.
+        """
+        check_exclude_patterns(entries)
         data = b"".join(f"{nfc(entry)}\n".encode("utf-8", errors="surrogateescape") for entry in entries)
         return cls(parse_pattern_lines(data), base=base)
 

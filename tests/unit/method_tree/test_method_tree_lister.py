@@ -1,14 +1,18 @@
+import os
 from pathlib import Path
 
 import pytest
 from pytest_mock import MockerFixture
 
-from mthds.method_tree import lister
+from mthds.method_tree import discovery, lister
+from mthds.method_tree.digest import digest_of_contents
+from mthds.method_tree.discovery import DirectoryEntry, EntryKind, on_disk_name
 from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeLimitError, TreeSourceError
 from mthds.method_tree.lister import list_method_tree, list_method_tree_at_root
 from mthds.method_tree.models import TreeLimits
 from mthds.method_tree.vocabulary import TreeLimitKind, TreeRefusalCode
 from mthds.package.discovery import find_package_manifest
+from tests.unit.method_tree.test_data import HostCapability
 
 MANIFEST_TEXT = '[package]\naddress = "github.com/acme/letters"\nversion = "1.0.0"\ndescription = "Letters"\n'
 
@@ -116,3 +120,82 @@ class TestMethodTreeLister:
         manifest = find_package_manifest(tmp_path / "main.mthds")
         assert manifest is not None
         assert manifest.address == "github.com/acme/letters"
+
+    @pytest.mark.parametrize(
+        ("asked", "held", "expected"),
+        [
+            pytest.param("main.mthds", ["Main.mthds", "main.mthds"], "main.mthds", id="the exact name wins"),
+            pytest.param("Main.mthds", ["main.mthds", "notes.txt"], "main.mthds", id="the one name equal once case-folded"),
+            pytest.param("cafe\u0301.mthds", ["caf\u00e9.mthds"], "caf\u00e9.mthds", id="the one name equal once normalized"),
+        ],
+    )
+    def test_on_disk_name_is_the_name_held(self, tmp_path: Path, mocker: MockerFixture, asked: str, held: list[str], expected: str):
+        entries = [DirectoryEntry(raw_name=name, kind=EntryKind.FILE) for name in held]
+        mocker.patch.object(discovery, "read_directory", return_value=entries)
+        assert on_disk_name(tmp_path, asked) == expected
+
+    @pytest.mark.parametrize(
+        "held",
+        [
+            pytest.param(["MAIN.mthds", "Main.mthds"], id="several names equal once case-folded"),
+            pytest.param(["notes.txt"], id="no such name"),
+        ],
+    )
+    def test_on_disk_name_that_cannot_be_told(self, tmp_path: Path, mocker: MockerFixture, held: list[str]):
+        entries = [DirectoryEntry(raw_name=name, kind=EntryKind.FILE) for name in held]
+        mocker.patch.object(discovery, "read_directory", return_value=entries)
+        with pytest.raises(TreeSourceError, match="Cannot tell which entry"):
+            on_disk_name(tmp_path, "main.mthds")
+
+    @pytest.mark.parametrize("with_manifest", [pytest.param(True, id="rooted at a manifest"), pytest.param(False, id="a one-file tree")])
+    def test_lone_file_named_in_another_letter_case_lists_as_held(self, tmp_path: Path, host_capabilities: frozenset[str], with_manifest: bool):
+        """A case-insensitive file system finds `Templates/Main.mthds` for `templates/main.mthds`; the tree keeps the names held."""
+        if HostCapability.CASE_SENSITIVE_NAMES in host_capabilities:
+            pytest.skip("this host's file system tells letter case apart, so the other spelling names nothing")
+        files = {"templates/main.mthds": 'domain = "letters"\n'}
+        if with_manifest:
+            files["METHODS.toml"] = MANIFEST_TEXT
+        _write(tmp_path, files)
+        as_held = list_method_tree(tmp_path / "templates" / "main.mthds")
+        handed_over = tmp_path / "Templates" / "Main.mthds" if with_manifest else tmp_path / "templates" / "Main.mthds"
+        as_asked = list_method_tree(handed_over)
+        expected_entry = "templates/main.mthds" if with_manifest else "main.mthds"
+        assert as_asked.entry == expected_entry
+        assert as_asked.tree_paths == as_held.tree_paths
+        assert as_asked.digest == as_held.digest
+
+    def test_members_are_built_once(self, tmp_path: Path):
+        _write(tmp_path, {"a.txt": "a", "b.txt": "b"})
+        tree = list_method_tree(tmp_path)
+        assert tree.members == frozenset({"a.txt", "b.txt"})
+        assert tree.members is tree.members
+
+    def test_ancestor_that_cannot_be_read_does_not_stop_discovery(self, tmp_path: Path):
+        """Manifest Discovery asks each ancestor for the special names and lists it only when one answers."""
+        if os.geteuid() == 0:
+            pytest.skip("permissions do not bind the superuser")
+        _write(
+            tmp_path,
+            {
+                "alone/locked/method/main.mthds": 'domain = "letters"\n',
+                "package/METHODS.toml": MANIFEST_TEXT,
+                "package/locked/method/main.mthds": 'domain = "letters"\n',
+            },
+        )
+        locked_directories = [tmp_path / "alone" / "locked", tmp_path / "package" / "locked"]
+        for locked in locked_directories:
+            locked.chmod(0o311)
+        try:
+            tree = list_method_tree(tmp_path / "alone" / "locked" / "method" / "main.mthds")
+            manifest = find_package_manifest(tmp_path / "package" / "locked" / "method" / "main.mthds")
+        finally:
+            for locked in locked_directories:
+                locked.chmod(0o755)
+        assert tree.is_one_file
+        assert tree.tree_paths == ["main.mthds"]
+        assert manifest is not None
+        assert manifest.address == "github.com/acme/letters"
+
+    def test_digest_of_a_listed_tree_matches_its_contents(self, tmp_path: Path):
+        _write(tmp_path, {"a.txt": "a", "sub/b.txt": "b"})
+        assert list_method_tree(tmp_path).digest == digest_of_contents({"a.txt": b"a", "sub/b.txt": b"b"})

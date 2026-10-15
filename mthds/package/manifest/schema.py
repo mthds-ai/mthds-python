@@ -4,6 +4,7 @@ from typing import Any, Final, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from mthds.method_tree.gitignore import check_exclude_patterns
 from mthds.package.manifest.validation import is_domain_code_valid, is_pipe_code_valid
 from mthds.package.semver import parse_constraint, parse_version, version_satisfies
 
@@ -309,10 +310,7 @@ class MethodsManifest(BaseModel):
     @classmethod
     def validate_exclude(cls, exclude: list[str]) -> list[str]:
         """Each entry is one pattern in `.gitignore` syntax, keeping files out of the method tree, and holds no line break."""
-        for index_pattern, pattern in enumerate(exclude):
-            if "\n" in pattern or "\r" in pattern:
-                msg = f"The exclude pattern at index {index_pattern} holds a line break; each entry is one pattern of one line."
-                raise ValueError(msg)
+        check_exclude_patterns(exclude)
         return exclude
 
     @field_validator("mthds_version")

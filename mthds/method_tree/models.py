@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import cached_property
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -77,9 +78,9 @@ class MethodTree(BaseModel):
         """The tree paths of the tree's files, in tree path order."""
         return [tree_file.path for tree_file in self.files]
 
-    @property
+    @cached_property
     def members(self) -> frozenset[str]:
-        """The tree paths of the tree's files, as a set."""
+        """The tree paths of the tree's files, as a set, built once: the model is frozen, so its files never change."""
         return frozenset(tree_file.path for tree_file in self.files)
 
     def file_location(self, tree_path: str) -> Path:

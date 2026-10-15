@@ -1,4 +1,4 @@
-"""Resolving a file reference against the tree that holds it, by the standard's seven steps.
+"""Resolving a file reference against the tree that holds it, by the standard's resolution steps.
 
 A file reference is written in a file of the tree, its holder, either in a bundle field naming a
 file (path context) or as a relative URL in a template (URL context). It is resolved against the

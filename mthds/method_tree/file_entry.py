@@ -1,6 +1,6 @@
 """The file entry, the form a tree travels in, and a receiver's reading of a map of file entries.
 
-A tree travels as a JSON object mapping each tree path to an entry in one of three forms
+A tree travels as a JSON object mapping each tree path to an entry in one of these forms
 (`mthds/docs/spec/method-tree.md`, "The File Entry"):
 
 - a string, the file's text, whose bytes are its UTF-8 encoding exactly;
@@ -8,8 +8,8 @@ A tree travels as a JSON object mapping each tree path to an entry in one of thr
 - `{"sha256": "…", "size": …}`, bytes the receiver already holds in its blob store.
 
 A receiver reads the map from the JSON text it parses, never from an already-decoded dictionary,
-because two of the refusals are only visible in the text: a key given twice, and a `size` written
-with a fraction or an exponent.
+because some refusals are only visible in the text: a key given twice, and a `size` written with a
+fraction or an exponent.
 """
 
 from __future__ import annotations
@@ -19,10 +19,10 @@ import binascii
 import json
 from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from typing_extensions import override
 
-from mthds.method_tree.digest import SHA256_HEX_PATTERN, sha256_hex, tree_digest, tree_files_from_contents
+from mthds.method_tree.digest import is_sha256_hex, sha256_hex, tree_digest, tree_files_from_contents
 from mthds.method_tree.discovery import DEFAULT_DIRECTORY_NAMES, MANIFEST_NAME, VENV_MARKER_NAME
 from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeRefusal, TreeSourceError
 from mthds.method_tree.models import MethodTree
@@ -84,8 +84,18 @@ class HashFileEntry(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
-    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    sha256: str
+    # Strict, so a size `json` read as a float, being written with a fraction or an exponent, or a
+    # boolean is refused: that is the one check of this form only the raw text decides.
     size: int = Field(ge=0)
+
+    @field_validator("sha256")
+    @classmethod
+    def validate_sha256(cls, value: str) -> str:
+        if not is_sha256_hex(value):
+            msg = "not 64 lowercase hexadecimal digits"
+            raise ValueError(msg)
+        return value
 
     @classmethod
     def make_from_bytes(cls, data: bytes) -> HashFileEntry:
@@ -158,8 +168,20 @@ class _JsonObject(NamedTuple):
     pairs: list[tuple[str, Any]]
 
 
+_ENTRY_FORMS: dict[frozenset[str], type[Base64FileEntry | HashFileEntry]] = {
+    frozenset({BASE64_KEY}): Base64FileEntry,
+    frozenset({SHA256_KEY, SIZE_KEY}): HashFileEntry,
+}
+
+
+def _refuse_json_constant(constant: str) -> Any:
+    """Refuse `NaN`, `Infinity` and `-Infinity`, which `json.loads` accepts as an extension and JSON does not hold."""
+    msg = f"{constant} is not a JSON value"
+    raise ValueError(msg)
+
+
 def _parse_keeping_pairs(document: str) -> Any:
-    return json.loads(document, object_pairs_hook=_JsonObject)
+    return json.loads(document, object_pairs_hook=_JsonObject, parse_constant=_refuse_json_constant)
 
 
 def excluded_name_violation(key: str) -> bool:
@@ -209,8 +231,10 @@ def read_file_map(document: str, *, blob_store: BlobStore | None = None) -> File
     """
     try:
         parsed = _parse_keeping_pairs(document)
-    except json.JSONDecodeError as exc:
-        msg = f"The map of file entries is not JSON text: {exc}"
+    except (ValueError, RecursionError) as exc:
+        # `ValueError` covers a syntax error, a constant JSON does not hold, and an integer longer
+        # than Python converts; `RecursionError` covers nesting deeper than the decoder follows.
+        msg = f"The map of file entries is not JSON text this receiver can read: {exc}"
         raise TreeSourceError(msg) from exc
     if not isinstance(parsed, _JsonObject):
         msg = "The map of file entries must be a JSON object."
@@ -264,29 +288,20 @@ def _entry_bytes(*, key: str, entry: Any, blob_store: BlobStore | None, missing:
     entry_keys = [entry_key for entry_key, _value in entry.pairs]
     if len(set(entry_keys)) != len(entry_keys):
         raise _refusal(TreeRefusalCode.DUPLICATE_KEY, names=[key], explanation=f"the entry of {key!r} gives one of its keys twice.")
-    values = dict(entry.pairs)
-    if entry_keys == [BASE64_KEY]:
-        encoded = values[BASE64_KEY]
-        if not isinstance(encoded, str):
-            raise _refusal(TreeRefusalCode.MALFORMED_ENTRY, names=[key], explanation=f"the base64 of {key!r} is not a string.")
-        try:
-            return decode_canonical_base64(encoded)
-        except ValueError as exc:
-            refused = _refusal(TreeRefusalCode.MALFORMED_ENTRY, names=[key], explanation=f"the base64 of {key!r} is {exc}.")
-            raise refused from exc
-    if sorted(entry_keys) == [SHA256_KEY, SIZE_KEY]:
-        digest = values[SHA256_KEY]
-        size = values[SIZE_KEY]
-        if not isinstance(digest, str) or not SHA256_HEX_PATTERN.match(digest):
-            explanation = f"the sha256 of {key!r} is not 64 lowercase hexadecimal digits."
-            raise _refusal(TreeRefusalCode.MALFORMED_ENTRY, names=[key], explanation=explanation)
-        # `json` reads a number written with a fraction or an exponent as a float, and a bool is an int in Python.
-        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
-            explanation = f"the size of {key!r} is not a non-negative integer written without a fraction or an exponent."
-            raise _refusal(TreeRefusalCode.MALFORMED_ENTRY, names=[key], explanation=explanation)
-        held = blob_store.read_blob(digest) if blob_store is not None else None
-        if held is None or len(held) != size:
-            missing.add(digest)
-            return None
-        return held
-    raise _refusal(TreeRefusalCode.MALFORMED_ENTRY, names=[key], explanation=f"the entry of {key!r} is in none of the three forms.")
+    form = _ENTRY_FORMS.get(frozenset(entry_keys))
+    if form is None:
+        explanation = f"the entry of {key!r} is neither a base64 object nor a sha256 and size object."
+        raise _refusal(TreeRefusalCode.MALFORMED_ENTRY, names=[key], explanation=explanation)
+    try:
+        validated = form.model_validate(dict(entry.pairs))
+    except ValidationError as exc:
+        reasons = "; ".join(f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}" for error in exc.errors())
+        refused = _refusal(TreeRefusalCode.MALFORMED_ENTRY, names=[key], explanation=f"the entry of {key!r} is malformed ({reasons}).")
+        raise refused from exc
+    if isinstance(validated, Base64FileEntry):
+        return validated.data
+    held = blob_store.read_blob(validated.sha256) if blob_store is not None else None
+    if held is None or len(held) != validated.size:
+        missing.add(validated.sha256)
+        return None
+    return held

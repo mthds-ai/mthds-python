@@ -3,7 +3,7 @@
 Every special name the standard gives (`METHODS.toml`, `.git`, `pyvenv.cfg`, `.gitignore`) is
 matched exactly, letter case included, whatever the file system. On a case-insensitive file
 system, asking whether `METHODS.toml` exists also answers for a file named `methods.toml`, so
-this module never asks by name alone: it lists the directory and compares names.
+this module never trusts an answer by name alone: it lists the directory and compares names.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, NamedTuple
 
 from mthds.method_tree.exceptions import TreeSourceError
-from mthds.method_tree.tree_path import nfc
+from mthds.method_tree.tree_path import case_fold, nfc
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -113,6 +113,25 @@ def holds_venv_marker(entries: list[DirectoryEntry]) -> bool:
     return kind is not None and kind.marks_virtual_environment
 
 
+def special_entry_kind(directory: Path, name: str) -> EntryKind | None:
+    """The kind of the entry of `directory` named exactly `name`, or None when it holds none.
+
+    The name is asked of the file system first, which needs no permission to read the directory:
+    when nothing answers to it, in any letter case, the directory holds no such entry. Only when
+    something answers is the directory listed, to tell the exact name from another spelling a
+    case-insensitive file system also answers for. So an ancestor a caller may search but not read
+    stands in the way only when it holds an entry answering to the name.
+
+    Raises:
+        OSError: When the name cannot be asked, or the directory must be listed and cannot be.
+    """
+    try:
+        os.lstat(directory / name)
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+    return kind_of_exact_name(read_directory(directory), name)
+
+
 def find_manifest_directory(start: Path) -> Path | None:
     """Manifest Discovery: the nearest directory at or above `start` holding `METHODS.toml`, or None.
 
@@ -123,23 +142,51 @@ def find_manifest_directory(start: Path) -> Path | None:
         start: An existing directory, already resolved.
 
     Raises:
-        TreeSourceError: When a directory on the way cannot be listed.
+        TreeSourceError: When a directory on the way holds an entry answering to one of those names
+            and cannot be listed to tell its exact name.
     """
     current = start
     while True:
         try:
-            entries = read_directory(current)
+            manifest_kind = special_entry_kind(current, MANIFEST_NAME)
+            holds_manifest_file = manifest_kind is not None and manifest_kind.is_regular_file
+            stops_here = not holds_manifest_file and special_entry_kind(current, GIT_ENTRY_NAME) is not None
         except OSError as exc:
             msg = f"Cannot look for {MANIFEST_NAME} in '{current}': {exc}"
             raise TreeSourceError(msg) from exc
-        if holds_manifest(entries):
+        if holds_manifest_file:
             return current
-        if holds_git_entry(entries):
+        if stops_here:
             return None
         parent = current.parent
         if parent == current:
             return None
         current = parent
+
+
+def on_disk_name(directory: Path, name: str) -> str:
+    """The name, as `directory` holds it, of the entry a caller named `name`, which the file system found.
+
+    A case-insensitive or normalization-insensitive file system finds `Main.mthds` for a file held
+    as `main.mthds`, and a tree path is taken from the name held, never the name asked. The exact
+    name wins; otherwise the one entry equal to it once both are normalized to NFC and case-folded.
+
+    Raises:
+        TreeSourceError: When the directory cannot be listed, or holds no such entry, or several.
+    """
+    try:
+        raw_names = [entry.raw_name for entry in read_directory(directory)]
+    except OSError as exc:
+        msg = f"Cannot list '{directory}' to read the name it holds for '{name}': {exc}"
+        raise TreeSourceError(msg) from exc
+    if name in raw_names:
+        return name
+    matching = [raw_name for raw_name in raw_names if case_fold(raw_name) == case_fold(name)]
+    if len(matching) == 1:
+        return matching[0]
+    shown = ", ".join(repr(raw_name) for raw_name in sorted(matching)) or "none"
+    msg = f"Cannot tell which entry of '{directory}' the name '{name}' designates: the entries equal to it once case-folded are {shown}."
+    raise TreeSourceError(msg)
 
 
 def kind_at_tree_path(*, directory: Path, raw_directory: str, segments: list[str]) -> EntryKind | None:

@@ -14,7 +14,7 @@ import tomlkit
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from mthds._utils.toml_utils import TomlError, load_toml_from_content
-from mthds.method_tree.digest import DIGEST_PREFIX, TREE_DIGEST_PATTERN
+from mthds.method_tree.digest import DIGEST_PREFIX, is_tree_digest
 from mthds.method_tree.exceptions import MethodTreeError
 from mthds.method_tree.written_tree import written_tree_digest
 from mthds.package.exceptions import IntegrityError, LockFileError
@@ -50,7 +50,7 @@ class LockedPackage(BaseModel):
     @field_validator("digest")
     @classmethod
     def validate_digest(cls, digest: str) -> str:
-        if not TREE_DIGEST_PATTERN.match(digest):
+        if not is_tree_digest(digest):
             msg = f"Invalid digest '{digest}'. Must be '{DIGEST_PREFIX}' followed by exactly 64 lowercase hex characters."
             raise ValueError(msg)
         return digest

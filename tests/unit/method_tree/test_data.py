@@ -13,7 +13,7 @@ def _load_corpus() -> dict[str, Any]:
 
 
 class MethodTreeCorpus:
-    """The vendored corpus file, its sidecar, and its three kinds of case keyed by what names each."""
+    """The vendored corpus file, its sidecar, and its kinds of case keyed by what names each."""
 
     CORPUS_PATH: ClassVar[Path] = FIXTURES_DIRECTORY / "method_tree_corpus.json"
     SIDECAR_PATH: ClassVar[Path] = FIXTURES_DIRECTORY / "method_tree_corpus.source.json"
