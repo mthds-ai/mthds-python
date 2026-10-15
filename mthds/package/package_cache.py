@@ -9,6 +9,9 @@ Uses a staging directory + atomic rename for safe writes.
 import shutil
 from pathlib import Path
 
+from mthds.method_tree.exceptions import MethodTreeError
+from mthds.method_tree.lister import list_method_tree_at_root
+from mthds.method_tree.written_tree import write_tree
 from mthds.package.exceptions import PackageCacheError
 
 
@@ -76,10 +79,13 @@ def store_in_cache(
     version: str,
     cache_root: Path | None = None,
 ) -> Path:
-    """Copy a package directory into the cache.
+    """Write a fetched package's method tree into the cache.
 
-    Uses a staging directory (``{path}.staging``) and an atomic rename for
-    safe writes. Removes the ``.git/`` subdirectory from the cached copy.
+    The tree is listed from ``source_dir`` under the membership rule, rooted at that directory,
+    and only its files are written, each at its tree path: the cached copy is the tree as written,
+    which a later digest reads back without applying the rule again. ``.git/`` and everything else
+    the rule excludes is left out. Uses a staging directory (``{path}.staging``) and an atomic
+    rename for safe writes.
 
     Args:
         source_dir: The directory to copy from (e.g. a fresh clone).
@@ -91,8 +97,13 @@ def store_in_cache(
         The final cache path.
 
     Raises:
-        PackageCacheError: If copying or renaming fails.
+        PackageCacheError: If the package's tree is refused, or copying or renaming fails.
     """
+    try:
+        tree = list_method_tree_at_root(source_dir)
+    except MethodTreeError as exc:
+        msg = f"Failed to store package '{address}@{version}' in cache: {exc.message}"
+        raise PackageCacheError(msg) from exc
     final_path = get_cached_package_path(address, version, cache_root)
     staging_path = final_path.parent / f"{final_path.name}.staging"
 
@@ -101,13 +112,9 @@ def store_in_cache(
         if staging_path.exists():
             shutil.rmtree(staging_path)
 
-        # Copy source into staging
-        shutil.copytree(source_dir, staging_path)
-
-        # Remove .git/ from the staged copy
-        git_dir = staging_path / ".git"
-        if git_dir.exists():
-            shutil.rmtree(git_dir)
+        # Write the package's tree into staging, each file at its tree path
+        staging_path.mkdir(parents=True)
+        write_tree(tree, destination=staging_path)
 
         # Ensure parent exists and perform atomic rename
         final_path.parent.mkdir(parents=True, exist_ok=True)

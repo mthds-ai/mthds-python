@@ -101,6 +101,29 @@ class TestPackageCache:
         result = store_in_cache(source, "github.com/org/repo", "2.0.0", cache_root)
         assert (result / "data.mthds").exists()
 
+    def test_store_in_cache_writes_the_method_tree_only(self, tmp_path: Path):
+        """The cached copy is the package's tree as written: what the membership rule keeps out is never copied."""
+        source = tmp_path / "source"
+        (source / "node_modules" / "dep").mkdir(parents=True)
+        (source / "node_modules" / "dep" / "index.js").write_text("module")
+        (source / "samples").mkdir()
+        (source / "samples" / "big.csv").write_text("a,b")
+        (source / "main.mthds").write_text("content")
+        (source / ".gitignore").write_text("samples/\n")
+
+        result = store_in_cache(source, "github.com/org/repo", "3.0.0", tmp_path / "cache")
+
+        assert sorted(path.relative_to(result).as_posix() for path in result.rglob("*")) == ["main.mthds"]
+
+    def test_store_in_cache_refuses_a_symbolic_link_in_the_tree(self, tmp_path: Path):
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "main.mthds").write_text("content")
+        (source / "link.mthds").symlink_to(source / "main.mthds")
+
+        with pytest.raises(PackageCacheError, match="symbolic link"):
+            store_in_cache(source, "github.com/org/repo", "3.0.0", tmp_path / "cache")
+
     # --- remove_cached_package ---
 
     def test_remove_cached_package_nonexistent(self, tmp_path: Path):
