@@ -1,6 +1,6 @@
 [project]
 name = "mthds"
-version = "0.21.0"
+version = "0.22.0"
 description = "The Python interface for methods — base structures for structured outputs and the base runner for executing methods via API."
 authors = [{ name = "Evotis S.A.S.", email = "oss@pipelex.com" }]
 maintainers = [{ name = "Pipelex staff", email = "oss@pipelex.com" }]
@@ -51,6 +51,9 @@ Changelog = "https://github.com/mthds-ai/mthds-python/blob/main/CHANGELOG.md"
 minversion = "9.0"
 testpaths = ["tests"]
 pythonpath = ["."]
+# Test modules are imported by their path, so a `test_data.py` at one level of `tests/` never
+# shadows the one at another, as the test layout's conventions place one per level.
+addopts = ["--import-mode=importlib"]
 
 [tool.mypy]
 check_untyped_defs = true
@@ -334,6 +337,11 @@ convention = "google"
   "implicit-namespace-package", # Allow test files to not have __init__.py in their directories (avoids namespace collisions)
   "float-equality-comparison", # Tests assert exact float literals that round-trip exactly; `pytest.approx` would only add noise
   "import-private-name", # A test may pin a module-private constant whose exact value IS the contract, e.g. the ECMAScript trim set
+]
+"scripts/*.py" = [
+  "implicit-namespace-package", # Maintenance scripts run by a make target, not an importable package
+  "suspicious-subprocess-import", # The corpus vendoring script runs git on a checkout its caller names
+  "subprocess-without-shell-equals-true",
 ]
 "examples/**/*.py" = [
   "implicit-namespace-package", # Runnable demo scripts, not an importable package

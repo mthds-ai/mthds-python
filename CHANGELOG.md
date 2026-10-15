@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.22.0] - 2026-10-16
+
+### Added
+
+- **`mthds.method_tree`**: lists a method tree from a directory or a `.mthds` file named alone (`list_method_tree`, `list_method_tree_at_root`), rooted by Manifest Discovery and filtered by the membership rule, the tree's own `.gitignore` files and `[package] exclude` matched as git matches them, and computes its tree digest. A refused tree raises `MethodTreeRefusedError`, whose `refusal.code` is the conformance corpus's code, and `TreeLimits` stops a walk at a file count, a total size or a file size before any file is hashed, raising `TreeLimitError`.
+- **File references and `PipeFunc` modules**: `resolve_reference` resolves a reference written in a bundle field or a template URL by the standard's resolution steps, the first failing step deciding the refusal and a URL with a scheme, an authority or no path left as written, and `locate_function` maps a `function_name` to its module, `<path>.py` or `<path>/__init__.py`, refusing a segment that is not an identifier, is a keyword or changes under NFKC.
+- **File entries**: `read_file_map` reads a map of file entries from its JSON text as a receiver of `files` does, against a `BlobStore`, refusing a key given twice, non-canonical Base64 and a `size` written with a fraction or an exponent, and `encode_file_map` writes one, with `Base64FileEntry` and `HashFileEntry` as the strict models of the object forms.
+- **`[package] exclude`**: `MethodsManifest.exclude` reads and writes the manifest's exclude patterns, refusing an entry holding a line break.
+- **Reading a package's manifest at its root**: `read_package_manifest_at` reads the regular file named exactly `METHODS.toml` in one directory and never looks above it, and `ManifestReadError` is the `ManifestError` raised when a manifest, or a directory on the way to it, cannot be read, or when `METHODS.toml` is not a regular file.
+
+### Changed
+
+- **Standard version `7.0.0` and Protocol `1.0.0` (Breaking)**: `MTHDS_STANDARD_VERSION` moved from `5.0.0` to `7.0.0` and `PROTOCOL_VERSION` from `0.7.0` to `1.0.0`, so a manifest's `mthds_version` is evaluated against `7.0.0`, and `^5.0.0`, `~5.0.0`, `5.*` or `6.0.0` no longer pass. `MthdsAPIClient` still sends a run's bundles as `mthds_contents`, not yet as the protocol's `files`.
+- **The lock records tree digests (Breaking)**: a `methods.lock` entry's `hash` is now `digest`, the tree digest of the package's cached copy read back as written, `LockedPackage.hash` is `LockedPackage.digest` and `compute_directory_hash` is replaced by `compute_package_digest`. A lock carrying `hash` is refused by `parse_lock_file` with a message saying `lock` regenerates it, and its old hash is never verified.
+- **The package cache holds the package's tree, in a new layout (Breaking)**: `store_in_cache` writes the fetched package's method tree, each file at its tree path and with its permission bits, rather than the whole clone minus `.git/`, and refuses a package whose tree the standard refuses, such as one holding a symbolic link. A copy is written into a hidden sibling directory renamed into place once complete, so an interrupted store is never taken for a cached package, and `write_tree` refuses a destination already holding files. The cache's layout is versioned, a package now living at `{cache_root}/v2/{address}/{version}/`, so a copy written before is never read back as a tree: the package is fetched again, and the old copies under `{cache_root}/{address}/` can be deleted.
+- **Manifest Discovery stops at any `.git` entry (Breaking)**: `find_package_manifest` matches `METHODS.toml` and `.git` by their exact names whatever the file system's letter case, and stops at a `.git` file or symbolic link as it stops at a `.git` directory. It asks each directory for those names and lists it only when one answers, so an ancestor that may be searched but not read stands in the way only when it holds such an entry, and that case raises `ManifestReadError`.
+- **A dependency's manifest is read at its root only (Breaking)**: the dependency resolver and `make_package_from_directory` read the regular file named exactly `METHODS.toml` in the package's own directory, so a `methods.toml` is no manifest, a linked `METHODS.toml` is refused as a `DependencyResolveError` or a `ManifestError`, and the lookup never walks up to the manifest of the package holding the dependency.
+
 ## [v0.21.0] - 2026-10-10
 
 ### Changed

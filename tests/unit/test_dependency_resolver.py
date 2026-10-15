@@ -1,9 +1,11 @@
+import os
 from pathlib import Path
 
 import pytest
 from pytest_mock import MockerFixture
 from semantic_version import Version  # type: ignore[import-untyped]
 
+from mthds.method_tree.digest import digest_of_contents
 from mthds.package.dependency_resolver import (
     PackageDependency,
     collect_mthds_files,
@@ -11,7 +13,11 @@ from mthds.package.dependency_resolver import (
     resolve_all_dependencies,
 )
 from mthds.package.exceptions import DependencyResolveError, TransitiveDependencyError
+from mthds.package.lock_file import generate_lock_file
 from mthds.package.manifest.schema import DomainExports, MethodsManifest
+
+LETTERS_MANIFEST = '[package]\naddress = "github.com/acme/letters"\nversion = "1.0.0"\ndescription = "Letters"\n'
+LETTERS_TREE = {"METHODS.toml": LETTERS_MANIFEST, "main.mthds": 'domain = "letters"\n'}
 
 
 class TestDependencyResolver:
@@ -350,3 +356,73 @@ class TestDependencyResolver:
 
         with pytest.raises(TransitiveDependencyError, match="No version"):
             resolve_all_dependencies(manifest_a, tmp_path)
+
+    # --- the package cache's layout ---
+
+    def test_copy_in_the_old_cache_layout_is_fetched_again_and_locks_as_a_fresh_cache(self, tmp_path: Path, mocker: MockerFixture):
+        """A copy the pre-7.0.0 cache wrote, the clone minus .git/, is never read back: the lock is the one a fresh machine writes."""
+        clone_extras = {".gitignore": "samples/\n", "samples/big.csv": "a,b\n", ".github/workflows/ci.yml": "on: push\n"}
+
+        def fake_clone(clone_url: str, version_tag: str, destination: Path) -> None:
+            assert clone_url
+            assert version_tag == "v1.0.0"
+            for relative_path, text in {**LETTERS_TREE, **clone_extras, ".git/HEAD": "ref: refs/heads/main\n"}.items():
+                location = destination / relative_path
+                location.parent.mkdir(parents=True, exist_ok=True)
+                location.write_text(text)
+
+        mocker.patch("mthds.package.dependency_resolver.list_remote_version_tags", return_value=[(Version("1.0.0"), "v1.0.0")])
+        clone = mocker.patch("mthds.package.dependency_resolver.clone_at_version", side_effect=fake_clone)
+        legacy_cache = tmp_path / "legacy-cache"
+        legacy_copy = legacy_cache / "github.com" / "acme" / "letters" / "1.0.0"
+        for relative_path, text in {**LETTERS_TREE, **clone_extras, "__pycache__/main.cpython-311.pyc": "bytecode"}.items():
+            location = legacy_copy / relative_path
+            location.parent.mkdir(parents=True, exist_ok=True)
+            location.write_text(text)
+        manifest = self._make_manifest(dependencies={"letters": PackageDependency(address="github.com/acme/letters", version="^1.0.0")})
+
+        over_legacy_cache = generate_lock_file(resolve_all_dependencies(manifest, tmp_path, cache_root=legacy_cache))
+        over_fresh_cache = generate_lock_file(resolve_all_dependencies(manifest, tmp_path, cache_root=tmp_path / "fresh-cache"))
+
+        assert over_legacy_cache == over_fresh_cache
+        assert clone.call_count == 2
+        expected_digest = digest_of_contents({path: text.encode() for path, text in LETTERS_TREE.items()})
+        assert over_fresh_cache.packages["github.com/acme/letters"].digest == expected_digest
+
+    # --- a dependency's manifest is read at its root only ---
+
+    def test_local_dependency_never_takes_the_consumer_manifest(self, tmp_path: Path):
+        """A `methods.toml` in the dependency is no manifest, and the lookup never walks up to the consumer's."""
+        (tmp_path / "METHODS.toml").write_text('[package]\naddress = "github.com/acme/root"\nversion = "1.0.0"\ndescription = "Root"\n')
+        dependency = tmp_path / "deps" / "foo"
+        dependency.mkdir(parents=True)
+        (dependency / "methods.toml").write_text(LETTERS_MANIFEST)
+        (dependency / "main.mthds").write_text('domain = "letters"\n')
+        manifest = self._make_manifest(dependencies={"foo": PackageDependency(address="github.com/acme/foo", version="^1.0.0", path="deps/foo")})
+        result = resolve_all_dependencies(manifest, tmp_path)
+        assert len(result) == 1
+        assert result[0].manifest is None
+
+    def test_local_dependency_with_a_linked_manifest_is_refused(self, tmp_path: Path):
+        (tmp_path / "METHODS.toml").write_text('[package]\naddress = "github.com/acme/root"\nversion = "1.0.0"\ndescription = "Root"\n')
+        dependency = tmp_path / "deps" / "foo"
+        dependency.mkdir(parents=True)
+        (tmp_path / "letters.toml").write_text(LETTERS_MANIFEST)
+        (dependency / "METHODS.toml").symlink_to(tmp_path / "letters.toml")
+        manifest = self._make_manifest(dependencies={"foo": PackageDependency(address="github.com/acme/foo", version="^1.0.0", path="deps/foo")})
+        with pytest.raises(DependencyResolveError, match="not a regular file"):
+            resolve_all_dependencies(manifest, tmp_path)
+
+    def test_dependency_directory_that_cannot_be_read_is_a_resolve_error(self, tmp_path: Path):
+        if os.geteuid() == 0:
+            pytest.skip("permissions do not bind the superuser")
+        dependency = tmp_path / "deps" / "foo"
+        dependency.mkdir(parents=True)
+        (dependency / "METHODS.toml").write_text(LETTERS_MANIFEST)
+        dependency.chmod(0o311)
+        manifest = self._make_manifest(dependencies={"foo": PackageDependency(address="github.com/acme/foo", version="^1.0.0", path="deps/foo")})
+        try:
+            with pytest.raises(DependencyResolveError, match="Cannot read the manifest of the package"):
+                resolve_all_dependencies(manifest, tmp_path)
+        finally:
+            dependency.chmod(0o755)
