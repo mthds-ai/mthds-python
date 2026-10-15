@@ -76,6 +76,8 @@ make check-unused-imports     - Check for unused imports without fixing
 make fix-unused-imports       - Fix unused imports with ruff
 make fui                      - Shorthand -> fix-unused-imports
 make check-TODOs              - Check for TODOs
+make vendor-tree-corpus CONFORMANCE=<path>
+                              - Vendor the method-tree corpus from a conformance checkout
 
 make c                        - Shorthand -> format lint pyright mypy
 make cc                       - Shorthand -> cleanderived c
@@ -85,7 +87,7 @@ make agent-check              - Shorthand -> fix-unused-imports format lint pyri
 endef
 export HELP
 
-.PHONY: all help env env-verbose check-uv check-uv-verbose lock install update build test test-with-prints t tp gha-tests agent-test format lint pyright mypy pylint merge-check-ruff-format merge-check-ruff-lint merge-check-pyright merge-check-mypy merge-check-pylint check-unused-imports fix-unused-imports check-TODOs cleanderived cleanenv cleanall c cc check agent-check li
+.PHONY: all help env env-verbose check-uv check-uv-verbose lock install update build test test-with-prints t tp gha-tests agent-test format lint pyright mypy pylint merge-check-ruff-format merge-check-ruff-lint merge-check-pyright merge-check-mypy merge-check-pylint check-unused-imports fix-unused-imports check-TODOs vendor-tree-corpus cleanderived cleanenv cleanall c cc check agent-check li
 
 all help:
 	@echo "$$HELP"
@@ -290,6 +292,13 @@ fui: fix-unused-imports
 check-TODOs: env
 	$(call PRINT_TITLE,"Checking for TODOs")
 	@$(VENV_RUFF) check --select=TD -v .
+
+# The method-tree corpus is vendored byte for byte from conformance; the sidecar beside it records
+# the commit it came from, and tests/unit/method_tree/ checks the copy against the sidecar.
+vendor-tree-corpus: env
+	$(call PRINT_TITLE,"Vendoring the method-tree corpus from conformance")
+	@if [ -z "$(CONFORMANCE)" ]; then echo "Give the conformance checkout: make vendor-tree-corpus CONFORMANCE=<path>"; exit 1; fi
+	$(VENV_PYTHON) scripts/vendor_method_tree_corpus.py "$(CONFORMANCE)"
 
 ##########################################################################################
 ### SHORTHANDS
