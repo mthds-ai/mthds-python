@@ -1,16 +1,18 @@
 from pathlib import Path
 
+from mthds.method_tree.discovery import MANIFEST_NAME, find_manifest_directory
 from mthds.package.manifest.parser import parse_methods_toml
 from mthds.package.manifest.schema import MethodsManifest
 
-MANIFEST_FILENAME = "METHODS.toml"
+MANIFEST_FILENAME = MANIFEST_NAME
 
 
 def find_package_manifest(bundle_path: Path) -> MethodsManifest | None:
-    """Walk up from a bundle file's directory to find the nearest METHODS.toml.
+    """Walk up from a bundle file's directory to find the nearest METHODS.toml, by Manifest Discovery.
 
-    Stops at the first METHODS.toml found, or when a .git/ directory is
-    encountered, or at the filesystem root.
+    Each directory is checked for a regular file named exactly ``METHODS.toml`` first, letter case
+    included whatever the file system; the walk then stops at a directory holding an entry named
+    ``.git`` of any kind, a file or a symbolic link included, or at the file system's root.
 
     Args:
         bundle_path: Path to a .mthds bundle file
@@ -21,23 +23,10 @@ def find_package_manifest(bundle_path: Path) -> MethodsManifest | None:
     Raises:
         ManifestParseError: If a METHODS.toml is found but has invalid TOML syntax
         ManifestValidationError: If a METHODS.toml is found but fails validation
+        TreeSourceError: If a directory on the way cannot be listed
     """
-    current = bundle_path.parent.resolve()
-
-    while True:
-        manifest_path = current / MANIFEST_FILENAME
-        if manifest_path.is_file():
-            content = manifest_path.read_text(encoding="utf-8")
-            return parse_methods_toml(content)
-
-        # Stop at .git boundary
-        git_dir = current / ".git"
-        if git_dir.exists():
-            return None
-
-        # Stop at filesystem root
-        parent = current.parent
-        if parent == current:
-            return None
-
-        current = parent
+    manifest_directory = find_manifest_directory(bundle_path.parent.resolve())
+    if manifest_directory is None:
+        return None
+    content = (manifest_directory / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    return parse_methods_toml(content)
