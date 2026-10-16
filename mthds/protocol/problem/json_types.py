@@ -18,6 +18,13 @@ from pydantic import BeforeValidator
 from pydantic_core import PydanticCustomError
 
 
+def integral_as_int(value: float) -> int | float:
+    """A JSON number as a JavaScript reader sees it: a float with no fractional part reads as an `int`, so that `2.0` reads as `2`."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
 def _json_integer(value: Any) -> Any:
     """Accept a JSON integer only: a number with no fractional part, never a string or a boolean."""
     if isinstance(value, bool) or not isinstance(value, int | float) or (isinstance(value, float) and not value.is_integer()):
@@ -33,9 +40,7 @@ def _json_number(value: Any) -> Any:
         error_type = "json_number"
         msg = "A JSON number is required."
         raise PydanticCustomError(error_type, msg)
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    return value
+    return integral_as_int(value)
 
 
 JsonInteger: TypeAlias = Annotated[int, BeforeValidator(_json_integer)]

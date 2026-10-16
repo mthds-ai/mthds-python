@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
+from mthds.protocol.problem.json_types import integral_as_int
 from mthds.protocol.problem.models import Problem
 from mthds.protocol.problem.registry import CORE_BASE_URL, CORE_CODE_SPECS, CoreCode, ProblemDomain, StepSpec
 
@@ -89,8 +90,8 @@ def _rendered_value(value: Any) -> str:
 
 def _json_value(value: Any) -> Any:
     """A parameter's value as a JSON writer writes it: an integral float as an integer, a list item by item."""
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
+    if isinstance(value, float):
+        return integral_as_int(value)
     if isinstance(value, list):
         items = cast("list[Any]", value)
         return [_json_value(item) for item in items]

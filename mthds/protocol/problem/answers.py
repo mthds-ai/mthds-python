@@ -41,8 +41,9 @@ from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast
 from pydantic import ValidationError
 
 from mthds.protocol.problem.client_problems import make_client_problem
-from mthds.protocol.problem.models import Problem
-from mthds.protocol.problem.registry import CORE_CODE_SPECS, STATUS_READINGS, CoreCode, RetryVerdict
+from mthds.protocol.problem.json_types import integral_as_int
+from mthds.protocol.problem.models import Problem, invites_retry
+from mthds.protocol.problem.registry import CORE_CODE_SPECS, STATUS_READINGS, CoreCode
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -126,9 +127,7 @@ def _parse_float(text: str) -> int | float:
     value = float(text)
     if not math.isfinite(value):
         _refuse_non_finite(text)
-    if value.is_integer():
-        return int(value)
-    return value
+    return integral_as_int(value)
 
 
 def nests_deeper_than(text: str, *, limit: int) -> bool:
@@ -268,11 +267,8 @@ def _is_server_error(status: int) -> bool:
 
 
 def _retries(code: CoreCode) -> bool:
-    match CORE_CODE_SPECS[code].retry:
-        case RetryVerdict.YES:
-            return True
-        case RetryVerdict.NO | RetryVerdict.OUTCOME_UNKNOWN:
-            return False
+    """Whether a core code's retry verdict invites a repeat of the operation."""
+    return invites_retry(CORE_CODE_SPECS[code].retry)
 
 
 def read_problem_document(body: str, *, status: int, headers: Mapping[str, str]) -> Problem | None:

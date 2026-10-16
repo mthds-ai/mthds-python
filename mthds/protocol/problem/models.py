@@ -46,9 +46,6 @@ from mthds.protocol.problem.registry import (
     StepKind,
 )
 
-if TYPE_CHECKING:
-    import builtins
-
 PROBLEM_CODE_PATTERN = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,2}$"
 """The shape of a registry code: lowercase and dotted, a family and a name, after its owner's prefix for an extension code."""
 
@@ -122,6 +119,36 @@ def _wire_value(value: Any) -> Any:
     if value is None or isinstance(value, str | int | float):
         return value
     return to_jsonable_python(value)
+
+
+def invites_retry(verdict: RetryVerdict) -> bool:
+    """Whether a retry verdict invites a repeat of the operation: only `yes`, never `no` nor `outcome_unknown`."""
+    match verdict:
+        case RetryVerdict.YES:
+            return True
+        case RetryVerdict.NO | RetryVerdict.OUTCOME_UNKNOWN:
+            return False
+
+
+class _CodedMembers:
+    """What a part carrying a code and its parameters reads from the registry: a problem, and each of its items."""
+
+    if TYPE_CHECKING:
+        code: str
+        params: ProblemParams | None
+
+    @property
+    def code_spec(self) -> CodeSpec | None:
+        """The registry's entry for the code, `None` for a code the core registry does not hold."""
+        return CORE_CODE_SPECS.get(self.code)
+
+    def params_as(self, params_model: type[ParamsModelT]) -> ParamsModelT:
+        """The parameters validated into `params_model`, such as a code's generated parameters model.
+
+        Raises:
+            pydantic.ValidationError: If the parameters do not validate into the model.
+        """
+        return params_model.model_validate(self.params.as_wire() if self.params is not None else {})
 
 
 def _family_of(code: str) -> str:
@@ -295,10 +322,11 @@ class SuggestedFix(_ProblemPart):
 # ── Items and problems ─────────────────────────────────────────────────
 
 
-class ProblemItem(_ProblemPart):
+class ProblemItem(_ProblemPart, _CodedMembers):
     """One fault of a problem with several, and one finding of a `/validate` verdict.
 
-    An item carries its own code but no verdict; `effective_domain` reads its domain from its code.
+    An item carries its own code but no verdict; `effective_domain` reads its domain from its code,
+    `code_spec` is the code's registry entry and `params_as` reads the parameters as a model.
     """
 
     code: Annotated[str, Field(pattern=PROBLEM_CODE_PATTERN)]
@@ -309,11 +337,6 @@ class ProblemItem(_ProblemPart):
     suggested_fix: SuggestedFix | None = None
 
     @property
-    def code_spec(self) -> CodeSpec | None:
-        """The registry's entry for the item's code, `None` for a code the core registry does not hold."""
-        return CORE_CODE_SPECS.get(self.code)
-
-    @property
     def effective_domain(self) -> ProblemDomain:
         """Who must act on this fault: its code's domain, else its family's, else `runtime`."""
         spec = self.code_spec
@@ -321,16 +344,8 @@ class ProblemItem(_ProblemPart):
             return spec.domain
         return _family_domain(self.code)
 
-    def params_as(self, params_model: type[ParamsModelT]) -> ParamsModelT:
-        """The item's parameters validated into `params_model`, such as a code's generated parameters model.
 
-        Raises:
-            pydantic.ValidationError: If the parameters do not validate into the model.
-        """
-        return params_model.model_validate(self.params.as_wire() if self.params is not None else {})
-
-
-class Problem(_ProblemPart):
+class Problem(_ProblemPart, _CodedMembers):
     """An RFC 9457 problem document carrying the MTHDS core members.
 
     `type`, `title`, `status` and `detail` are the RFC's; `code`, `domain`, `retry`, `retry_after`,
@@ -365,11 +380,6 @@ class Problem(_ProblemPart):
         return _family_of(self.code)
 
     @property
-    def code_spec(self) -> CodeSpec | None:
-        """The registry's entry for the problem's code, `None` for a code the core registry does not hold."""
-        return CORE_CODE_SPECS.get(self.code)
-
-    @property
     def effective_domain(self) -> ProblemDomain:
         """Who must act: the problem's domain, else its family's, else `runtime`."""
         if isinstance(self.domain, ProblemDomain):
@@ -398,11 +408,7 @@ class Problem(_ProblemPart):
         true, after `retry_after` seconds when it is given, and never on `outcome_unknown`, where
         the run may already exist: it reads the run instead.
         """
-        match self.effective_retry:
-            case RetryVerdict.YES:
-                return True
-            case RetryVerdict.NO | RetryVerdict.OUTCOME_UNKNOWN:
-                return False
+        return invites_retry(self.effective_retry)
 
     @property
     def outcome_is_unknown(self) -> bool:
@@ -412,14 +418,6 @@ class Problem(_ProblemPart):
                 return True
             case RetryVerdict.NO | RetryVerdict.YES:
                 return False
-
-    def params_as(self, params_model: builtins.type[ParamsModelT]) -> ParamsModelT:
-        """The problem's parameters validated into `params_model`, such as a code's generated parameters model.
-
-        Raises:
-            pydantic.ValidationError: If the parameters do not validate into the model.
-        """
-        return params_model.model_validate(self.params.as_wire() if self.params is not None else {})
 
     def with_members(self, **members: Any) -> Self:
         """A copy with `members` added or replaced, validated again so that they count as read."""
