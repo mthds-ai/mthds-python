@@ -88,6 +88,11 @@ class TestProblemReadingCases:
 
         problem = exc_info.value.problem
         assert _canonical(problem.as_wire()) == _canonical(case["expected"]), case["description"]
+        # A case may also pin how the reader's fallbacks read the problem's domain, retry verdict and step kind.
+        reading: dict[str, str] | None = case.get("reading")
+        if reading is not None:
+            effective = {"domain": problem.effective_domain, "retry": problem.effective_retry, "step_kind": problem.effective_step_kind}
+            assert effective == reading, case["description"]
         # A problem the client states itself is always under a code the core registry holds.
         if problem.code.startswith("client."):
             assert problem.code in CORE_CODE_SPECS

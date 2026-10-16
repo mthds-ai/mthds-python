@@ -17,7 +17,9 @@ The models follow the protocol's reader rules (the "Errors" section of the stand
   `status` written as a string, a `null` where the protocol leaves a member out, or a code outside
   the code pattern, is no problem document, and the client reads it as an unreadable answer.
 - **A reader falls back on the family.** `effective_domain` and `effective_step_kind` read a value
-  the reader does not know by the code's family, as the generated registry declares it, then as
+  the reader does not know by the code's family, as the generated registry declares it: the domain
+  every core code of the family shares, and the step kind every one of them gives to the actor and
+  to any other reader alike, a family whose codes differ reading as one the reader knows nothing of,
   `runtime` and `report`. A retry verdict is never read by the family: `effective_retry` reads an
   unknown one as `no`, so that nothing is repeated on a guess. `effective_safety` reads an unknown
   safety as `unsafe`.

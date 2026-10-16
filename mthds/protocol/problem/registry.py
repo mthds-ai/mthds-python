@@ -4307,11 +4307,8 @@ FAMILY_DOMAINS: Final[dict[str, ProblemDomain]] = {
 }
 """The domain a reader reads for a family whose every code declares that domain; a family whose codes differ reads as `runtime`."""
 
-FAMILY_STEP_KINDS: Final[dict[str, StepKind]] = {
-    "auth": StepKind.CONTACT_OWNER,
-    "input": StepKind.CHANGE_INPUT,
-}
-"""The step kind a reader reads for a family whose every code gives that kind to a reader who is not the actor; another family reads `report`."""
+FAMILY_STEP_KINDS: Final[dict[str, StepKind]] = {}
+"""The step kind a reader reads for a family whose every code gives that kind to the actor and to any other reader alike; another family reads `report`."""
 
 STATUS_READINGS: Final[dict[int, CoreCode]] = {
     405: CoreCode.REQUEST_METHOD_NOT_ALLOWED,

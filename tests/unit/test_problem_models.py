@@ -5,7 +5,15 @@ import pytest
 from pydantic import ValidationError
 
 from mthds.protocol.problem.models import FixSafety, Problem, ProblemItem, RemapValueOp, SuggestedFix, UnknownFixOp
-from mthds.protocol.problem.registry import MethodConceptUnresolvedParams, ProblemDomain, RetryVerdict, StepKind
+from mthds.protocol.problem.registry import (
+    CORE_CODE_SPECS,
+    FAMILY_DOMAINS,
+    FAMILY_STEP_KINDS,
+    MethodConceptUnresolvedParams,
+    ProblemDomain,
+    RetryVerdict,
+    StepKind,
+)
 from tests.unit.test_data import ProblemBodies
 
 
@@ -65,11 +73,25 @@ class TestProblemModels:
         [
             ("every value known", {}, ProblemDomain.ACCOUNT, RetryVerdict.YES, StepKind.WAIT),
             (
-                "unknown values in a family whose codes agree",
+                "unknown values in a family whose codes share a domain but give their two readers different steps",
                 {"code": "auth.passkey_expired", "domain": "steward", "retry": "later", "next_step": {"kind": "escalate", "detail": "Escalate."}},
                 ProblemDomain.ACCOUNT,
                 RetryVerdict.NO,
-                StepKind.CONTACT_OWNER,
+                StepKind.REPORT,
+            ),
+            (
+                "unknown values in a family whose codes share a domain and whose other reader's step agrees",
+                {"code": "input.smudged", "domain": "steward", "retry": "later", "next_step": {"kind": "escalate", "detail": "Escalate."}},
+                ProblemDomain.INPUT,
+                RetryVerdict.NO,
+                StepKind.REPORT,
+            ),
+            (
+                "unknown values in a family whose codes share neither",
+                {"code": "request.smudged", "domain": "steward", "retry": "later", "next_step": {"kind": "escalate", "detail": "Escalate."}},
+                ProblemDomain.RUNTIME,
+                RetryVerdict.NO,
+                StepKind.REPORT,
             ),
             (
                 "unknown values in a family the reader does not know",
@@ -181,3 +203,14 @@ class TestProblemModels:
         assert problem.as_wire()["status"] == 429
         assert isinstance(problem.as_wire()["retry_after"], int)
         assert Problem.model_validate(_problem(retry_after=2.5)).retry_after == 2.5
+
+    def test_a_family_gives_a_step_kind_only_when_every_code_gives_it_to_both_readers(self) -> None:
+        """A reader that does not know a step kind cannot tell whose step it is, so a family's kind counts only when both readers' steps agree."""
+        kinds_by_family: dict[str, set[StepKind]] = {}
+        domains_by_family: dict[str, set[ProblemDomain]] = {}
+        for spec in CORE_CODE_SPECS.values():
+            kinds_by_family.setdefault(spec.family, set()).update((spec.actor_step.kind, spec.other_step.kind))
+            domains_by_family.setdefault(spec.family, set()).add(spec.domain)
+
+        assert FAMILY_STEP_KINDS == {family: next(iter(kinds)) for family, kinds in kinds_by_family.items() if len(kinds) == 1}
+        assert FAMILY_DOMAINS == {family: next(iter(domains)) for family, domains in domains_by_family.items() if len(domains) == 1}

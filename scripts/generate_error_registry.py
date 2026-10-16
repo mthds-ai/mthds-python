@@ -144,12 +144,21 @@ def _check(snapshot: dict[str, Any], closed: dict[str, list[str]]) -> None:
 
 
 def _family_unanimous(snapshot: dict[str, Any], pick: str) -> dict[str, str]:
-    """The families whose every code declares the same value for `pick`, with that value."""
+    """The families whose every code declares the same value for `pick`, with that value.
+
+    For the step kind, the value must be the same in both of every code's steps, the one aimed at the
+    actor and the one aimed at any other reader: a reader of a problem whose step kind it does not know
+    cannot tell which of the two it is, so a family whose codes give different kinds to the two
+    readers says nothing it can rely on, and reads as a family it knows nothing of.
+    """
     by_family: dict[str, set[str]] = {}
     for entry in snapshot["codes"]:
         family = entry["code"].rsplit(".", 1)[0]
-        value = entry["domain"] if pick == "domain" else entry["steps"]["other"]["kind"]
-        by_family.setdefault(family, set()).add(value)
+        values = by_family.setdefault(family, set())
+        if pick == "domain":
+            values.add(entry["domain"])
+        else:
+            values.update((entry["steps"]["actor"]["kind"], entry["steps"]["other"]["kind"]))
     return {family: next(iter(values)) for family, values in by_family.items() if len(values) == 1}
 
 
@@ -393,8 +402,8 @@ def render(snapshot: dict[str, Any], schema: dict[str, Any]) -> str:
         [
             "}",
             (
-                '"""The step kind a reader reads for a family whose every code gives that kind to a reader who is not the actor;'
-                ' another family reads `report`."""'
+                '"""The step kind a reader reads for a family whose every code gives that kind to the actor and to any other reader'
+                ' alike; another family reads `report`."""'
             ),
         ]
     )
