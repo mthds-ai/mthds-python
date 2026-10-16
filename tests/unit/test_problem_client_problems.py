@@ -25,7 +25,12 @@ class TestClientProblems:
 
     @pytest.mark.parametrize(
         ("topic", "template"),
-        [("a parameter not given", "The input '{input}' is missing."), ("an unclosed brace", "The input '{input is missing.")],
+        [
+            ("a parameter not given", "The input '{input}' is missing."),
+            ("an unclosed brace", "The input '{input is missing."),
+            ("a lone closing brace", "The input input} is missing."),
+            ("a closing brace after a literal one", "Write {{name}}} for it."),
+        ],
     )
     def test_render_template_refuses_what_it_cannot_fill(self, topic: str, template: str) -> None:
         with pytest.raises(ValueError, match="template"):
@@ -111,3 +116,14 @@ class TestClientProblems:
         assert problem.code == code
         assert "{" not in problem.detail
         assert "{" not in problem.next_step.detail
+
+    @pytest.mark.parametrize("code", list(CORE_CODE_SPECS))
+    def test_every_core_template_renders_with_its_braces_matched(self, code: str) -> None:
+        """Every sentence of every core code renders from its declared parameters, so no registry template holds an unmatched brace."""
+        spec = CORE_CODE_SPECS[code]
+        params = {param.name: "sample" for param in spec.params}
+
+        for template in (spec.detail, spec.actor_step.detail, spec.other_step.detail):
+            rendered = render_template(template, params=params)
+            for param in spec.params:
+                assert f"{{{param.name}}}" not in rendered, f"{code}: {template}"

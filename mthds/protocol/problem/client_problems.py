@@ -41,7 +41,8 @@ def render_template(template: str, *, params: Mapping[str, Any]) -> str:
         and `{{` and `}}` read as literal braces.
 
     Raises:
-        ValueError: If the template names a parameter `params` does not hold, or a brace is unmatched.
+        ValueError: If the template names a parameter `params` does not hold, or a brace is unmatched:
+            a `{` it never closes, or a lone `}`.
     """
     pieces: list[str] = []
     index_char = 0
@@ -67,6 +68,9 @@ def render_template(template: str, *, params: Mapping[str, Any]) -> str:
             pieces.append(_rendered_value(params[name]))
             index_char = end + 1
             continue
+        if char == "}":
+            msg = f"The template '{template}' closes a brace it never opens; a literal brace is written '}}}}'."
+            raise ValueError(msg)
         pieces.append(char)
         index_char += 1
     return "".join(pieces)
