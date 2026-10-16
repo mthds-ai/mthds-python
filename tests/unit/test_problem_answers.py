@@ -119,7 +119,11 @@ class TestProblemAnswers:
             ("an hour the day does not have", "Fri, 16 Oct 2026 24:00:00 GMT", None),
             ("a second past a leap second", "Fri, 16 Oct 2026 12:00:61 GMT", None),
             ("a leap second carrying the moment past the year 9999", "Fri, 31 Dec 9999 23:59:60 GMT", None),
-            ("the last second of the year 9999", "Fri, 31 Dec 9999 23:59:59 GMT", int((datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC) - _NOW).total_seconds())),
+            (
+                "the last second of the year 9999",
+                "Fri, 31 Dec 9999 23:59:59 GMT",
+                int((datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC) - _NOW).total_seconds()),
+            ),
             ("absent", None, None),
             ("empty", "", None),
             ("negative", "-5", None),
