@@ -89,11 +89,12 @@ def answer_request_id(response: httpx.Response, *, problem: Problem) -> str | No
         problem: The problem the error carries for it.
 
     Returns:
-        The request's id, or `None` when neither the problem nor the header names one.
+        The request's id, whitespace at either end trimmed whichever names it, or `None` when neither
+        the problem nor the header names one.
     """
     member = (problem.model_extra or {}).get("request_id")
     if isinstance(member, str) and member.strip():
-        return member
+        return member.strip()
     return response.headers.get(REQUEST_ID_HEADER, "").strip() or None
 
 

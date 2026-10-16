@@ -393,6 +393,13 @@ class TestMthdsAPIClientErrors:
                 "req_b7d2c66f-b2d5-4dc7-bd4f-6cf98abfbdc0",
             ),
             ("a problem that names none takes the header's", 429, ProblemBodies.RATE_LIMITED_BODY, " req_rate ", "req_rate"),
+            (
+                "a problem's own id is trimmed as the header's is",
+                422,
+                json.dumps({**ProblemBodies.MODEL_UNKNOWN, "request_id": " req_padded\n"}),
+                "req_header",
+                "req_padded",
+            ),
             ("nothing names the request", 502, LegacyAnswerBodies.GATEWAY_HTML, None, None),
         ],
     )
