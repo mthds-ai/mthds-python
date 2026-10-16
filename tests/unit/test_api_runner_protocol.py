@@ -13,7 +13,7 @@ from mthds.protocol.models import InvalidValidationReport, ModelCategory, ModelD
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.client import MthdsAPIClient
 from mthds.runners.api.exceptions import ApiResponseError
-from tests.unit.test_data import ExecuteWireResponses, ModelDeckWireBodies
+from tests.unit.test_data import ExecuteWireResponses, MethodFileMaps, ModelDeckWireBodies
 
 _BASE_URL = "http://localhost:8081"
 
@@ -46,12 +46,18 @@ class TestMthdsAPIClientProtocol:
         assert isinstance(client, MTHDSProtocol)
 
     def test_protocol_interface_carries_basic_args_only(self) -> None:
-        """The abstract interface has no implementation extensions — only basic args + the generic extra passthrough."""
+        """The abstract interface has no implementation extensions — only basic args + the generic extra passthrough.
+
+        The method travels as `files`, its whole tree, on the run and validate routes alike: protocol
+        1.0.0 has no `mthds_contents`.
+        """
         execute_params = set(inspect.signature(MTHDSProtocol.execute).parameters)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
         start_params = set(inspect.signature(MTHDSProtocol.start).parameters)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
-        basic = {"self", "pipe_code", "mthds_contents", "inputs", "output_name", "output_multiplicity", "dynamic_output_concept_ref", "extra"}
+        validate_params = set(inspect.signature(MTHDSProtocol.validate).parameters)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+        basic = {"self", "pipe_code", "files", "inputs", "output_name", "output_multiplicity", "dynamic_output_concept_ref", "extra"}
         assert execute_params == basic
         assert start_params == basic
+        assert validate_params == {"self", "files", "allow_signatures", "extra"}
 
     # ── construction ─────────────────────────────────────────────
 
@@ -71,8 +77,8 @@ class TestMthdsAPIClientProtocol:
 
     # ── validate ─────────────────────────────────────────────────
 
-    def test_validate_posts_contents_and_parses_valid_report(self, mocker: MockerFixture) -> None:
-        """A 200 valid verdict posts mthds_contents + allow_signatures and parses the valid arm."""
+    def test_validate_posts_files_and_parses_valid_report(self, mocker: MockerFixture) -> None:
+        """A 200 valid verdict posts files + allow_signatures and parses the valid arm."""
         client = self._client()
         body: dict[str, object] = {
             "is_valid": True,
@@ -86,29 +92,28 @@ class TestMthdsAPIClientProtocol:
         }
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
-        report = asyncio.run(client.validate(['domain = "answer"'], allow_signatures=True))
+        report = asyncio.run(client.validate(MethodFileMaps.ONE_BUNDLE, allow_signatures=True))
         assert send_mock.call_args.args[1] == f"{_BASE_URL}/v1/validate"
-        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
-        # `to_json` emits compact JSON (no spaces after ':' / ',').
-        assert '"mthds_contents":["domain = \\"answer\\""]' in sent
-        assert '"allow_signatures":true' in sent
-        # No extra passed → mthds_sources is omitted from the request body.
-        assert "mthds_sources" not in sent
+        # `to_json` emits compact JSON (no spaces after ':' / ','), and no extra means no other key.
+        assert (
+            send_mock.call_args.kwargs["content"]
+            == b'{"files":{"main.mthds":"domain = \\"answer\\"\\nmain_pipe = \\"answer\\"\\n"},"allow_signatures":true}'
+        )
         assert isinstance(report, ValidationReport)
         assert report.is_valid is True
         # Implementation artifacts (bundle_blueprint, graph_spec, …) ride model_extra on the
         # neutral protocol arm — the `pipelex-sdk` subclass narrows them to typed fields.
         assert (report.model_extra or {})["bundle_blueprint"] == {"domain": "answer"}
 
-    def test_validate_threads_mthds_sources(self, mocker: MockerFixture) -> None:
-        """A server extension arg (mthds_sources) rides the generic `extra` passthrough into the request body."""
+    def test_validate_threads_a_server_extension(self, mocker: MockerFixture) -> None:
+        """A server extension arg (`render`) rides the generic `extra` passthrough into the request body."""
         client = self._client()
         body: dict[str, object] = {"is_valid": True, "message": "ok"}
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
-        asyncio.run(client.validate(['domain = "answer"'], extra={"mthds_sources": ["answer.mthds"]}))
+        asyncio.run(client.validate(MethodFileMaps.ONE_BUNDLE, extra={"render": ["markdown"]}))
         sent = send_mock.call_args.kwargs["content"].decode("utf-8")
-        assert '"mthds_sources":["answer.mthds"]' in sent
+        assert sent.endswith(',"allow_signatures":false,"render":["markdown"]}')
 
     def test_validate_invalid_bundle_returns_200_invalid_report(self, mocker: MockerFixture) -> None:
         """An invalid bundle is a 200 diagnostic verdict — NOT a silent pass, NOT a raise.
@@ -127,7 +132,7 @@ class TestMthdsAPIClientProtocol:
         }
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
-        report = asyncio.run(client.validate(["domain = "]))
+        report = asyncio.run(client.validate({"main.mthds": "domain = "}))
         assert isinstance(report, InvalidValidationReport)
         assert report.is_valid is False
         # Neutral arm: `category` is a plain string and `pipe_code` rides model_extra — the
@@ -146,16 +151,17 @@ class TestMthdsAPIClientProtocol:
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(422, json=body)))
 
         with pytest.raises(ApiResponseError) as exc_info:
-            asyncio.run(client.validate(["domain = "]))
+            asyncio.run(client.validate({"main.mthds": "domain = "}))
         assert exc_info.value.status == 422
         assert exc_info.value.title == "Malformed request"
         assert str(exc_info.value) == "API POST /v1/validate failed (422): Malformed request"
 
-    def test_validate_extra_rejects_protocol_arg(self) -> None:
+    @pytest.mark.parametrize("smuggled", [{"files": {"other.mthds": "x"}}, {"allow_signatures": True}])
+    def test_validate_extra_rejects_protocol_arg(self, smuggled: dict[str, Any]) -> None:
         """A protocol arg smuggled through `extra` is rejected client-side (mirrors the execute/start guard)."""
         client = self._client()
-        with pytest.raises(PipelineRequestError):
-            asyncio.run(client.validate(['domain = "answer"'], extra={"mthds_contents": ["x"]}))
+        with pytest.raises(PipelineRequestError, match="pass them as named parameters"):
+            asyncio.run(client.validate(MethodFileMaps.ONE_BUNDLE, extra=smuggled))
 
     # ── models ───────────────────────────────────────────────────
 
@@ -232,7 +238,7 @@ class TestMthdsAPIClientProtocol:
         [("execute", ExecuteWireResponses.REDUCED), ("start", {"pipeline_run_id": "run_7f3a"})],
     )
     def test_run_requires_something_to_run(self, route: str, wire_response: dict[str, Any], mocker: MockerFixture) -> None:
-        """Neither a pipe, nor contents, nor an extension arg: the call is refused before any request.
+        """Neither a pipe, nor files, nor an extension arg: the call is refused before any request.
 
         The transport stub answers with a well-formed body on purpose. Were the guard removed,
         the call would run to completion and this test would report the guard's absence — rather
@@ -251,28 +257,28 @@ class TestMthdsAPIClientProtocol:
     def test_run_forwards_extension_args_without_interpreting_them(self, route: str, wire_response: dict[str, Any], mocker: MockerFixture) -> None:
         """`extra` is the server's to define, so this client forwards its keys without judging them.
 
-        The combination sent here — inline contents beside both bundle encodings at once — is
-        illegal on `pipelex-api`, which is the runner that defines `files` and `bundle_b64`. They
-        are that runner's extension args and not the protocol's, and `MthdsAPIClient` is
-        documented as a client for any MTHDS-compliant runner, so it is the addressed server that
-        answers for the combination. Pre-empting the refusal is the business of a client that
-        takes those arguments by name, from the shared definitions in `mthds.protocol.options`.
+        The combination sent here — a method tree beside a zipped bundle and inline contents — is
+        illegal on `pipelex-api`, which is the runner that defines `bundle_b64` and still takes
+        `mthds_contents`. They are that runner's extension args and not the protocol's, and
+        `MthdsAPIClient` is documented as a client for any MTHDS-compliant runner, so it is the
+        addressed server that answers for the combination. Pre-empting the refusal is the business
+        of a client that takes those arguments by name, from the shared definitions in
+        `mthds.protocol.options`.
         """
         client = self._client()
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=wire_response)))
 
-        asyncio.run(getattr(client, route)(mthds_contents=['domain = "answer"'], extra={"files": {}, "bundle_b64": "UEsDBA=="}))
+        asyncio.run(getattr(client, route)(files=MethodFileMaps.ONE_BUNDLE, extra={"bundle_b64": "UEsDBA==", "mthds_contents": ["x"]}))
 
         sent = send_mock.call_args.kwargs["content"].decode("utf-8")
-        assert '"mthds_contents":["domain = \\"answer\\""]' in sent
-        assert '"files":{}' in sent
+        assert '"files":{"main.mthds":' in sent
         assert '"bundle_b64":"UEsDBA=="' in sent
+        assert '"mthds_contents":["x"]' in sent
 
-    def test_execute_accepts_a_bundle_as_the_only_run_source(self, mocker: MockerFixture) -> None:
-        """A bundle in `extra` satisfies the precondition and merges into the body as a top-level property."""
+    def test_execute_accepts_an_extension_arg_as_the_only_run_source(self, mocker: MockerFixture) -> None:
+        """A server's own run source in `extra` satisfies the precondition and merges into the body as a top-level property."""
         client = self._client()
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=ExecuteWireResponses.REDUCED)))
 
-        asyncio.run(client.execute(extra={"files": {"main.mthds": 'domain = "answer"'}}))
-        sent = send_mock.call_args.kwargs["content"].decode("utf-8")
-        assert '"files":{"main.mthds":"domain = \\"answer\\""}' in sent
+        asyncio.run(client.execute(extra={"method_ref": "github.com/acme/methods/answer@v1.0.0"}))
+        assert send_mock.call_args.kwargs["content"] == b'{"method_ref":"github.com/acme/methods/answer@v1.0.0"}'

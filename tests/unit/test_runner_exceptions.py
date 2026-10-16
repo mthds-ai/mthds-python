@@ -9,7 +9,7 @@ import pytest
 
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import ValidationDiagnostic
-from mthds.runners.api.exceptions import ApiResponseError, ClientAuthenticationError, RunStillRunningError
+from mthds.runners.api.exceptions import ApiResponseError, BlobUploadError, ClientAuthenticationError, RunStillRunningError
 from mthds.runners.api.problem import UserAction
 
 
@@ -125,6 +125,17 @@ class TestClientExceptions:
                 ),
             ),
             ("run still running", RunStillRunningError("still running", run_id="run_1", retry_after_seconds=10, location="/v1/runs/run_1")),
+            (
+                "blob upload error",
+                BlobUploadError(
+                    "Uploading blob 3e9b failed (403): AccessDenied",
+                    sha256="3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0",
+                    status=403,
+                    status_text="Forbidden",
+                    response_body="<Error><Code>AccessDenied</Code></Error>",
+                    upload_url="https://bucket.example/blobs/3e9b",
+                ),
+            ),
             ("plain request error", PipelineRequestError("nothing to run")),
         ],
     )

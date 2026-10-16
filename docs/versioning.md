@@ -35,4 +35,4 @@ The same number appears in a library crate as a **stamp** rather than a constrai
 
 ## Reading a runner's versions
 
-`VersionInfo`, returned by a runner's `version()` route, carries `protocol_version` and an optional `runner_version`. The protocol version a runner reports is the one it implements — compare it against `PROTOCOL_VERSION` to know whether this client and that runner agree on the wire contract. `runner_version` is that server's own build number and means nothing outside it.
+`VersionInfo`, returned by a runner's `version()` route, carries `protocol_version`, an optional `runner_version`, and `blob_store`, true when the runner keeps a blob store and so accepts files sent by hash (false when the runner does not say). The protocol version a runner reports is the one it implements — compare it against `PROTOCOL_VERSION` to know whether this client and that runner agree on the wire contract. `runner_version` is that server's own build number and means nothing outside it.

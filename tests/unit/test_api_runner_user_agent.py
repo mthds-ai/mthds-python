@@ -90,7 +90,7 @@ class TestMthdsAPIClientUserAgent:
             async with client:
                 await client.version()
                 await client.models()
-                await client.validate(["domain = 'x'"])
+                await client.validate({"main.mthds": "domain = 'x'"})
 
         asyncio.run(scenario())
         assert len(captured) == 3

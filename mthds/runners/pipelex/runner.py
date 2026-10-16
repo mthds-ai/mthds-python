@@ -9,9 +9,11 @@ import tempfile
 from pathlib import Path
 from typing import Any, cast
 
-from pydantic_core import to_json
+from pydantic_core import PydanticSerializationError, to_json
 from typing_extensions import override
 
+from mthds.method_tree.exceptions import MethodTreeError
+from mthds.method_tree.file_entry import MethodFiles, read_file_map
 from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationReport, ValidationResult, VersionInfo
 from mthds.protocol.pipe_output import VariableMultiplicity
 from mthds.protocol.pipeline_inputs import PipelineInputs
@@ -24,6 +26,38 @@ from mthds.runners.types import RunnerType
 
 class PipelexRunnerError(Exception):
     """Error raised when the pipelex runner encounters an issue."""
+
+
+# Where a run's method tree is written, below the run's temporary directory: the inputs, the working
+# memory and the results the CLI writes sit beside it, so none of them becomes a file of the tree.
+_METHOD_DIRECTORY_NAME = "method"
+
+
+def _write_method_tree(files: MethodFiles, *, destination: Path) -> None:
+    """Write a `files` map out as a directory, each file at its tree path, after reading it as a receiver does.
+
+    The map is read by `read_file_map`, so a key that is not a tree path, such as one holding `..`,
+    is refused before anything is written, and no file lands outside `destination`. This runner
+    keeps no blob store, so a hash entry is refused, naming its hash.
+
+    Raises:
+        PipelexRunnerError: If the map is not a method tree this runner can write, an entry being
+            neither text nor a file entry model included.
+    """
+    try:
+        document = to_json(dict(files)).decode("utf-8")
+    except PydanticSerializationError as exc:
+        msg = f"The pipelex CLI runner cannot write this files map: an entry is neither text nor a file entry ({exc})."
+        raise PipelexRunnerError(msg) from exc
+    try:
+        reading = read_file_map(document)
+    except MethodTreeError as exc:
+        msg = f"The pipelex CLI runner cannot load this files map (it keeps no blob store, so every entry is its text or its Base64): {exc}"
+        raise PipelexRunnerError(msg) from exc
+    for tree_path, data in reading.contents.items():
+        location = destination.joinpath(*tree_path.split("/"))
+        location.parent.mkdir(parents=True, exist_ok=True)
+        location.write_bytes(data)
 
 
 def _ensure_pipelex() -> str:
@@ -171,7 +205,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
     async def execute(
         self,
         pipe_code: str | None = None,
-        mthds_contents: list[str] | None = None,
+        files: MethodFiles | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -180,12 +214,14 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
     ) -> DictRunResultExecute:
         """Execute a method via the pipelex CLI subprocess.
 
-        Writes mthds_contents and inputs to temp files, runs `pipelex run`,
-        and parses the output JSON back into a typed response.
+        Writes the method's tree and the inputs to a temporary directory, runs
+        `pipelex run`, and parses the output JSON back into a typed response.
 
         Args:
-            pipe_code: The code identifying the pipeline to execute.
-            mthds_contents: List of MTHDS bundle contents to load.
+            pipe_code: The code identifying the pipeline to execute: a pipe of the
+                library pipelex loads, or one declared in a bundle of `files`.
+            files: The method's tree as a map of file entries; this runner keeps no
+                blob store, so every entry is inline (text or Base64).
             inputs: Inputs passed to the pipeline.
             output_name: Unused by pipelex CLI.
             output_multiplicity: Unused by pipelex CLI.
@@ -196,8 +232,9 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             Complete execution results including pipeline state and output.
 
         Raises:
-            PipelexRunnerError: If pipelex execution fails, or if extension
-                args are passed (the CLI runner accepts none).
+            PipelexRunnerError: If pipelex execution fails, if `files` is no method
+                tree this runner can write (a key that is not a tree path, a hash
+                entry), or if extension args are passed (the CLI runner accepts none).
             pydantic.ValidationError: If the working memory the CLI wrote does not
                 fit the wire shape — a stuff carrying anything but its concept's ref
                 string under `concept`, as a `pipelex` built on an mthds older than
@@ -218,8 +255,8 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         if rejected_output_args:
             msg = f"The pipelex CLI runner does not support output args; got {rejected_output_args}. Use the API runner instead."
             raise PipelexRunnerError(msg)
-        if not pipe_code and not mthds_contents:
-            msg = "Either pipe_code or mthds_contents must be provided to the pipelex CLI runner."
+        if not pipe_code and files is None:
+            msg = "Either pipe_code or files must be provided to the pipelex CLI runner."
             raise PipelexRunnerError(msg)
         pipelex_path = _ensure_pipelex()
 
@@ -227,12 +264,10 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         try:
             cmd: list[str] = [pipelex_path, *self._library_args(), "run"]
 
-            if mthds_contents:
-                for idx, content in enumerate(mthds_contents):
-                    bundle_path = tmp_dir / f"bundle_{idx}.mthds"
-                    bundle_path.write_text(content, encoding="utf-8")
-                target = tmp_dir / "bundle_0.mthds" if len(mthds_contents) == 1 else tmp_dir
-                cmd.extend(["bundle", str(target)])
+            if files is not None:
+                method_dir = tmp_dir / _METHOD_DIRECTORY_NAME
+                _write_method_tree(files, destination=method_dir)
+                cmd.extend(["bundle", str(method_dir)])
                 if pipe_code:
                     cmd.extend(["--pipe", pipe_code])
             elif pipe_code:
@@ -260,7 +295,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
     async def start(
         self,
         pipe_code: str | None = None,
-        mthds_contents: list[str] | None = None,
+        files: MethodFiles | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -271,7 +306,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
 
         Args:
             pipe_code: Unused.
-            mthds_contents: Unused.
+            files: Unused.
             inputs: Unused.
             output_name: Unused.
             output_multiplicity: Unused.
@@ -283,7 +318,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         """
         _ = (
             pipe_code,
-            mthds_contents,
+            files,
             inputs,
             output_name,
             output_multiplicity,
@@ -296,11 +331,11 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
     @override
     async def validate(
         self,
-        mthds_contents: list[str],
+        files: MethodFiles,
         allow_signatures: bool = False,
         extra: dict[str, Any] | None = None,
     ) -> ValidationResult:
-        """Validate MTHDS bundles via `pipelex validate`.
+        """Validate a method's tree via `pipelex validate`.
 
         The CLI reports validity through its exit code; it does not emit the
         protocol's structural artifacts, so a passing validation returns an
@@ -313,36 +348,32 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         non-zero on unimplemented signatures unless `allow_signatures`.)
 
         Args:
-            mthds_contents: MTHDS contents to load (always a list, even for one file).
+            files: The method's tree as a map of file entries, holding at least one
+                file; this runner keeps no blob store, so every entry is inline.
             allow_signatures: Tolerate unimplemented pipe signatures.
             extra: Rejected — the CLI runner defines no extension args.
 
         Returns:
-            An empty ValidationReport (`is_valid: true`) when the bundle is valid.
+            An empty ValidationReport (`is_valid: true`) when the method is valid.
 
         Raises:
-            PipelexRunnerError: If validation fails, pipelex is unavailable, or
-                extension args are passed (the CLI runner accepts none).
+            PipelexRunnerError: If validation fails, pipelex is unavailable, `files`
+                is no method tree this runner can write (an empty map, a key that is
+                not a tree path, a hash entry), or extension args are passed (the CLI
+                runner accepts none).
         """
         if extra:
             msg = f"The pipelex CLI runner defines no extension args; got {sorted(extra)}."
             raise PipelexRunnerError(msg)
         pipelex_path = _ensure_pipelex()
 
-        if not mthds_contents:
-            msg = "mthds_contents must contain at least one bundle to validate."
-            raise PipelexRunnerError(msg)
-
         tmp_dir = Path(tempfile.mkdtemp(prefix="mthds-"))
         try:
-            # `pipelex validate bundle` takes ONE path — a bundle file or a directory.
-            # Write all contents into the temp dir and validate the directory, which
-            # covers both the single- and multi-bundle cases.
-            for idx, content in enumerate(mthds_contents):
-                bundle_path = tmp_dir / f"bundle_{idx}.mthds"
-                bundle_path.write_text(content, encoding="utf-8")
-            target = tmp_dir / "bundle_0.mthds" if len(mthds_contents) == 1 else tmp_dir
-            cmd: list[str] = [pipelex_path, *self._library_args(), "validate", "bundle", str(target)]
+            # `pipelex validate bundle` takes ONE path, a bundle file or a directory: the method's
+            # tree is written out as a directory, which pipelex reads as that tree.
+            method_dir = tmp_dir / _METHOD_DIRECTORY_NAME
+            _write_method_tree(files, destination=method_dir)
+            cmd: list[str] = [pipelex_path, *self._library_args(), "validate", "bundle", str(method_dir)]
             if allow_signatures:
                 cmd.append("--allow-signatures")
 

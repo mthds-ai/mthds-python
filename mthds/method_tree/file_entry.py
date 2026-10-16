@@ -17,7 +17,8 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, cast
+from collections.abc import Mapping
+from typing import Any, NamedTuple, Protocol, TypeAlias, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from typing_extensions import override
@@ -28,9 +29,6 @@ from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeRefusal, Tr
 from mthds.method_tree.models import MethodTree
 from mthds.method_tree.tree_path import path_collisions, sorted_tree_paths, tree_path_violation
 from mthds.method_tree.vocabulary import TreeRefusalCode
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
 
 # How deeply a map of file entries may nest, a bound of this receiver's own: a map nests two
 # levels deep, and Python's own decoder gives up at a depth that varies from one version to the
@@ -108,8 +106,19 @@ class HashFileEntry(BaseModel):
         return cls(sha256=sha256_hex(data), size=len(data))
 
 
-def encode_file_entry(data: bytes, *, by_hash: bool = False) -> str | dict[str, str | int]:
-    """The entry a sender writes for a file's bytes, as JSON-ready data.
+FileEntry: TypeAlias = str | Base64FileEntry | HashFileEntry
+"""One file of a tree as it travels: its text, its bytes in Base64, or the hash of bytes the receiver holds.
+
+`pydantic_core.to_json` writes each form as the wire has it: the string itself, `{"base64": …}`, and
+`{"sha256": …, "size": …}`.
+"""
+
+MethodFiles: TypeAlias = Mapping[str, FileEntry]
+"""A method tree as it travels, the MTHDS Protocol's `files`: a map from tree path to file entry, holding at least one file."""
+
+
+def encode_file_entry(data: bytes, *, by_hash: bool = False) -> FileEntry:
+    """The entry a sender writes for a file's bytes.
 
     Args:
         data: The file's bytes.
@@ -119,14 +128,14 @@ def encode_file_entry(data: bytes, *, by_hash: bool = False) -> str | dict[str, 
         A hash entry when `by_hash`, else the text when the bytes are UTF-8, else a Base64 entry.
     """
     if by_hash:
-        return HashFileEntry.make_from_bytes(data).model_dump()
+        return HashFileEntry.make_from_bytes(data)
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError:
-        return Base64FileEntry.make_from_bytes(data).model_dump()
+        return Base64FileEntry.make_from_bytes(data)
 
 
-def encode_file_map(contents: Mapping[str, bytes], *, held_by_receiver: frozenset[str] | None = None) -> dict[str, str | dict[str, str | int]]:
+def encode_file_map(contents: Mapping[str, bytes], *, held_by_receiver: frozenset[str] | None = None) -> dict[str, FileEntry]:
     """The map of file entries a sender writes for a tree whose bytes it holds, keyed by tree path in tree path order.
 
     Args:
