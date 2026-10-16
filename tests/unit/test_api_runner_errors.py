@@ -444,6 +444,8 @@ class TestMthdsAPIClientErrors:
             ("an execute with no output", "POST /v1/execute", 200, '{"pipeline_run_id":"run_7f3a"}', "run_7f3a"),
             ("an execute naming an empty run", "POST /v1/execute", 200, '{"pipeline_run_id":"","pipe_output":{}}', None),
             ("a start whose run id is no string", "POST /v1/start", 202, '{"pipeline_run_id":42}', None),
+            ("a start naming an empty run", "POST /v1/start", 202, '{"pipeline_run_id":""}', None),
+            ("a start naming an empty run with members of its own", "POST /v1/start", 201, '{"pipeline_run_id":"","state":"queued"}', None),
             ("a start naming no run", "POST /v1/start", 202, '{"status":"accepted"}', None),
             ("a start whose body is not json", "POST /v1/start", 202, "Accepted", None),
         ],

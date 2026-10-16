@@ -300,7 +300,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             endpoint: The endpoint below the protocol prefix, query included.
             response: The runner's answer.
             creates_run: Whether the request may have created a run.
-            body: The decoded body, `None` when it is not JSON.
+            body: The decoded body, `None` when it is not JSON or names no run the client can read.
         """
         problem = _outcome_unknown(started_run_id=_started_run_id(body)) if creates_run else unreadable_answer(response.status_code)
         self._raise_api_response_error(method=method, endpoint=endpoint, response=response, problem=problem, problem_from_body=False)
@@ -403,8 +403,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 protocol arg (`client.argument_invalid`).
             ApiResponseError: If the server answers non-2xx — a refusal to run an invalid
                 method (`method.invalid`, its faults on `problem.errors`), auth, or a server
-                fault — or a success the client cannot read, which leaves the outcome unknown
-                (`client.outcome_unknown`, naming the run when the body does).
+                fault — or a success the client cannot read, an empty `pipeline_run_id`
+                included, which leaves the outcome unknown (`client.outcome_unknown`, naming the
+                run when the body names one the client can read).
             ApiTransportError: If no answer came back; a request that left reads as
                 `client.outcome_unknown`, since the run may exist.
         """
@@ -422,7 +423,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         )
         content = to_json(body)
         response = await self._request("POST", "start", content=content, creates_run=True)
-        return self._parse_answer(method="POST", endpoint="start", response=response, creates_run=True, parse=RunResultStart.model_validate)
+        started = self._parse_answer(method="POST", endpoint="start", response=response, creates_run=True, parse=RunResultStart.model_validate)
+        if _usable_run_id(started.pipeline_run_id) is None:
+            # The answer has the route's shape but names no run the client can read, such as an empty id:
+            # the runtime accepted the request, so the run may exist, as after a 202 on execute naming none.
+            self._raise_unreadable_success(method="POST", endpoint="start", response=response, creates_run=True, body=None)
+        return started
 
     async def _post_validate(self, mthds_contents: list[str], allow_signatures: bool, extra: dict[str, Any] | None) -> httpx.Response:
         """POST a `/validate` request and return the raw 200-diagnostic response.
@@ -641,8 +647,15 @@ _VALIDATION_RESULT_ADAPTER: TypeAdapter[ValidationResult] = TypeAdapter(Validati
 AnswerT = TypeVar("AnswerT")
 
 
+def _usable_run_id(value: object) -> str | None:
+    """A run id the client can read a run by: `value` when it is a non-empty string, which a run id must be, else `None`."""
+    if not isinstance(value, str) or not value:
+        return None
+    return value
+
+
 def _started_run_id(body: object) -> str | None:
-    """The run a decoded success body names: its `pipeline_run_id` when it is a non-empty string, which a run id must be.
+    """The run a decoded success body names: its `pipeline_run_id` when it is a usable run id (`_usable_run_id`).
 
     Args:
         body: The decoded body, `None` when the body is not JSON.
@@ -652,10 +665,7 @@ def _started_run_id(body: object) -> str | None:
     """
     if not isinstance(body, dict):
         return None
-    run_id = cast("dict[str, Any]", body).get("pipeline_run_id")
-    if not isinstance(run_id, str) or not run_id:
-        return None
-    return run_id
+    return _usable_run_id(cast("dict[str, Any]", body).get("pipeline_run_id"))
 
 
 def _outcome_unknown(*, started_run_id: str | None) -> Problem:
