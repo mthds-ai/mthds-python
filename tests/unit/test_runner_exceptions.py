@@ -51,7 +51,7 @@ class TestClientExceptions:
         """The client's own refusal of an argument carries `client.argument_invalid`, naming the argument and the reason."""
         exc = make_argument_invalid_error("pipe_code must be a string, received int.", argument="pipe_code", reason="not_a_string")
         assert type(exc) is PipelineRequestError
-        assert str(exc) == "pipe_code must be a string, received int."
+        assert str(exc) == "pipe_code must be a string, received int.\nNext step: Correct the argument 'pipe_code', then try again."
         assert exc.problem.as_wire() == {
             "type": "https://mthds.ai/errors/client.argument_invalid",
             "title": "An argument was refused before sending",
@@ -87,6 +87,7 @@ class TestClientExceptions:
             MthdsAPIClient(api_key=api_key, base_url=base_url)
         assert exc_info.value.problem.code == "client.not_configured", topic
         assert exc_info.value.problem.as_wire()["params"] == {"setting": setting}
+        assert str(exc_info.value).endswith(f"\nNext step: Set '{setting}' in the client's configuration."), topic
 
     def test_api_response_error_message_ends_with_the_next_step(self) -> None:
         """`str()` is the message, then the problem's next step on its own line."""

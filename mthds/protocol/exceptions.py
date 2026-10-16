@@ -17,7 +17,9 @@ class PipelineRequestError(Exception):
     carries when it is raised bare), `client.unreachable` for a runtime no connection reached, or
     `client.response_unreadable` for an answer that is no problem document. A program branches on
     `problem.code`, and on `problem.effective_domain`, `problem.effective_retry` and
-    `problem.is_retryable`, never on the wording of the message, which is for a person.
+    `problem.is_retryable`, never on the wording of the message, which is for a person: `str(exc)`
+    is the message given, then the problem's next step on its own line, `Next step: …`, whichever
+    error of this package raised it.
 
     A subclass survives pickling and copying whatever its `__init__` asks for: the error is rebuilt
     from its message and its instance attributes without calling `__init__` again, so a subclass
@@ -27,13 +29,13 @@ class PipelineRequestError(Exception):
     """
 
     def __init__(self, message: str, *, problem: Problem) -> None:
-        """Build the error.
+        """Build the error; its message is `message` followed by the problem's next step on its own line.
 
         Args:
             message: What failed, for a person.
             problem: The failure as the protocol's problem document.
         """
-        super().__init__(message)
+        super().__init__(f"{message}\nNext step: {problem.next_step.detail}")
         self.problem = problem
 
     @override

@@ -27,11 +27,6 @@ if TYPE_CHECKING:
     from mthds.protocol.problem.models import Problem
 
 
-def _with_next_step(message: str, problem: Problem) -> str:
-    """Append the problem's next step to a message on its own line."""
-    return f"{message}\nNext step: {problem.next_step.detail}"
-
-
 class ClientNotConfiguredError(PipelineRequestError):
     """The client is not configured to send: no API key or no base URL resolves, or the base URL makes no URL it sends to.
 
@@ -85,7 +80,7 @@ class ApiResponseError(PipelineRequestError):
             request_id: The id the runtime knows the request by
                 (`mthds.runners.api.problem.answer_request_id`).
         """
-        super().__init__(_with_next_step(message, problem), problem=problem)
+        super().__init__(message, problem=problem)
         self.api_url = api_url
         self.status = status
         self.status_text = status_text
@@ -112,7 +107,7 @@ class ApiTransportError(PipelineRequestError):
             api_url: The base URL of the runner the request was for.
             request_url: The URL the request was sent to.
         """
-        super().__init__(_with_next_step(message, problem), problem=problem)
+        super().__init__(message, problem=problem)
         self.api_url = api_url
         self.request_url = request_url
 
@@ -145,7 +140,7 @@ class RunStillRunningError(PipelineRequestError):
             retry_after_seconds: The delay the `Retry-After` header asks for before reading the run.
             location: The run's status resource, from the `Location` header.
         """
-        super().__init__(_with_next_step(message, problem), problem=problem)
+        super().__init__(message, problem=problem)
         self.run_id = run_id
         self.retry_after_seconds = retry_after_seconds
         self.location = location
