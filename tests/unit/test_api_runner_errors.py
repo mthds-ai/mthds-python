@@ -425,13 +425,41 @@ class TestMthdsAPIClientErrors:
     def test_a_success_the_client_cannot_read_is_an_unreadable_answer(
         self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, body: str
     ) -> None:
-        """A 2xx whose body is not the route's answer raises `client.response_unreadable` naming the status, never a pydantic error."""
+        """A 2xx whose body is not the route's answer is unreadable, never a pydantic error, and on a run route it leaves the outcome unknown."""
         status = 202 if route == "POST /v1/start" else 200
         exc = self._response_error(self._client(_answering(status, text=body)), call)
 
-        assert exc.problem.code == "client.response_unreadable", f"{route}, {topic}, creates a run: {creates_run}"
-        assert exc.problem.as_wire()["params"] == {"status": status}
+        if creates_run:
+            assert exc.problem.as_wire() == make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN).as_wire(), f"{route}, {topic}"
+        else:
+            assert exc.problem.code == "client.response_unreadable", f"{route}, {topic}"
+            assert exc.problem.as_wire()["params"] == {"status": status}
         assert exc.status == status
+        assert str(exc).split("\n")[1] == f"The server answered: {body}"
+
+    @pytest.mark.parametrize(
+        ("topic", "route", "status", "body", "expected_run_id"),
+        [
+            ("an execute whose output is not one", "POST /v1/execute", 200, '{"pipeline_run_id":"run_7f3a","pipe_output":42}', "run_7f3a"),
+            ("an execute with no output", "POST /v1/execute", 200, '{"pipeline_run_id":"run_7f3a"}', "run_7f3a"),
+            ("an execute naming an empty run", "POST /v1/execute", 200, '{"pipeline_run_id":"","pipe_output":{}}', None),
+            ("a start whose run id is no string", "POST /v1/start", 202, '{"pipeline_run_id":42}', None),
+            ("a start naming no run", "POST /v1/start", 202, '{"status":"accepted"}', None),
+            ("a start whose body is not json", "POST /v1/start", 202, "Accepted", None),
+        ],
+    )
+    def test_a_run_routes_success_the_client_cannot_read_names_the_run_it_gives(
+        self, topic: str, route: str, status: int, body: str, expected_run_id: str | None
+    ) -> None:
+        """The runtime accepted the request, so the run may exist: `client.outcome_unknown`, naming the run when the body gives a usable id."""
+        call = next(call for label, _, call in _ROUTE_CALLS if label == route)
+        exc = self._response_error(self._client(_answering(status, text=body)), call)
+
+        params = {"pipeline_run_id": expected_run_id} if expected_run_id is not None else None
+        expected = make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN, params=params, pipeline_run_id=expected_run_id)
+        assert exc.problem.as_wire() == expected.as_wire(), topic
+        assert exc.problem.pipeline_run_id == expected_run_id, topic
+        assert exc.problem.outcome_is_unknown, topic
 
     @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
     @pytest.mark.parametrize(
@@ -448,8 +476,11 @@ class TestMthdsAPIClientErrors:
         body = json.dumps(answer)[:-1] + f', "load": {literal}}}'
         exc = self._response_error(self._client(_answering(status, text=body)), call)
 
-        assert exc.problem.code == "client.response_unreadable", f"{route}, {topic}, creates a run: {creates_run}"
-        assert exc.problem.as_wire()["params"] == {"status": status}
+        if creates_run:
+            assert exc.problem.as_wire() == make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN).as_wire(), f"{route}, {topic}"
+        else:
+            assert exc.problem.code == "client.response_unreadable", f"{route}, {topic}"
+            assert exc.problem.as_wire()["params"] == {"status": status}
 
     @pytest.mark.parametrize("literal", ["NaN", "1e999"])
     def test_a_202_on_execute_whose_body_is_no_json_names_no_run(self, literal: str) -> None:

@@ -5,7 +5,9 @@ Every route raises only these, so `except PipelineRequestError` catches every fa
 
 - `ApiResponseError`: an answer came back and it is a failure, a non-2xx or a success the client
   cannot read. Its problem is the runtime's own problem document, or the problem the client reads
-  from the answer when the body is none (see `mthds.protocol.problem.answers`).
+  from the answer when the body is none (see `mthds.protocol.problem.answers`); a success it cannot
+  read on `execute` or `start` leaves the outcome unknown, `client.outcome_unknown`, since the
+  runtime accepted the request.
 - `ApiTransportError`: no answer came back. Its problem is `client.unreachable` when no request
   left, `client.timeout` when a call that creates nothing got no answer in time, and
   `client.outcome_unknown` when a request that creates a run left and no answer came back, so the

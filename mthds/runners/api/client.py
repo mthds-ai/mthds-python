@@ -253,7 +253,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         A non-2xx raises through `_raise_api_response_error` with the problem the answer reads
         as, and a success whose body is not JSON, or does not validate as the route's answer,
-        raises it with `client.response_unreadable`. A success body is decoded by the rules every
+        raises it with `client.response_unreadable`, except on a route that creates a run: there
+        the runtime said it accepted the request, so the run may exist, and the answer reads as
+        `client.outcome_unknown`, naming the run when the body gives its `pipeline_run_id` as a
+        non-empty string, in the problem's parameters and as its member. A success body is decoded by the rules every
         body is (`mthds.protocol.problem.answers.decode_json`): `NaN`, `Infinity` and a number past
         the range of a double are not JSON, and an integral number reads as an integer. A documented protected extension seam: a
         client built on this one parses its own routes' answers through it too.
@@ -279,15 +282,28 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             )
         decoded = decode_json(response.text)
         if not decoded.is_json:
-            self._raise_api_response_error(
-                method=method, endpoint=endpoint, response=response, problem=unreadable_answer(response.status_code), problem_from_body=False
-            )
+            self._raise_unreadable_success(method=method, endpoint=endpoint, response=response, creates_run=creates_run, body=None)
         try:
             return parse(decoded.value)
         except ValidationError:
-            self._raise_api_response_error(
-                method=method, endpoint=endpoint, response=response, problem=unreadable_answer(response.status_code), problem_from_body=False
-            )
+            self._raise_unreadable_success(method=method, endpoint=endpoint, response=response, creates_run=creates_run, body=decoded.value)
+
+    def _raise_unreadable_success(self, *, method: str, endpoint: str, response: httpx.Response, creates_run: bool, body: object) -> NoReturn:
+        """Raise the `ApiResponseError` of a success whose body is not the route's answer.
+
+        On a route that creates nothing it is `client.response_unreadable`. On a route that creates a
+        run the runtime said it accepted the request, so the run may exist: `client.outcome_unknown`,
+        naming the run when the body gives its id.
+
+        Args:
+            method: The HTTP method of the request, for the message.
+            endpoint: The endpoint below the protocol prefix, query included.
+            response: The runner's answer.
+            creates_run: Whether the request may have created a run.
+            body: The decoded body, `None` when it is not JSON.
+        """
+        problem = _outcome_unknown(started_run_id=_started_run_id(body)) if creates_run else unreadable_answer(response.status_code)
+        self._raise_api_response_error(method=method, endpoint=endpoint, response=response, problem=problem, problem_from_body=False)
 
     # ── Protocol surface ─────────────────────────────────────────────────
 
@@ -329,7 +345,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 carrying `client.outcome_unknown`, since the run may exist.
             ApiResponseError: If the server answers non-2xx — a refusal to run an invalid
                 method (`method.invalid`, its faults on `problem.errors`), a failed run, auth,
-                or a server fault — or a success the client cannot read.
+                or a server fault — or a success the client cannot read, which leaves the
+                outcome unknown (`client.outcome_unknown`, naming the run when the body does).
             ApiTransportError: If no answer came back; a request that left reads as
                 `client.outcome_unknown`, since the run may exist.
         """
@@ -386,7 +403,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 protocol arg (`client.argument_invalid`).
             ApiResponseError: If the server answers non-2xx — a refusal to run an invalid
                 method (`method.invalid`, its faults on `problem.errors`), auth, or a server
-                fault — or a success the client cannot read.
+                fault — or a success the client cannot read, which leaves the outcome unknown
+                (`client.outcome_unknown`, naming the run when the body does).
             ApiTransportError: If no answer came back; a request that left reads as
                 `client.outcome_unknown`, since the run may exist.
         """
@@ -579,15 +597,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         """
         if response.status_code != 202:
             return
-        raw = decode_json(response.text).value
-        started_run_id = cast("dict[str, Any]", raw).get("pipeline_run_id") if isinstance(raw, dict) else None
-        if not isinstance(started_run_id, str) or not started_run_id:
+        started_run_id = _started_run_id(decode_json(response.text).value)
+        if started_run_id is None:
             self._raise_api_response_error(
-                method="POST",
-                endpoint="execute",
-                response=response,
-                problem=make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN),
-                problem_from_body=False,
+                method="POST", endpoint="execute", response=response, problem=_outcome_unknown(started_run_id=None), problem_from_body=False
             )
         problem = make_client_problem(CoreCode.CLIENT_FOLLOW_FAILED, params={"pipeline_run_id": started_run_id}, pipeline_run_id=started_run_id)
         msg = (
@@ -626,6 +639,30 @@ _VALIDATION_RESULT_ADAPTER: TypeAdapter[ValidationResult] = TypeAdapter(Validati
 
 # The answer a route parses its success body into.
 AnswerT = TypeVar("AnswerT")
+
+
+def _started_run_id(body: object) -> str | None:
+    """The run a decoded success body names: its `pipeline_run_id` when it is a non-empty string, which a run id must be.
+
+    Args:
+        body: The decoded body, `None` when the body is not JSON.
+
+    Returns:
+        The run's id, or `None` when the body names no run the client can read.
+    """
+    if not isinstance(body, dict):
+        return None
+    run_id = cast("dict[str, Any]", body).get("pipeline_run_id")
+    if not isinstance(run_id, str) or not run_id:
+        return None
+    return run_id
+
+
+def _outcome_unknown(*, started_run_id: str | None) -> Problem:
+    """`client.outcome_unknown`, naming the run in its parameters and as its member when the client learned its id."""
+    if started_run_id is None:
+        return make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN)
+    return make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN, params={"pipeline_run_id": started_run_id}, pipeline_run_id=started_run_id)
 
 
 def _assert_run_sources(
