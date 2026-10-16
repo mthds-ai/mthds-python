@@ -75,7 +75,11 @@ class TestProblemAnswers:
             ("the asctime form", "Fri Oct 16 12:00:30 2026", 30),
             ("the asctime form with a one-digit day", "Fri Nov  6 12:00:00 2026", 21 * 24 * 3600),
             ("an rfc 850 year more than 50 years ahead reads as the past", "Sunday, 06-Nov-94 08:49:37 GMT", 0),
-            ("an rfc 850 year within 50 years ahead", "Friday, 16-Oct-76 12:00:00 GMT", int((datetime(2076, 10, 16, 12, tzinfo=UTC) - _NOW).total_seconds())),
+            (
+                "an rfc 850 year within 50 years ahead",
+                "Friday, 16-Oct-76 12:00:00 GMT",
+                int((datetime(2076, 10, 16, 12, tzinfo=UTC) - _NOW).total_seconds()),
+            ),
             ("a leap second", "Fri, 16 Oct 2026 12:00:60 GMT", 60),
             ("no day name", "16 Oct 2026 12:00:30 GMT", None),
             ("a numeric zone", "Fri, 16 Oct 2026 12:00:30 +0000", None),

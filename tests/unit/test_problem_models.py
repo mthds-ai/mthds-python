@@ -212,5 +212,5 @@ class TestProblemModels:
             kinds_by_family.setdefault(spec.family, set()).update((spec.actor_step.kind, spec.other_step.kind))
             domains_by_family.setdefault(spec.family, set()).add(spec.domain)
 
-        assert FAMILY_STEP_KINDS == {family: next(iter(kinds)) for family, kinds in kinds_by_family.items() if len(kinds) == 1}
-        assert FAMILY_DOMAINS == {family: next(iter(domains)) for family, domains in domains_by_family.items() if len(domains) == 1}
+        assert {family: next(iter(kinds)) for family, kinds in kinds_by_family.items() if len(kinds) == 1} == FAMILY_STEP_KINDS
+        assert {family: next(iter(domains)) for family, domains in domains_by_family.items() if len(domains) == 1} == FAMILY_DOMAINS

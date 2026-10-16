@@ -402,8 +402,8 @@ def render(snapshot: dict[str, Any], schema: dict[str, Any]) -> str:
         [
             "}",
             (
-                '"""The step kind a reader reads for a family whose every code gives that kind to the actor and to any other reader'
-                ' alike; another family reads `report`."""'
+                '"""The step kind a reader reads for a family whose every code gives that kind in both its steps, to the actor and'
+                ' to any other reader;\nanother family reads `report`."""'
             ),
         ]
     )
