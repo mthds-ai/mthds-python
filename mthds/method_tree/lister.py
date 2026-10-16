@@ -47,7 +47,7 @@ from mthds.method_tree.discovery import (
     on_disk_name,
     read_directory,
 )
-from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeLimitError, TreeRefusal, TreeSourceError
+from mthds.method_tree.exceptions import EmptyMethodTreeError, MethodTreeRefusedError, TreeLimitError, TreeRefusal, TreeSourceError
 from mthds.method_tree.gitignore import PatternList
 from mthds.method_tree.models import MethodTree, TreeExclusion, TreeFile, TreeLimits
 from mthds.method_tree.tree_path import directories_of, nfc, refuse_path_collisions, sorted_tree_paths, tree_path_sort_key, tree_path_violation
@@ -96,6 +96,8 @@ def list_method_tree(handed_over: Path, *, limits: TreeLimits | None = None) -> 
         The tree, its files in tree path order with their hashes and sizes, and its digest.
 
     Raises:
+        EmptyMethodTreeError: When the membership rule keeps every file out of the tree; it carries what the listing
+            kept out, so a caller learns the packages and repositories nested in a directory whose own tree is empty.
         MethodTreeRefusedError: When the standard refuses the tree; its `refusal.code` says why.
         TreeLimitError: When the walk passed one of `limits`.
         TreeSourceError: When `handed_over` does not exist, is a file not named `.mthds`, or when
@@ -129,6 +131,7 @@ def list_method_tree_at_root(root: Path, *, limits: TreeLimits | None = None) ->
     """List the tree rooted at `root` itself, with no Manifest Discovery, as a fetched package's tree is rooted at its directory.
 
     Raises:
+        EmptyMethodTreeError: When the membership rule keeps every file out of the tree; it carries what the listing kept out.
         MethodTreeRefusedError: When the standard refuses the tree; its `refusal.code` says why.
         TreeLimitError: When the walk passed one of `limits`.
         TreeSourceError: When `root` is not a directory, or a directory, a file or the manifest cannot be read.
@@ -247,11 +250,17 @@ class _TreeWalk:
             if entry not in member_paths:
                 self._refuse_lone_file(lone_file, tree_path=entry, root_exclusion=root_exclusion)
         if not self.candidates:
-            msg = (
-                f"The method tree at '{self.root}' is empty: the membership rule keeps every file out of it, "
-                "and a method tree holds at least one file."
+            reason = (
+                f"its root is {root_exclusion.rule.description}" if root_exclusion is not None else "the membership rule keeps every file out of it"
             )
-            raise MethodTreeRefusedError(msg, refusal=TreeRefusal(code=TreeRefusalCode.EMPTY_TREE))
+            msg = f"The method tree at '{self.root}' is empty: {reason}, and a method tree holds at least one file."
+            raise EmptyMethodTreeError(
+                msg,
+                root=self.root,
+                excluded_files=self.excluded_files,
+                excluded_directories=self.excluded_directories,
+                raw_paths=self.raw_paths,
+            )
         files = [self._hash(candidate) for candidate in sorted(self.candidates, key=lambda candidate: tree_path_sort_key(candidate.tree_path))]
         return MethodTree(
             files=files,
