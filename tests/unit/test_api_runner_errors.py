@@ -372,8 +372,8 @@ class TestMthdsAPIClientErrors:
         handler = _answering(202, text=f'{{"pipeline_run_id":"run_7f3a","load":{literal}}}')
         exc = self._response_error(self._client(handler), lambda client: client.execute(pipe_code="answer"))
 
-        assert exc.problem.code == "client.response_unreadable", literal
-        assert exc.problem.as_wire()["params"] == {"status": 202}
+        assert exc.problem.code == "client.outcome_unknown", literal
+        assert exc.problem.pipeline_run_id is None, literal
 
     @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
     @pytest.mark.parametrize(
@@ -447,12 +447,19 @@ class TestMthdsAPIClientErrors:
         assert exc.problem.outcome_is_unknown
         assert str(exc).endswith("\nNext step: Read the run 'run_7f3a' by its id rather than start it again.")
 
-    def test_a_202_on_execute_naming_no_run_is_an_unreadable_answer(self) -> None:
-        """A 202 that names no run gives the client nothing to follow: `client.response_unreadable`."""
-        exc = self._response_error(self._client(_answering(202, text="{}")), lambda client: client.execute(pipe_code="answer"))
+    @pytest.mark.parametrize(
+        ("topic", "body"),
+        [("an empty object", "{}"), ("an empty run id", '{"pipeline_run_id":""}'), ("a body that is not json", "Accepted"), ("no body", "")],
+    )
+    def test_a_202_on_execute_naming_no_run_leaves_the_outcome_unknown(self, topic: str, body: str) -> None:
+        """A 202 that names no run says the runtime accepted the request, so the run may exist: `client.outcome_unknown`, never repeated."""
+        exc = self._response_error(self._client(_answering(202, text=body)), lambda client: client.execute(pipe_code="answer"))
 
-        assert exc.problem.code == "client.response_unreadable"
-        assert exc.problem.as_wire()["params"] == {"status": 202}
+        assert exc.problem.code == "client.outcome_unknown", topic
+        assert exc.problem.outcome_is_unknown, topic
+        assert not exc.problem.is_retryable, topic
+        assert exc.problem.pipeline_run_id is None, topic
+        assert exc.status == 202, topic
 
     def test_a_body_whose_encoding_cannot_be_decoded_reads_by_its_status(self) -> None:
         """A broken gzip stream is read as an empty body, so the answer's status still decides how it reads."""

@@ -320,7 +320,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 protocol arg (`client.argument_invalid`).
             RunStillRunningError: If the server answers 202 (the protocol's optional
                 async degrade) — the run continues server-side; resume by `run_id`
-                (`client.follow_failed`).
+                (`client.follow_failed`). A 202 naming no run raises `ApiResponseError`
+                carrying `client.outcome_unknown`, since the run may exist.
             ApiResponseError: If the server answers non-2xx — a refusal to run an invalid
                 method (`method.invalid`, its faults on `problem.errors`), a failed run, auth,
                 or a server fault — or a success the client cannot read.
@@ -558,19 +559,22 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         Hosted does not emit 202 today, but the protocol permits it. The run has started and this
         client does not follow it, so the answer reads as `client.follow_failed` naming the run, with
-        the `Location` and `Retry-After` hints on the error; a 202 that names no run is an answer the
-        client cannot read.
+        the `Location` and `Retry-After` hints on the error. A 202 that names no run still says the
+        runtime accepted the request, so the run may exist under an id the client never learned: it
+        reads as `client.outcome_unknown`, which no caller repeats automatically.
 
         Raises:
             RunStillRunningError: If the answer is a 202 naming its run.
-            ApiResponseError: If the answer is a 202 naming no run (`client.response_unreadable`).
+            ApiResponseError: If the answer is a 202 naming no run (`client.outcome_unknown`).
         """
         if response.status_code != 202:
             return
         raw = decode_json(response.text).value
         started_run_id = cast("dict[str, Any]", raw).get("pipeline_run_id") if isinstance(raw, dict) else None
         if not isinstance(started_run_id, str) or not started_run_id:
-            self._raise_api_response_error(method="POST", endpoint="execute", response=response, problem=unreadable_answer(response.status_code))
+            self._raise_api_response_error(
+                method="POST", endpoint="execute", response=response, problem=make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN)
+            )
         problem = make_client_problem(CoreCode.CLIENT_FOLLOW_FAILED, params={"pipeline_run_id": started_run_id}, pipeline_run_id=started_run_id)
         msg = (
             f"execute() was accepted asynchronously (202): run {started_run_id} is still running server-side. "
