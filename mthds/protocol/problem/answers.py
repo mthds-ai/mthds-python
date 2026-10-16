@@ -11,12 +11,17 @@ as a problem under a registered code, so that a caller branches on one shape:
   when it validates as `Problem`. Its members are kept as sent, undeclared
   ones included; `status` is filled from the answer when the body leaves it out, and `retry_after`
   from the `Retry-After` header when the body gives none and its retry verdict is `yes`.
-- **A status that names one code reads as that code.** When the body is no problem document, the
-  answer's status is read by `STATUS_READINGS`, the statuses that exactly one core code carries and
-  that a client can state from the answer alone (`405` and `503` in the core registry): the problem
-  is that code with the answer's status. On a route that creates a run, a status whose code invites a
-  retry is not read this way, since an answer that is no problem document never invites a repeat of
-  a request that may have started a run.
+- **A server error on a route that creates a run leaves the outcome unknown.** When the body is no
+  problem document and the status is a `5xx`, such as a gateway's `504` after its own time limit or
+  a proxy's `502`, on a route that creates a run, something other than the runtime answered and the
+  run may have started behind it: the problem is `client.outcome_unknown`, which no caller repeats
+  automatically.
+- **A status that names one code reads as that code.** Otherwise, when the body is no problem
+  document, the answer's status is read by `STATUS_READINGS`, the statuses that exactly one core
+  code carries and that a client can state from the answer alone (`405` and `503` in the core
+  registry): the problem is that code with the answer's status. On a route that creates a run, a
+  status whose code invites a retry is not read this way, since an answer that is no problem
+  document never invites a repeat of a request that may have started a run.
 - **Anything else reads as `client.response_unreadable`**, naming the answer's status.
 
 `unreadable_answer` states the last case directly, for a success answer whose body is not the
@@ -171,6 +176,11 @@ def parse_retry_after(value: str | None, *, now: datetime | None = None) -> int 
     return max(0, math.ceil(delta))
 
 
+def _is_server_error(status: int) -> bool:
+    """Whether a status is a server error, `500` to `599`."""
+    return 500 <= status <= 599
+
+
 def _retries(code: CoreCode) -> bool:
     match CORE_CODE_SPECS[code].retry:
         case RetryVerdict.YES:
@@ -227,12 +237,14 @@ def read_answer(*, status: int, body: str, headers: Mapping[str, str], creates_r
         creates_run: Whether the request may have created a run, as `POST /execute` and `POST /start` do.
 
     Returns:
-        The runtime's problem when the body is one, else the code the status names, else
-        `client.response_unreadable`.
+        The runtime's problem when the body is one, else `client.outcome_unknown` for a server error
+        on a route that creates a run, else the code the status names, else `client.response_unreadable`.
     """
     problem = read_problem_document(body, status=status, headers=headers)
     if problem is not None:
         return problem
+    if creates_run and _is_server_error(status):
+        return make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN)
     code = STATUS_READINGS.get(status)
     if code is None or (creates_run and _retries(code)):
         return unreadable_answer(status)

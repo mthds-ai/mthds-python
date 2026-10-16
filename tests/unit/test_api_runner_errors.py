@@ -189,10 +189,12 @@ class TestMthdsAPIClientErrors:
         ("topic", "status", "body", "expected_code"),
         [
             ("an answer written before the protocol's core members", 422, LegacyAnswerBodies.UNKNOWN_MODEL_AT_LOAD, "client.response_unreadable"),
-            ("a legacy detail object", 500, LegacyAnswerBodies.LEGACY_DETAIL_OBJECT, "client.response_unreadable"),
+            # A server error that is no problem document may stand in front of a run that started.
+            ("a legacy detail object", 500, LegacyAnswerBodies.LEGACY_DETAIL_OBJECT, "client.outcome_unknown"),
             ("a framework's unmatched route", 404, LegacyAnswerBodies.PLAIN_DETAIL_STRING, "client.response_unreadable"),
-            ("a gateway's html page", 502, LegacyAnswerBodies.GATEWAY_HTML, "client.response_unreadable"),
-            ("an empty 503 on a route that creates a run", 503, "", "client.response_unreadable"),
+            ("a gateway's html page", 502, LegacyAnswerBodies.GATEWAY_HTML, "client.outcome_unknown"),
+            ("an empty 503 on a route that creates a run", 503, "", "client.outcome_unknown"),
+            ("a gateway's time limit", 504, '{"message":"Endpoint request timed out"}', "client.outcome_unknown"),
             ("a framework's refusal of the method", 405, '{"detail":"Method Not Allowed"}', "request.method_not_allowed"),
         ],
     )
@@ -243,6 +245,24 @@ class TestMthdsAPIClientErrors:
 
         assert str(exc).split("\n")[1] == expected_line, topic
         assert exc.response_body == body, topic
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    @pytest.mark.parametrize("status", [500, 502, 503, 504])
+    def test_a_server_error_that_is_no_problem_leaves_a_run_routes_outcome_unknown(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], status: int
+    ) -> None:
+        """A gateway's or a proxy's 5xx may stand in front of a run that started, so a run route never reads it as a plain unreadable answer."""
+        exc = self._response_error(self._client(_answering(status, text='{"message":"Endpoint request timed out"}')), call)
+
+        if creates_run:
+            assert exc.problem.code == "client.outcome_unknown", f"{route} {status}"
+            assert exc.problem.outcome_is_unknown
+            assert not exc.problem.is_retryable
+            assert exc.problem.status is None
+        else:
+            expected_code = "runtime.unavailable" if status == 503 else "client.response_unreadable"
+            assert exc.problem.code == expected_code, f"{route} {status}"
+        assert exc.status == status
 
     def test_an_empty_503_on_a_read_says_the_runtime_is_unavailable_with_the_delay_it_asks_for(self) -> None:
         """A read creates nothing, so a 503 with no problem document reads as runtime.unavailable, retry_after from the header."""

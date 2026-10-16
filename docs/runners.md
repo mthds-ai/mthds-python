@@ -77,6 +77,7 @@ Every failure of every route raises a `PipelineRequestError` (`mthds.protocol.ex
 | What the client met | Raised as | `problem.code` |
 | --- | --- | --- |
 | An answer whose body is a problem document | `ApiResponseError` | the runtime's code, as sent |
+| A `5xx` whose body is no problem document, on `/execute` or `/start` | `ApiResponseError` | `client.outcome_unknown`, since a gateway or a proxy may have answered in front of a run that started |
 | A non-2xx whose body is no problem document, with a status exactly one core code carries and a caller can state | `ApiResponseError` | that code, today `request.method_not_allowed` for `405` and `runtime.unavailable` for `503` |
 | Any other answer that is no problem document, such as a proxy's HTML page or a framework's `{"detail": ...}` | `ApiResponseError` | `client.response_unreadable`, naming the status |
 | A success whose body is not the route's answer, decoded by the same JSON rules as an error's body | `ApiResponseError` | `client.response_unreadable`, naming the status |
@@ -88,7 +89,7 @@ Every failure of every route raises a `PipelineRequestError` (`mthds.protocol.ex
 | An argument refused before any request left | `PipelineRequestError` | `client.argument_invalid`, naming the argument and the reason |
 | No API key or no base URL at construction, or a base URL that makes no valid URL or does not start with `http://` or `https://` | `ClientNotConfiguredError` | `client.not_configured`, naming the setting |
 
-On a route that creates a run, a `503` that is no problem document reads as `client.response_unreadable` rather than as `runtime.unavailable`, because an answer the runtime did not word never invites a repeat of a request that may have started a run.
+On a route that creates a run, a `5xx` that is no problem document, such as a gateway's `504` after its own time limit (`{"message":"Endpoint request timed out"}`) or a proxy's `502` page, reads as `client.outcome_unknown` rather than as `runtime.unavailable` or `client.response_unreadable`: the runtime did not word it, so it never invites a repeat, and the run may have started behind whatever answered, so the caller reads the run rather than starting it again. Any other status that is no problem document reads there as it reads on a route that creates nothing, except that a status whose code invites a retry reads as `client.response_unreadable`.
 
 `Problem` (`mthds.protocol.problem.models`) reads the document as the protocol's reader rules ask:
 

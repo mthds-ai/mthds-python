@@ -128,7 +128,11 @@ class TestProblemAnswers:
         ("topic", "status", "creates_run", "expected_code"),
         [
             ("a 503 on a read", 503, False, "runtime.unavailable"),
-            ("a 503 on a run route, which never invites a repeat", 503, True, "client.response_unreadable"),
+            ("a 503 on a run route, where the run may have started", 503, True, "client.outcome_unknown"),
+            ("a gateway's 504 on a run route", 504, True, "client.outcome_unknown"),
+            ("a 500 on a run route", 500, True, "client.outcome_unknown"),
+            ("a 504 on a read", 504, False, "client.response_unreadable"),
+            ("a 404 on a run route, which no server error is", 404, True, "client.response_unreadable"),
             ("a 405 on a run route, which invites none", 405, True, "request.method_not_allowed"),
             ("a 404, which several codes answer", 404, False, "client.response_unreadable"),
             ("a 500", 500, False, "client.response_unreadable"),
@@ -142,6 +146,9 @@ class TestProblemAnswers:
         if expected_code == "client.response_unreadable":
             assert problem.as_wire()["params"] == {"status": status}
             assert problem.status is None
+        elif expected_code == "client.outcome_unknown":
+            assert problem.outcome_is_unknown, topic
+            assert problem.status is None, topic
         else:
             assert problem.status == status
 
