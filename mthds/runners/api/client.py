@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, NoReturn, Self, TypeVar, cast
 from urllib.parse import quote
 
@@ -80,8 +81,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 the `User-Agent` (see `mthds.runners.api.user_agent`).
 
         Raises:
-            ClientNotConfiguredError: If no API key or base URL can be resolved
-                (`client.not_configured`, naming the setting).
+            ClientNotConfiguredError: If no API key or base URL can be resolved, or the API key
+                holds a character an HTTP header cannot carry, such as a line break or a space at
+                its end (`client.not_configured`, naming the setting; the key is never quoted).
             ValueError: If the assembled `User-Agent` is over the length limit.
         """
         self.init_user_agent(app_info)
@@ -90,6 +92,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         resolved_api_key = api_key or config["api_key"]
         if not resolved_api_key:
             msg = "API key is required for API execution. Set MTHDS_API_KEY or run: mthds config set api-key <key>"
+            raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "api_key"}))
+        if _SENDABLE_API_KEY.fullmatch(resolved_api_key) is None:
+            # httpx would refuse the header at every request, which no repeat changes; the message never quotes the key.
+            msg = "The API key holds a character an HTTP header cannot carry, such as a line break or a space at its end. Set it to the key alone."
             raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "api_key"}))
         self.api_key = resolved_api_key
 
@@ -222,7 +228,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         Raises:
             ApiTransportError: If no answer came back.
             ClientNotConfiguredError: If the base URL does not make a valid URL, or names no scheme the
-                client sends to, `http` or `https` (`client.not_configured`).
+                client sends to, `http` or `https` (`client.not_configured`), or if httpx refuses to
+                write the request because a header holds a value HTTP cannot carry, which reads as
+                the API key (`client.not_configured` naming `api_key`).
         """
         url = self._url(endpoint)
         try:
@@ -232,6 +240,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             # client sends to, so no repeat can succeed, and it must not read as an unreachable runtime.
             msg = f"API base URL '{self.base_url}' does not start with http:// or https://: {exc}"
             raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "base_url"})) from exc
+        except httpx.LocalProtocolError:
+            # httpx refused to write the request, so nothing left and no repeat changes it: a header holds a
+            # value HTTP cannot carry, and the API key is the header value a caller sets. httpx's message
+            # quotes that value, which may be the key, so the failure is not chained to this error.
+            msg = "The request could not be written: the API key holds a character an HTTP header cannot carry."
+            raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "api_key"})) from None
         except httpx.TransportError as exc:
             problem = transport_failure_problem(exc, creates_run=creates_run, base_url=self.base_url, timeout_seconds=self.request_timeout_seconds)
             msg = f"API {method} /{self._API_PREFIX}/{endpoint} failed: {problem.detail}"
@@ -624,6 +638,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
 # ── Module helpers ──────────────────────────────────────────────────────
 
+
+# An API key HTTP can carry in the `Authorization` header as written: visible ASCII characters only, so no
+# whitespace at either end, no line break and nothing past ASCII, which httpx refuses to write.
+_SENDABLE_API_KEY = re.compile(r"[!-~]+")
 
 # The protocol's basic request args — the named parameters of execute()/start().
 # Anything else a caller passes is an extension arg: it rides `extra` and merges

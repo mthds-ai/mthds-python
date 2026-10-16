@@ -89,6 +89,26 @@ class TestClientExceptions:
         assert exc_info.value.problem.as_wire()["params"] == {"setting": setting}
         assert str(exc_info.value).endswith(f"\nNext step: Set '{setting}' in the client's configuration."), topic
 
+    @pytest.mark.parametrize(
+        ("topic", "api_key"),
+        [
+            ("a line break at its end", "sk-secret-key\n"),
+            ("a carriage return and a line break", "sk-secret-key\r\n"),
+            ("a space at its end", "sk-secret-key "),
+            ("a line break inside", "sk-secret\nkey"),
+            ("a null character", "sk-secret-key\x00"),
+            ("a character past ASCII", "sk-secret-kéy"),
+        ],
+    )
+    def test_an_api_key_no_header_can_carry_is_a_setting_to_fix(self, topic: str, api_key: str, mocker: MockerFixture) -> None:
+        """A key HTTP cannot send is refused at construction as `client.not_configured`, never as an unreachable runtime, and never quoted."""
+        mocker.patch("mthds.runners.api.client.load_config", return_value={"api_key": "", "base_url": "", "runner": "api"})
+        with pytest.raises(ClientNotConfiguredError) as exc_info:
+            MthdsAPIClient(api_key=api_key, base_url="http://localhost:8081")
+        assert exc_info.value.problem.as_wire()["params"] == {"setting": "api_key"}, topic
+        assert not exc_info.value.problem.is_retryable, topic
+        assert "secret" not in str(exc_info.value), topic
+
     def test_api_response_error_message_ends_with_the_next_step(self) -> None:
         """`str()` is the message, then the problem's next step on its own line."""
         exc = ApiResponseError(

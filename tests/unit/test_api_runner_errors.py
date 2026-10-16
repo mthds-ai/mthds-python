@@ -494,6 +494,26 @@ class TestMthdsAPIClientErrors:
         assert exc.problem.pipeline_run_id is None, literal
 
     @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    def test_a_request_httpx_refuses_to_write_is_a_setting_to_fix(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]
+    ) -> None:
+        """A header HTTP cannot carry is refused before anything leaves, which no repeat changes: `client.not_configured`, never quoted."""
+
+        def refuse(request: httpx.Request) -> httpx.Response:
+            msg = "Illegal header value b'Bearer test-token\\n'"
+            raise httpx.LocalProtocolError(msg, request=request)
+
+        exc = self._raised(self._client(refuse), call)
+
+        assert isinstance(exc, ClientNotConfiguredError), f"{route}: {exc!r}"
+        assert exc.problem.as_wire()["params"] == {"setting": "api_key"}, route
+        assert not exc.problem.is_retryable, route
+        assert not exc.problem.outcome_is_unknown, f"{route} creates a run: {creates_run}"
+        assert exc.__cause__ is None, route
+        assert exc.__suppress_context__, route
+        assert "test-token" not in str(exc), route
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
     @pytest.mark.parametrize(
         ("topic", "failure", "code_on_a_read", "code_on_a_run"),
         [
