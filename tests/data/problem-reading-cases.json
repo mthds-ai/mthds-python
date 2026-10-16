@@ -606,6 +606,33 @@
       "name": "retry-after-date-without-a-day-name"
     },
     {
+      "description": "A Retry-After date whose leap second carries it past the end of the year 9999 names no moment a reader holds, so it gives no delay.",
+      "expected": {
+        "code": "runtime.unavailable",
+        "detail": "The runtime, or a service it depends on, is unavailable.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Send the request again after a while.",
+          "kind": "retry"
+        },
+        "params": {},
+        "retry": "yes",
+        "status": 503,
+        "title": "The runtime or a service it depends on is unavailable",
+        "type": "https://mthds.ai/errors/runtime.unavailable"
+      },
+      "input": {
+        "body": "",
+        "headers": {
+          "retry-after": "Fri, 31 Dec 9999 23:59:60 GMT"
+        },
+        "kind": "response",
+        "route": "GET /models",
+        "status": 503
+      },
+      "name": "retry-after-leap-second-past-the-year-9999"
+    },
+    {
       "description": "An empty 503 on a route that creates a run is no problem document, so it never invites a repeat, and the run may have started behind whatever answered, so it reads as client.outcome_unknown rather than runtime.unavailable.",
       "expected": {
         "code": "client.outcome_unknown",
@@ -851,6 +878,87 @@
       "name": "success-body-not-json"
     },
     {
+      "description": "A 200 on /execute whose body is not the route's answer says the runtime accepted the request, so the run may exist, and it reads as client.outcome_unknown, naming no run when the body names none.",
+      "expected": {
+        "code": "client.outcome_unknown",
+        "detail": "The connection was lost after a request that creates a run had left, so the run may exist.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Read the run if its id is known, and otherwise leave the outcome unknown rather than send the request again automatically.",
+          "kind": "read_run"
+        },
+        "params": {},
+        "retry": "outcome_unknown",
+        "title": "The call may have created a run",
+        "type": "https://mthds.ai/errors/client.outcome_unknown"
+      },
+      "input": {
+        "body": "OK",
+        "headers": {
+          "content-type": "text/plain"
+        },
+        "kind": "response",
+        "route": "POST /execute",
+        "status": 200
+      },
+      "name": "success-body-not-json-on-execute"
+    },
+    {
+      "description": "A 200 on /execute that names its run but whose pipe_output is not an output reads as client.outcome_unknown naming the run, in its params and as the problem's pipeline_run_id, since the run exists.",
+      "expected": {
+        "code": "client.outcome_unknown",
+        "detail": "The connection was lost after a request that creates a run had left, so the run may exist.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Read the run if its id is known, and otherwise leave the outcome unknown rather than send the request again automatically.",
+          "kind": "read_run"
+        },
+        "params": {
+          "pipeline_run_id": "run_7f3a"
+        },
+        "pipeline_run_id": "run_7f3a",
+        "retry": "outcome_unknown",
+        "title": "The call may have created a run",
+        "type": "https://mthds.ai/errors/client.outcome_unknown"
+      },
+      "input": {
+        "body": "{\"pipeline_run_id\":\"run_7f3a\",\"pipe_output\":42}",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "kind": "response",
+        "route": "POST /execute",
+        "status": 200
+      },
+      "name": "execute-success-whose-output-is-unreadable"
+    },
+    {
+      "description": "A 202 on /start whose pipeline_run_id is no string is not the route's answer and names no run the client can read, so it reads as client.outcome_unknown naming no run.",
+      "expected": {
+        "code": "client.outcome_unknown",
+        "detail": "The connection was lost after a request that creates a run had left, so the run may exist.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Read the run if its id is known, and otherwise leave the outcome unknown rather than send the request again automatically.",
+          "kind": "read_run"
+        },
+        "params": {},
+        "retry": "outcome_unknown",
+        "title": "The call may have created a run",
+        "type": "https://mthds.ai/errors/client.outcome_unknown"
+      },
+      "input": {
+        "body": "{\"pipeline_run_id\":42}",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "kind": "response",
+        "route": "POST /start",
+        "status": 202
+      },
+      "name": "start-accepted-with-a-run-id-that-is-no-string"
+    },
+    {
       "description": "A 202 on /execute acknowledges a run the client does not follow, so it reads as client.follow_failed naming the run, in its params and as the problem's pipeline_run_id, since the run exists.",
       "expected": {
         "code": "client.follow_failed",
@@ -906,6 +1014,58 @@
         "status": 202
       },
       "name": "execute-accepted-naming-no-run"
+    },
+    {
+      "description": "A 202 on /execute whose pipeline_run_id is no string names no run the client can read, so it reads as client.outcome_unknown naming no run.",
+      "expected": {
+        "code": "client.outcome_unknown",
+        "detail": "The connection was lost after a request that creates a run had left, so the run may exist.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Read the run if its id is known, and otherwise leave the outcome unknown rather than send the request again automatically.",
+          "kind": "read_run"
+        },
+        "params": {},
+        "retry": "outcome_unknown",
+        "title": "The call may have created a run",
+        "type": "https://mthds.ai/errors/client.outcome_unknown"
+      },
+      "input": {
+        "body": "{\"pipeline_run_id\":42}",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "kind": "response",
+        "route": "POST /execute",
+        "status": 202
+      },
+      "name": "execute-accepted-with-a-run-id-that-is-no-string"
+    },
+    {
+      "description": "A 202 on /execute whose pipeline_run_id is the empty string names no run, so it reads as client.outcome_unknown naming no run.",
+      "expected": {
+        "code": "client.outcome_unknown",
+        "detail": "The connection was lost after a request that creates a run had left, so the run may exist.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Read the run if its id is known, and otherwise leave the outcome unknown rather than send the request again automatically.",
+          "kind": "read_run"
+        },
+        "params": {},
+        "retry": "outcome_unknown",
+        "title": "The call may have created a run",
+        "type": "https://mthds.ai/errors/client.outcome_unknown"
+      },
+      "input": {
+        "body": "{\"pipeline_run_id\":\"\"}",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "kind": "response",
+        "route": "POST /execute",
+        "status": 202
+      },
+      "name": "execute-accepted-with-an-empty-run-id"
     },
     {
       "description": "A runtime the client cannot connect to reads as client.unreachable naming the configured base URL.",
