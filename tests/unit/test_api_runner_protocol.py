@@ -339,6 +339,17 @@ class TestMthdsAPIClientProtocol:
         assert '"files":{}' in sent
         assert '"bundle_b64":"UEsDBA=="' in sent
 
+    def test_execute_keeps_the_numbers_of_its_output_as_written(self, mocker: MockerFixture) -> None:
+        """A float a method wrote with no fractional part, such as a price of `10.0`, reaches the caller as a float, as `json.loads` reads it."""
+        client = self._client()
+        mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=ExecuteWireResponses.FLOAT_OUTPUT)))
+
+        result = asyncio.run(client.execute(pipe_code="quote"))
+
+        content = result.pipe_output.working_memory.root["quote"].content
+        assert content == {"price": 10.0, "discounts": [2.0, 2.5], "quantity": 3}
+        assert [type(content["price"]), type(content["discounts"][0]), type(content["quantity"])] == [float, float, int]
+
     def test_execute_accepts_a_bundle_as_the_only_run_source(self, mocker: MockerFixture) -> None:
         """A bundle in `extra` satisfies the precondition and merges into the body as a top-level property."""
         client = self._client()

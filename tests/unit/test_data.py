@@ -83,6 +83,25 @@ class ExecuteWireResponses:
         "main_stuff_name": "extracted_entities",
     }
 
+    # An output whose numbers a method wrote as floats, `10.0` among them: a caller reads them as
+    # written, as `json.loads` does, never with the integral ones turned into integers.
+    FLOAT_OUTPUT: ClassVar[dict[str, Any]] = {
+        "pipeline_run_id": "run_7f3a",
+        "pipe_output": {
+            "pipeline_run_id": "run_7f3a",
+            "working_memory": {
+                "root": {
+                    "quote": {
+                        "concept": "pricing.Quote",
+                        "content": {"price": 10.0, "discounts": [2.0, 2.5], "quantity": 3},
+                    },
+                },
+                "aliases": {"main_stuff": "quote"},
+            },
+        },
+        "main_stuff_name": "quote",
+    }
+
     # What the hosted runner sent before the runtime stopped dumping the concept object onto the
     # wire, abridged from a body captured against api-dev on 2026-07-03: the concept's whole
     # definition riding the stuff in place of its ref. The standard names a stuff's concept by its

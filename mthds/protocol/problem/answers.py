@@ -129,8 +129,8 @@ def _parse_int(text: str) -> int:
     return value
 
 
-def _parse_float(text: str) -> int | float:
-    """A JSON number with a fraction or an exponent, an integral value reading as an integer, as a JavaScript reader sees it.
+def _parse_float(text: str) -> float:
+    """A JSON number with a fraction or an exponent, as written.
 
     A literal past the range of a double, such as `1e999`, which Python and a JavaScript reader both
     read as an infinity, is refused.
@@ -138,7 +138,12 @@ def _parse_float(text: str) -> int | float:
     value = float(text)
     if not math.isfinite(value):
         _refuse_non_finite(text)
-    return integral_as_int(value)
+    return value
+
+
+def _parse_float_as_javascript(text: str) -> int | float:
+    """A JSON number with a fraction or an exponent, an integral value reading as an integer, as a JavaScript reader sees it."""
+    return integral_as_int(_parse_float(text))
 
 
 def nests_deeper_than(text: str, *, limit: int) -> bool:
@@ -158,19 +163,26 @@ def nests_deeper_than(text: str, *, limit: int) -> bool:
     return max(itertools.accumulate(map(_BRACKET_STEPS.__getitem__, brackets)), default=0) > limit
 
 
-def decode_json(text: str) -> DecodedBody:
+def decode_json(text: str, *, numbers_as_written: bool = False) -> DecodedBody:
     """Decode a body as JSON, as every reader of the protocol does.
 
     A body nested deeper than `MAX_BODY_NESTING` is refused before it is parsed. The constants
     `NaN`, `Infinity` and `-Infinity`, which Python's decoder accepts and JSON does not define, are
     refused, and so is a number past the range of a double, such as `1e999`, which would read as an
-    infinity. Numbers read as a JavaScript reader reads them: one with no fractional part reads as an
-    integer, so that `2.0` reads as `2`.
+    infinity. Numbers read as a JavaScript reader reads them, so that the twins agree on a problem
+    document: one with no fractional part reads as an integer, so that `2.0` reads as `2`.
+
+    Args:
+        text: The body.
+        numbers_as_written: Keep every number as written, so that `10.0` stays a float, as
+            `json.loads` reads it: for a success body, whose payload, such as a pipe's output, is
+            the caller's and not the protocol's.
     """
     if nests_deeper_than(text, limit=MAX_BODY_NESTING):
         return DecodedBody(is_json=False, value=None)
+    parse_float = _parse_float if numbers_as_written else _parse_float_as_javascript
     try:
-        value = json.loads(text, parse_constant=_refuse_constant, parse_float=_parse_float, parse_int=_parse_int)
+        value = json.loads(text, parse_constant=_refuse_constant, parse_float=parse_float, parse_int=_parse_int)
     except (ValueError, RecursionError):
         return DecodedBody(is_json=False, value=None)
     return DecodedBody(is_json=True, value=value)

@@ -290,8 +290,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         `client.outcome_unknown`, naming the run when the body gives its `pipeline_run_id` as a
         non-empty string, in the problem's parameters and as its member. A success body is decoded by the rules every
         body is (`mthds.protocol.problem.answers.decode_json`): `NaN`, `Infinity` and a number past
-        the range of a double are not JSON, and an integral number reads as an integer. A documented protected extension seam: a
-        client built on this one parses its own routes' answers through it too.
+        the range of a double are not JSON. Its numbers are kept as written, so that a pipe output's
+        `10.0` stays a float. A documented protected extension seam: a client built on this one
+        parses its own routes' answers through it too.
 
         Args:
             method: The HTTP method of the request, for the message.
@@ -312,7 +313,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             self._raise_api_response_error(
                 method=method, endpoint=endpoint, response=response, problem=reading.problem, problem_from_body=reading.from_body
             )
-        decoded = decode_json(response.text)
+        decoded = decode_json(response.text, numbers_as_written=True)
         if not decoded.is_json:
             self._raise_unreadable_success(method=method, endpoint=endpoint, response=response, creates_run=creates_run, body=None)
         try:
