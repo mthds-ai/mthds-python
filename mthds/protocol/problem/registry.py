@@ -9,7 +9,8 @@ code (`CoreCode`), a parameters model per code, every code's entry (`CORE_CODE_S
 extension prefixes, the family fallbacks a reader uses for a value it does not know, and the statuses
 by which an answer that is not a problem document is read (`STATUS_READINGS`). A parameters model
 widens a parameter whose values the registry lists to any string, since a reader accepts a value a
-later registry adds, and it accepts members it does not declare.
+later registry adds, and it accepts members it does not declare. It reads a number strictly, never
+from a string or a boolean, as `JsonInteger` and `JsonNumber` read it.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from enum import StrEnum
 from typing import Annotated, Final
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from mthds.protocol.problem.json_types import JsonInteger, JsonNumber
 
 REGISTRY_VERSION: Final[str] = "7.1.0"
 """The version of the core registry this module was generated from, which is the standard version it is published with."""
@@ -313,8 +316,8 @@ class RequestTooLargeParams(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    limit: Annotated[Annotated[int, Field(ge=0)], Field(description="The bound the request passes.")]
-    size: Annotated[Annotated[int, Field(ge=0)], Field(description="The size the request, or the file in it, reached.")]
+    limit: Annotated[Annotated[JsonInteger, Field(ge=0)], Field(description="The bound the request passes.")]
+    size: Annotated[Annotated[JsonInteger, Field(ge=0)], Field(description="The size the request, or the file in it, reached.")]
 
 
 class RequestNotFoundParams(BaseModel):
@@ -424,8 +427,8 @@ class AccountRateLimitedParams(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    limit: Annotated[int, Field(description="The number of requests the account may send in one window.")]
-    window: Annotated[Annotated[int, Field(ge=0)] | Annotated[float, Field(ge=0)], Field(description="The length of the window.")]
+    limit: Annotated[JsonInteger, Field(description="The number of requests the account may send in one window.")]
+    window: Annotated[Annotated[JsonNumber, Field(ge=0)], Field(description="The length of the window.")]
 
 
 class AccountQuotaExhaustedParams(BaseModel):
@@ -480,8 +483,8 @@ class InputWrongMultiplicityParams(BaseModel):
         Annotated[InputWrongMultiplicityExpected | str, Field(union_mode="left_to_right")],
         Field(description="What the method expects: one item, a list of any length, or a list of a fixed length."),
     ]
-    expected_count: Annotated[int | None, Field(description="The number of items the method expects, when it expects a fixed count.")] = None
-    provided_count: Annotated[int, Field(description="The number of items the request gives.")]
+    expected_count: Annotated[JsonInteger | None, Field(description="The number of items the method expects, when it expects a fixed count.")] = None
+    provided_count: Annotated[JsonInteger, Field(description="The number of items the request gives.")]
 
 
 class InputInvalidParams(BaseModel):
@@ -519,8 +522,8 @@ class InputTooLargeParams(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     input: Annotated[str, Field(description="The input at fault.")]
-    limit: Annotated[int, Field(description="The bound the input passes.")]
-    size: Annotated[int, Field(description="The size the input, or what a template renders from it, reached.")]
+    limit: Annotated[JsonInteger, Field(description="The bound the input passes.")]
+    size: Annotated[JsonInteger, Field(description="The size the input, or what a template renders from it, reached.")]
 
 
 class InputReferenceNotFoundParams(BaseModel):
@@ -595,7 +598,7 @@ class MethodPackageInvalidParams(BaseModel):
 
     reason: Annotated[str, Field(description="The package rule the method breaks.")]
     path: Annotated[str | None, Field(description="The tree path at fault, when one is.")] = None
-    limit: Annotated[int | None, Field(description="The limit the package passes, when the rule is a limit.")] = None
+    limit: Annotated[JsonInteger | None, Field(description="The limit the package passes, when the rule is a limit.")] = None
 
 
 class MethodDependencyMissingKind(StrEnum):
@@ -1094,7 +1097,7 @@ class PipeFunctionTimedOutParams(BaseModel):
 
     pipe: Annotated[str, Field(description="The PipeFunc whose function timed out.")]
     function: Annotated[str, Field(description="The function's import path.")]
-    timeout: Annotated[Annotated[int, Field(ge=0)] | Annotated[float, Field(ge=0)], Field(description="The time limit it passed.")]
+    timeout: Annotated[Annotated[JsonNumber, Field(ge=0)], Field(description="The time limit it passed.")]
 
 
 class PipeTemplateRenderFailedParams(BaseModel):
@@ -1127,7 +1130,7 @@ class PipeTemplateBudgetExceededParams(BaseModel):
         Annotated[PipeTemplateBudgetExceededOperation | str, Field(union_mode="left_to_right")],
         Field(description="The kind of operation that passed the budget."),
     ]
-    limit: Annotated[int, Field(description="The bound it passed.")]
+    limit: Annotated[JsonInteger, Field(description="The bound it passed.")]
 
 
 class PipeConditionUnmatchedParams(BaseModel):
@@ -1199,7 +1202,7 @@ class PipeStackOverflowParams(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    limit: Annotated[int, Field(description="The depth the run passed.")]
+    limit: Annotated[JsonInteger, Field(description="The depth the run passed.")]
 
 
 class ModelUnknownParams(BaseModel):
@@ -1274,8 +1277,8 @@ class ModelContextExceededParams(BaseModel):
         Annotated[ModelContextExceededLimit | str, Field(union_mode="left_to_right")],
         Field(description="Which bound the prompt passes: the context window, or the number of images."),
     ]
-    count: Annotated[int, Field(description="What the prompt reached.")]
-    max: Annotated[int, Field(description="The bound.")]
+    count: Annotated[JsonInteger, Field(description="What the prompt reached.")]
+    max: Annotated[JsonInteger, Field(description="The bound.")]
 
 
 class ModelOutputTruncatedParams(BaseModel):
@@ -1284,8 +1287,8 @@ class ModelOutputTruncatedParams(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     model: Annotated[str, Field(description="The model.")]
-    max_tokens: Annotated[int, Field(description="The cap the step sets.")]
-    output_tokens: Annotated[int, Field(description="The tokens the model produced.")]
+    max_tokens: Annotated[JsonInteger, Field(description="The cap the step sets.")]
+    output_tokens: Annotated[JsonInteger, Field(description="The tokens the model produced.")]
 
 
 class ModelOutputSchemaMismatchParams(BaseModel):
@@ -1344,7 +1347,7 @@ class ProviderFailedParams(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     provider: Annotated[str, Field(description="The provider.")]
-    status: Annotated[int, Field(description="The HTTP status the provider answered with.")]
+    status: Annotated[JsonInteger, Field(description="The HTTP status the provider answered with.")]
 
 
 class ProviderResponseInvalidDefect(StrEnum):
@@ -1427,7 +1430,7 @@ class RunTimedOutParams(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    timeout: Annotated[Annotated[int, Field(ge=0)] | Annotated[float, Field(ge=0)], Field(description="The deployment's run limit.")]
+    timeout: Annotated[Annotated[JsonNumber, Field(ge=0)], Field(description="The deployment's run limit.")]
 
 
 class RunLostParams(BaseModel):
@@ -1651,7 +1654,7 @@ class ClientTimeoutParams(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    seconds: Annotated[Annotated[int, Field(ge=0)] | Annotated[float, Field(ge=0)], Field(description="The client's time limit.")]
+    seconds: Annotated[Annotated[JsonNumber, Field(ge=0)], Field(description="The client's time limit.")]
 
 
 class ClientResponseUnreadableParams(BaseModel):
@@ -1659,7 +1662,7 @@ class ClientResponseUnreadableParams(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    status: Annotated[int, Field(description="The HTTP status of the answer.")]
+    status: Annotated[JsonInteger, Field(description="The HTTP status of the answer.")]
 
 
 class ClientOutcomeUnknownParams(BaseModel):
@@ -1762,7 +1765,7 @@ class ClientDownloadLimitExceededParams(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    limit: Annotated[Annotated[int, Field(ge=0)], Field(description="The client's limit.")]
+    limit: Annotated[Annotated[JsonInteger, Field(ge=0)], Field(description="The client's limit.")]
 
 
 class ClientAbortedParams(BaseModel):

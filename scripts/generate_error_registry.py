@@ -84,17 +84,22 @@ def _closed_list(schema: dict[str, Any], name: str) -> list[str]:
 
 
 def _python_type(param: dict[str, Any], enum_class: str | None) -> str:
-    """The annotation a parameter's value reads as, widened where the registry lists values."""
+    """The annotation a parameter's value reads as, widened where the registry lists values.
+
+    A number is read strictly, as `mthds.protocol.problem.models` reads every number of the problem
+    document: `JsonInteger` and `JsonNumber` refuse a string and a boolean, which pydantic's lax mode
+    would coerce.
+    """
     param_type = param["type"]
     match param_type:
         case "identifier" | "caller_text":
             return "str"
         case "integer":
-            return "int"
+            return "JsonInteger"
         case "seconds":
-            return "Annotated[int, Field(ge=0)] | Annotated[float, Field(ge=0)]"
+            return "Annotated[JsonNumber, Field(ge=0)]"
         case "bytes":
-            return "Annotated[int, Field(ge=0)]"
+            return "Annotated[JsonInteger, Field(ge=0)]"
         case "sha256":
             return 'Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]'
         case "enum":
@@ -183,7 +188,8 @@ code (`CoreCode`), a parameters model per code, every code's entry (`CORE_CODE_S
 extension prefixes, the family fallbacks a reader uses for a value it does not know, and the statuses
 by which an answer that is not a problem document is read (`STATUS_READINGS`). A parameters model
 widens a parameter whose values the registry lists to any string, since a reader accepts a value a
-later registry adds, and it accepts members it does not declare.
+later registry adds, and it accepts members it does not declare. It reads a number strictly, never
+from a string or a boolean, as `JsonInteger` and `JsonNumber` read it.
 """
 
 from __future__ import annotations
@@ -192,7 +198,7 @@ from enum import StrEnum
 from typing import Annotated, Final
 
 from pydantic import BaseModel, ConfigDict, Field
-
+{json_types_import}
 REGISTRY_VERSION: Final[str] = {version_literal}
 """The version of the core registry this module was generated from, which is the standard version it is published with."""
 
@@ -259,17 +265,22 @@ def _enum_class(name: str, doc: str, values: list[str]) -> list[str]:
     return lines
 
 
+_JSON_TYPES = ("JsonInteger", "JsonNumber")
+
+
+def _json_types_import(body: str) -> str:
+    """The import of the strict JSON number types the module's body uses, empty when it uses none."""
+    used = [name for name in _JSON_TYPES if re.search(rf"\b{name}\b", body)]
+    if not used:
+        return ""
+    return f"\nfrom mthds.protocol.problem.json_types import {', '.join(used)}\n"
+
+
 def render(snapshot: dict[str, Any], schema: dict[str, Any]) -> str:
     """The module's source, before formatting."""
     closed = {name: _closed_list(schema, name) for name in ("domain", "retry", "stepKind", "scalarType")}
     _check(snapshot, closed)
-    lines: list[str] = [
-        _PREAMBLE.format(
-            version=snapshot["version"],
-            version_literal=json.dumps(snapshot["version"]),
-            base_url_literal=json.dumps(snapshot["base_url"]),
-        ).rstrip("\n")
-    ]
+    lines: list[str] = []
     lines.extend(_enum_class("ProblemDomain", "Who must act: the protocol's closed list of domains.", closed["domain"]))
     lines.extend(_enum_class("RetryVerdict", "Whether repeating the operation can succeed: the protocol's closed list of verdicts.", closed["retry"]))
     lines.extend(_enum_class("StepKind", "What the reader does next: the protocol's closed list of step kinds.", closed["stepKind"]))
@@ -396,7 +407,14 @@ def render(snapshot: dict[str, Any], schema: dict[str, Any]) -> str:
             '"""The statuses that name one core code a client can state completely, by which an answer that is no problem document is read."""',
         ]
     )
-    return "\n".join(lines) + "\n"
+    body = "\n".join(lines) + "\n"
+    preamble = _PREAMBLE.format(
+        version=snapshot["version"],
+        version_literal=json.dumps(snapshot["version"]),
+        base_url_literal=json.dumps(snapshot["base_url"]),
+        json_types_import=_json_types_import(body),
+    ).rstrip("\n")
+    return f"{preamble}\n{body}"
 
 
 def _ruff() -> str:

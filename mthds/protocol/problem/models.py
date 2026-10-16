@@ -27,13 +27,12 @@ The models follow the protocol's reader rules (the "Errors" section of the stand
 
 from __future__ import annotations
 
-import math
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, TypeAlias, TypeVar, cast
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Discriminator, Field, Tag, model_validator
-from pydantic_core import PydanticCustomError
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, model_validator
 
+from mthds.protocol.problem.json_types import JsonInteger, JsonNumber
 from mthds.protocol.problem.registry import (
     CORE_CODE_SPECS,
     FAMILY_DOMAINS,
@@ -54,33 +53,6 @@ FIX_CODE_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 """The shape of a suggested fix's `fix_code`: kebab case."""
 
 ParamsModelT = TypeVar("ParamsModelT", bound=BaseModel)
-
-
-def _json_integer(value: Any) -> Any:
-    """Accept a JSON integer only: a number with no fractional part, never a string or a boolean."""
-    if isinstance(value, bool) or not isinstance(value, int | float) or (isinstance(value, float) and not value.is_integer()):
-        error_type = "json_integer"
-        msg = "A JSON integer is required."
-        raise PydanticCustomError(error_type, msg)
-    return int(value)
-
-
-def _json_number(value: Any) -> Any:
-    """Accept a JSON number only, never a string, a boolean, an infinity or `NaN`; an integral value reads as an integer."""
-    if isinstance(value, bool) or not isinstance(value, int | float) or (isinstance(value, float) and not math.isfinite(value)):
-        error_type = "json_number"
-        msg = "A JSON number is required."
-        raise PydanticCustomError(error_type, msg)
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    return value
-
-
-JsonInteger: TypeAlias = Annotated[int, BeforeValidator(_json_integer)]
-"""A JSON integer: `422` and `422.0` read as `422`, while `"422"` and `true` are refused."""
-
-JsonNumber: TypeAlias = Annotated[int | float, BeforeValidator(_json_number)]
-"""A JSON number: an integral value reads as an `int`, as a JavaScript reader sees it, and a string, a boolean, an infinity or `NaN` is refused."""
 
 
 class FixSafety(StrEnum):

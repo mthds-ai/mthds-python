@@ -7,6 +7,7 @@ from typing import Any, NoReturn
 
 import httpx
 import pytest
+from pydantic import ValidationError
 from pytest_mock import MockerFixture
 from typing_extensions import override
 
@@ -14,7 +15,7 @@ from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import ModelCategory
 from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.models import Problem, ProblemDomain, RemapValueOp
-from mthds.protocol.problem.registry import CoreCode, ModelUnknownParams
+from mthds.protocol.problem.registry import AccountRateLimitedParams, CoreCode, ModelUnknownParams
 from mthds.runners.api.client import MthdsAPIClient
 from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
 from tests.unit.test_data import ExecuteWireResponses, LegacyAnswerBodies, ProblemBodies
@@ -139,6 +140,32 @@ class TestMthdsAPIClientErrors:
             f"API {route} failed (422): The method names the llm model 'gpt-5.1', which no catalog knows.\n"
             "Next step: Ask the method's owner to name a model that exists in place of 'gpt-5.1'."
         )
+
+    @pytest.mark.parametrize(
+        ("topic", "params", "expected"),
+        [
+            ("numbers read as numbers", {"limit": 60, "window": 1.5}, AccountRateLimitedParams(limit=60, window=1.5)),
+            ("an integral number reads as an integer", {"limit": 60.0, "window": 60.0}, AccountRateLimitedParams(limit=60, window=60)),
+            ("a count written as a string", {"limit": "60", "window": 60}, None),
+            ("a window written as a boolean", {"limit": 60, "window": True}, None),
+            ("a fractional count", {"limit": 60.5, "window": 60}, None),
+        ],
+    )
+    def test_a_codes_parameters_read_as_json_types_them(
+        self, topic: str, params: dict[str, Any], expected: AccountRateLimitedParams | None
+    ) -> None:
+        """The generated parameters model reads a number strictly, as the problem model does: a string or a boolean is never coerced."""
+        body = json.dumps({**ProblemBodies.RATE_LIMITED, "params": params})
+        exc = self._response_error(self._client(_answering(429, text=body)), lambda client: client.models())
+
+        assert exc.problem.code == "account.rate_limited", topic
+        if expected is None:
+            with pytest.raises(ValidationError):
+                exc.problem.params_as(AccountRateLimitedParams)
+        else:
+            read = exc.problem.params_as(AccountRateLimitedParams)
+            assert read == expected, topic
+            assert type(read.window) is type(expected.window), topic
 
     def test_a_method_that_does_not_validate_carries_its_faults_as_items(self) -> None:
         """A run route's refusal of an invalid method keeps one typed item per fault, with its fix."""

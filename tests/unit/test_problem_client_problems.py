@@ -91,6 +91,11 @@ class TestClientProblems:
             make_client_problem(CoreCode.CLIENT_TIMEOUT, params={"seconds": 30, "route": "/models"})
         with pytest.raises(ValidationError):
             make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": "five hundred"})
+        # A number is read strictly: pydantic's lax mode would coerce these two.
+        with pytest.raises(ValidationError):
+            make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": "500"})
+        with pytest.raises(ValidationError):
+            make_client_problem(CoreCode.CLIENT_TIMEOUT, params={"seconds": True})
 
     @pytest.mark.parametrize("code", [code for code, spec in CORE_CODE_SPECS.items() if spec.raised_as is RaisedAs.CLIENT])
     def test_every_client_code_builds_from_its_parameters(self, code: str) -> None:
