@@ -128,9 +128,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         Raises:
             ClientNotConfiguredError: If `seconds` is not a finite number, never negative, such as
-                `-1`, `NaN`, an infinity or a boolean (`client.not_configured`, naming `request_timeout_seconds`).
+                `-1`, `NaN`, an infinity, a boolean, a string or an integer past the range of a float
+                (`client.not_configured`, naming `request_timeout_seconds`).
         """
-        if isinstance(seconds, bool) or not math.isfinite(seconds) or seconds < 0:
+        if not _states_seconds(seconds):
             msg = f"The request time limit must be a finite number of seconds, never negative; got {seconds!r}."
             raise ClientNotConfiguredError(
                 msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "request_timeout_seconds"})
@@ -654,6 +655,16 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
 
 # ── Module helpers ──────────────────────────────────────────────────────
+
+
+def _states_seconds(value: object) -> bool:
+    """Whether `value` is a time limit `client.timeout` can state: an int or a float, never a boolean, finite and never negative."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return False
+    try:
+        return math.isfinite(value) and value >= 0
+    except OverflowError:  # an int too large for a float
+        return False
 
 
 # An API key HTTP can carry in the `Authorization` header as written: visible ASCII characters only, so no

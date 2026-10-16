@@ -72,7 +72,14 @@ class TestMthdsAPIClientProtocol:
 
     @pytest.mark.parametrize(
         ("topic", "timeout_seconds"),
-        [("negative", -1.0), ("not a number", float("nan")), ("infinite", float("inf")), ("a boolean", True)],
+        [
+            ("negative", -1.0),
+            ("not a number", float("nan")),
+            ("infinite", float("inf")),
+            ("a boolean", True),
+            ("a string", "30"),
+            ("an integer past the range of a float", 10**400),
+        ],
     )
     def test_a_timeout_no_problem_can_state_is_a_setting_to_fix(self, topic: str, timeout_seconds: float) -> None:
         """A time limit that is no finite number of seconds, never negative, is refused when it is set, so that a timeout always reads."""
