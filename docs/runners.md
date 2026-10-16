@@ -85,7 +85,7 @@ Every failure of every route raises a `PipelineRequestError` (`mthds.protocol.ex
 | No answer in time on a route that creates nothing | `ApiTransportError` | `client.timeout`, naming the time limit |
 | A request to `/execute` or `/start` left and no answer came back | `ApiTransportError` | `client.outcome_unknown`, since the run may exist |
 | An argument refused before any request left | `PipelineRequestError` | `client.argument_invalid`, naming the argument and the reason |
-| No API key or no base URL at construction | `ClientNotConfiguredError` | `client.not_configured`, naming the setting |
+| No API key or no base URL at construction, or a base URL that makes no valid URL or does not start with `http://` or `https://` | `ClientNotConfiguredError` | `client.not_configured`, naming the setting |
 
 On a route that creates a run, a `503` that is no problem document reads as `client.response_unreadable` rather than as `runtime.unavailable`, because an answer the runtime did not word never invites a repeat of a request that may have started a run.
 

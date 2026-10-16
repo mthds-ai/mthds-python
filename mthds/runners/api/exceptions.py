@@ -12,7 +12,7 @@ Every route raises only these, so `except PipelineRequestError` catches every fa
   run may exist.
 - `RunStillRunningError`: `/execute` answered `202`, the protocol's optional degrade, so the run
   goes on on the runtime and the client does not follow it: `client.follow_failed`, naming the run.
-- `ClientNotConfiguredError`: the client has no API key or no base URL: `client.not_configured`.
+- `ClientNotConfiguredError`: the client has no API key, no base URL, or a base URL it cannot send to: `client.not_configured`.
 """
 
 from __future__ import annotations
@@ -31,7 +31,11 @@ def _with_next_step(message: str, problem: Problem) -> str:
 
 
 class ClientNotConfiguredError(PipelineRequestError):
-    """The client cannot be built: no API key or no base URL resolves, `client.not_configured` naming the setting."""
+    """The client is not configured to send: no API key or no base URL resolves, or the base URL makes no URL it sends to.
+
+    Its problem is `client.not_configured` naming the setting, whose retry verdict is `no`: a repeat
+    of the call cannot succeed until the setting is fixed.
+    """
 
 
 class ApiResponseError(PipelineRequestError):

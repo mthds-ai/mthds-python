@@ -222,11 +222,17 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         Raises:
             ApiTransportError: If no answer came back.
-            ClientNotConfiguredError: If the base URL does not make a valid URL (`client.not_configured`).
+            ClientNotConfiguredError: If the base URL does not make a valid URL, or names no scheme the
+                client sends to, `http` or `https` (`client.not_configured`).
         """
         url = self._url(endpoint)
         try:
             return await self._send(method, url, content=content, request_timeout=self.request_timeout_seconds)
+        except httpx.UnsupportedProtocol as exc:
+            # A transport error by its class, but a setting by its cause: the base URL names no scheme the
+            # client sends to, so no repeat can succeed, and it must not read as an unreachable runtime.
+            msg = f"API base URL '{self.base_url}' does not start with http:// or https://: {exc}"
+            raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "base_url"})) from exc
         except httpx.TransportError as exc:
             problem = transport_failure_problem(exc, creates_run=creates_run, base_url=self.base_url, timeout_seconds=self.request_timeout_seconds)
             msg = f"API {method} /{self._API_PREFIX}/{endpoint} failed: {problem.detail}"

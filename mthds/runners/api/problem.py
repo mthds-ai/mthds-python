@@ -3,9 +3,10 @@
 The reading of an answer is the protocol's and lives in `mthds.protocol.problem.answers`; this
 module hands it an httpx response, and states the problem of a request that got no answer:
 
-- **No request left** (no connection opened, a proxy refused it, the URL's scheme is unsupported, or
-  the request was refused locally): `client.unreachable`, naming the client's base URL, since the call
-  created nothing. A request that waited past the time limit for a free connection of the pool did
+- **No request left** (no connection opened, a proxy refused it, or the request was refused locally):
+  `client.unreachable`, naming the client's base URL, since the call created nothing. A base URL whose
+  scheme the client does not send to is no transport failure but a setting: `MthdsAPIClient` raises
+  it as `client.not_configured` before reading a failure here. A request that waited past the time limit for a free connection of the pool did
   not leave either, so it is `client.timeout`.
 - **The request left and no answer came back** (the time limit passed, or the connection was lost):
   `client.outcome_unknown` on a route that creates a run, since the run may exist, and otherwise
@@ -30,7 +31,6 @@ _NOTHING_SENT: tuple[type[httpx.TransportError], ...] = (
     httpx.ConnectError,
     httpx.ConnectTimeout,
     httpx.ProxyError,
-    httpx.UnsupportedProtocol,
     httpx.LocalProtocolError,
 )
 

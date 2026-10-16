@@ -14,7 +14,7 @@ from mthds.protocol.models import ModelCategory
 from mthds.protocol.problem.models import Problem, ProblemDomain, RemapValueOp
 from mthds.protocol.problem.registry import ModelUnknownParams
 from mthds.runners.api.client import MthdsAPIClient
-from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, RunStillRunningError
+from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
 from tests.unit.test_data import LegacyAnswerBodies, ProblemBodies
 
 _BASE_URL = "http://localhost:8081"
@@ -294,6 +294,24 @@ class TestMthdsAPIClientErrors:
             assert not exc.problem.is_retryable
         if expected_code == "client.timeout":
             assert exc.problem.as_wire()["params"] == {"seconds": 30}
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    @pytest.mark.parametrize(
+        ("topic", "base_url"), [("no scheme", "api.example.com"), ("a host read as a scheme", "localhost:8081"), ("a scheme not sent to", "ftp://example.com")]
+    )
+    def test_a_base_url_the_client_cannot_send_to_is_a_setting_to_fix(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, base_url: str
+    ) -> None:
+        """httpx's real transport refuses the scheme before connecting, and the call reads as `client.not_configured`, never as a runtime to retry."""
+        client = MthdsAPIClient(api_key="test-token", base_url=base_url, request_timeout_seconds=30.0)
+        exc = self._raised(client, call)
+
+        assert isinstance(exc, ClientNotConfiguredError), f"{route}, {topic}: {exc!r}"
+        assert isinstance(exc.__cause__, httpx.UnsupportedProtocol)
+        assert exc.problem.code == "client.not_configured", f"{route} creates a run: {creates_run}"
+        assert exc.problem.as_wire()["params"] == {"setting": "base_url"}
+        assert not exc.problem.is_retryable
+        assert not exc.problem.outcome_is_unknown
 
     def test_a_202_on_execute_raises_run_still_running(self) -> None:
         """The protocol's async degrade reads as `client.follow_failed` naming the run, with the 202's hints on the error."""
