@@ -13,7 +13,7 @@ from mthds.protocol.models import InvalidValidationReport, ModelCategory, ModelD
 from mthds.protocol.problem.registry import ProblemDomain
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.client import MthdsAPIClient
-from mthds.runners.api.exceptions import ApiResponseError
+from mthds.runners.api.exceptions import ApiResponseError, ClientNotConfiguredError
 from tests.unit.test_data import ExecuteWireResponses, ModelDeckWireBodies
 
 _BASE_URL = "http://localhost:8081"
@@ -69,6 +69,21 @@ class TestMthdsAPIClientProtocol:
         """
         client = MthdsAPIClient(api_key="test-token", base_url=_BASE_URL, request_timeout_seconds=timeout_seconds)
         assert client.request_timeout_seconds == timeout_seconds
+
+    @pytest.mark.parametrize(
+        ("topic", "timeout_seconds"),
+        [("negative", -1.0), ("not a number", float("nan")), ("infinite", float("inf")), ("a boolean", True)],
+    )
+    def test_a_timeout_no_problem_can_state_is_a_setting_to_fix(self, topic: str, timeout_seconds: float) -> None:
+        """A time limit that is no finite number of seconds, never negative, is refused when it is set, so that a timeout always reads."""
+        with pytest.raises(ClientNotConfiguredError) as exc_info:
+            MthdsAPIClient(api_key="test-token", base_url=_BASE_URL, request_timeout_seconds=timeout_seconds)
+        assert exc_info.value.problem.as_wire()["params"] == {"setting": "request_timeout_seconds"}, topic
+
+        client = self._client()
+        with pytest.raises(ClientNotConfiguredError):
+            client.request_timeout_seconds = timeout_seconds
+        assert client.request_timeout_seconds == 1200.0, topic
 
     # ── validate ─────────────────────────────────────────────────
 

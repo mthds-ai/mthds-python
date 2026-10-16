@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, NoReturn, Self, TypeVar, cast
 from urllib.parse import quote
@@ -81,9 +82,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 the `User-Agent` (see `mthds.runners.api.user_agent`).
 
         Raises:
-            ClientNotConfiguredError: If no API key or base URL can be resolved, or the API key
+            ClientNotConfiguredError: If no API key or base URL can be resolved, the API key
                 holds a character an HTTP header cannot carry, such as a line break or a space at
-                its end (`client.not_configured`, naming the setting; the key is never quoted).
+                its end, or `request_timeout_seconds` is no finite number of seconds, never
+                negative (`client.not_configured`, naming the setting; the key is never quoted).
             ValueError: If the assembled `User-Agent` is over the length limit.
         """
         self.init_user_agent(app_info)
@@ -111,6 +113,29 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         self.request_timeout_seconds = request_timeout_seconds if request_timeout_seconds is not None else self._DEFAULT_REQUEST_TIMEOUT_SECONDS
 
         self.client: httpx.AsyncClient | None = None
+
+    @property
+    def request_timeout_seconds(self) -> float:
+        """The time limit of each request, in seconds: a finite number, never negative."""
+        return self._request_timeout_seconds
+
+    @request_timeout_seconds.setter
+    def request_timeout_seconds(self, seconds: float) -> None:
+        """Set the time limit of each request, refusing one that `client.timeout` could not state.
+
+        Every assignment is checked, a subclass's own `__init__` included, so that a request that
+        times out always reads as `client.timeout` naming its limit.
+
+        Raises:
+            ClientNotConfiguredError: If `seconds` is not a finite number, never negative, such as
+                `-1`, `NaN`, an infinity or a boolean (`client.not_configured`, naming `request_timeout_seconds`).
+        """
+        if isinstance(seconds, bool) or not math.isfinite(seconds) or seconds < 0:
+            msg = f"The request time limit must be a finite number of seconds, never negative; got {seconds!r}."
+            raise ClientNotConfiguredError(
+                msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "request_timeout_seconds"})
+            )
+        self._request_timeout_seconds = seconds
 
     @property
     def runner_type(self) -> RunnerType:
