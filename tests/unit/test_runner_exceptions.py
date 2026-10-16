@@ -40,7 +40,7 @@ class TestClientExceptions:
         assert exc.run_id == "run_1"
         assert exc.retry_after_seconds == 10
         assert exc.location == "/v1/runs/run_1/results"
-        assert str(exc) == msg
+        assert str(exc) == f"{msg}\nNext step: Read the run 'run_1' by its id rather than start it again."
         assert exc.problem.code == "client.follow_failed"
         assert exc.problem.outcome_is_unknown
         assert not exc.problem.is_retryable

@@ -134,7 +134,7 @@ class RunStillRunningError(PipelineRequestError):
         retry_after_seconds: int | None = None,
         location: str | None = None,
     ) -> None:
-        """Build the error.
+        """Build the error; its message is `message` followed by the problem's next step, which says not to start the run again.
 
         Args:
             message: What happened, for a person.
@@ -143,7 +143,7 @@ class RunStillRunningError(PipelineRequestError):
             retry_after_seconds: The delay the `Retry-After` header asks for before reading the run.
             location: The run's status resource, from the `Location` header.
         """
-        super().__init__(message, problem=problem)
+        super().__init__(_with_next_step(message, problem), problem=problem)
         self.run_id = run_id
         self.retry_after_seconds = retry_after_seconds
         self.location = location

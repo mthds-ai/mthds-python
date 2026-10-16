@@ -443,6 +443,7 @@ class TestMthdsAPIClientErrors:
         assert exc.problem.code == "client.follow_failed"
         assert exc.problem.as_wire()["params"] == {"pipeline_run_id": "run_7f3a"}
         assert exc.problem.outcome_is_unknown
+        assert str(exc).endswith("\nNext step: Read the run 'run_7f3a' by its id rather than start it again.")
 
     def test_a_202_on_execute_naming_no_run_is_an_unreadable_answer(self) -> None:
         """A 202 that names no run gives the client nothing to follow: `client.response_unreadable`."""
