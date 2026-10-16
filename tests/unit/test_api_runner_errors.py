@@ -1,77 +1,100 @@
-"""Tests for how MthdsAPIClient turns a non-2xx answer into ApiResponseError, on every route, httpx mocked."""
+"""Tests for how MthdsAPIClient reads every failure of every route as a problem, httpx's transport mocked."""
 
 import asyncio
-from collections.abc import Callable, Coroutine
+import itertools
+import json
+from collections.abc import Callable, Coroutine, Mapping
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from typing import Any, NoReturn
 
 import httpx
 import pytest
+from pydantic import ValidationError
 from pytest_mock import MockerFixture
 from typing_extensions import override
 
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.protocol.models import ModelCategory, ValidationDiagnostic
+from mthds.protocol.models import ModelCategory
+from mthds.protocol.problem import answers as problem_answers
+from mthds.protocol.problem.answers import MAX_BODY_NESTING
+from mthds.protocol.problem.client_problems import make_client_problem
+from mthds.protocol.problem.models import Problem, ProblemDomain, RemapValueOp
+from mthds.protocol.problem.registry import AccountRateLimitedParams, CoreCode, ModelUnknownParams
 from mthds.runners.api.client import MthdsAPIClient
-from mthds.runners.api.exceptions import ApiResponseError, RunStillRunningError
-from mthds.runners.api.problem import ProblemDocument
-from tests.unit.test_data import RefusedRunBodies
+from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
+from tests.unit.test_data import ExecuteWireResponses, LegacyAnswerBodies, ProblemBodies
 
 _BASE_URL = "http://localhost:8081"
+_CLOCK_START = datetime(2026, 10, 16, 12, 0, 0, tzinfo=UTC)
 
-# Each protocol route, called with arguments that name something to run: (route label, call).
-_ROUTE_CALLS: list[tuple[str, Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]]] = [
-    ("POST /v1/execute", lambda client: client.execute(pipe_code="pitch_product", mthds_contents=['domain = "sales_copy"'])),
-    ("POST /v1/start", lambda client: client.start(pipe_code="pitch_product", mthds_contents=['domain = "sales_copy"'])),
-    ("POST /v1/validate", lambda client: client.validate(['domain = "sales_copy"'])),
-    ("GET /v1/models", lambda client: client.models()),
-    ("GET /v1/version", lambda client: client.version()),
+
+def _execute(client: MthdsAPIClient) -> Coroutine[Any, Any, object]:
+    """Call `execute()` with arguments that name something to run."""
+    return client.execute(pipe_code="pitch_product", mthds_contents=['domain = "sales_copy"'])
+
+
+# Each protocol route, called with arguments that name something to run: (route label, whether it creates a run, call).
+_ROUTE_CALLS: list[tuple[str, bool, Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]]] = [
+    ("POST /v1/execute", True, _execute),
+    ("POST /v1/start", True, lambda client: client.start(pipe_code="pitch_product", mthds_contents=['domain = "sales_copy"'])),
+    ("POST /v1/validate", False, lambda client: client.validate(['domain = "sales_copy"'])),
+    ("GET /v1/models", False, lambda client: client.models()),
+    ("GET /v1/version", False, lambda client: client.version()),
 ]
 
-
-def _response(status_code: int, *, text: str = "", headers: dict[str, str] | None = None) -> httpx.Response:
-    """Build a constructed httpx.Response carrying `text` as its body."""
-    request = httpx.Request("POST", f"{_BASE_URL}/v1/x")
-    return httpx.Response(status_code, text=text, headers=headers or {}, request=request)
+Handler = Callable[[httpx.Request], httpx.Response]
 
 
-class _NarrowedDiagnostic(ValidationDiagnostic):
-    """A client's own narrowing of the diagnostic item, as pipelex-sdk narrows it."""
+def _answering(status_code: int, *, text: str = "", headers: Mapping[str, str] | Mapping[bytes, bytes] | None = None) -> Handler:
+    """A transport handler answering every request with `status_code`, `text` as its body; header bytes carry a value that is not ASCII."""
 
-    pipe_code: str | None = None
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, text=text, headers=headers or {}, request=request)
+
+    return handle
 
 
-class _NarrowedApiResponseError(ApiResponseError[_NarrowedDiagnostic]):
+def _failing(failure: type[httpx.TransportError]) -> Handler:
+    """A transport handler that raises `failure` instead of answering."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        msg = "the transport failed"
+        raise failure(msg, request=request)
+
+    return handle
+
+
+class _NarrowedApiResponseError(ApiResponseError):
     """A client's own error, carrying a member the base does not name."""
 
-    def __init__(self, message: str, *, category: str | None, **kwargs: Any) -> None:
+    def __init__(self, message: str, *, request_id: str | None, **kwargs: Any) -> None:
         super().__init__(message, **kwargs)
-        self.category = category
+        self.request_id = request_id
 
 
 class _NarrowingClient(MthdsAPIClient):
     """A client built on the base that raises its own error subclass through the protected seam."""
 
     @override
-    def _raise_api_response_error(self, *, method: str, endpoint: str, response: httpx.Response) -> NoReturn:
-        document = ProblemDocument.make_from_response(response)
-        members = document.members or {}
-        raw_items: list[dict[str, Any]] = members.get("validation_errors", [])
-        category = members.get("error_category")
+    def _raise_api_response_error(
+        self, *, method: str, endpoint: str, response: httpx.Response, problem: Problem, problem_from_body: bool
+    ) -> NoReturn:
+        request_id = (problem.model_extra or {}).get("request_id")
         msg = f"API {method} /v1/{endpoint} failed ({response.status_code})"
         raise _NarrowedApiResponseError(
             msg,
-            category=category if isinstance(category, str) else None,
+            request_id=request_id if isinstance(request_id, str) else None,
+            problem=problem,
             api_url=self.base_url,
             status=response.status_code,
             status_text=response.reason_phrase,
             response_body=response.text,
-            validation_errors=[_NarrowedDiagnostic.model_validate(item) for item in raw_items],
-            user_action=document.user_action,
         )
 
 
 class TestMthdsAPIClientErrors:
-    """Every route raises ApiResponseError on a non-2xx answer, its problem members typed and its message readable."""
+    """Every route raises a PipelineRequestError carrying a problem: the runtime's, or the one the client reads from what it met."""
 
     @pytest.fixture(autouse=True)
     def _mock_config(self, mocker: MockerFixture) -> None:
@@ -81,188 +104,526 @@ class TestMthdsAPIClientErrors:
             return_value={"api_key": "", "base_url": "", "runner": "api"},
         )
 
-    def _client(self) -> MthdsAPIClient:
-        return MthdsAPIClient(api_key="test-token", base_url=_BASE_URL)
+    def _client(self, handler: Handler, *, client_class: type[MthdsAPIClient] = MthdsAPIClient) -> MthdsAPIClient:
+        client = client_class(api_key="test-token", base_url=_BASE_URL, request_timeout_seconds=30.0)
+        client.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        return client
 
-    def _raised(
-        self, client: MthdsAPIClient, mocker: MockerFixture, response: httpx.Response, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]
-    ) -> ApiResponseError:
-        """Answer every request with `response`, make the call, and return the ApiResponseError it raised."""
-        mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=response))
-        with pytest.raises(ApiResponseError) as exc_info:
-            asyncio.run(call(client))
+    def _raised(self, client: MthdsAPIClient, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]) -> PipelineRequestError:
+        """Make the call and return the PipelineRequestError it raised."""
+
+        async def scenario() -> None:
+            try:
+                await call(client)
+            finally:
+                await client.close()
+
+        with pytest.raises(PipelineRequestError) as exc_info:
+            asyncio.run(scenario())
         return exc_info.value
 
-    @pytest.mark.parametrize(("route", "call"), _ROUTE_CALLS)
-    def test_every_route_raises_the_typed_error_with_the_problem_members(
-        self, route: str, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], mocker: MockerFixture
+    def _response_error(self, client: MthdsAPIClient, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]) -> ApiResponseError:
+        exc = self._raised(client, call)
+        assert isinstance(exc, ApiResponseError), repr(exc)
+        return exc
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    def test_every_route_raises_the_runtimes_problem(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]
     ) -> None:
-        """A refusal on any route arrives as ApiResponseError, never as httpx's HTTPStatusError, its members parsed."""
-        exc = self._raised(self._client(), mocker, _response(422, text=RefusedRunBodies.UNSERVED_MODEL_AT_RUN), call)
+        """A refusal on any route arrives as ApiResponseError carrying the problem as the runtime sent it, its extra member kept."""
+        exc = self._response_error(self._client(_answering(422, text=ProblemBodies.MODEL_UNKNOWN_BODY)), call)
 
         assert not isinstance(exc, httpx.HTTPStatusError)
-        assert isinstance(exc, PipelineRequestError)
+        assert exc.problem.as_wire() == ProblemBodies.MODEL_UNKNOWN, f"{route} creates a run: {creates_run}"
+        assert (exc.problem.model_extra or {})["request_id"] == "req_b7d2c66f-b2d5-4dc7-bd4f-6cf98abfbdc0"
+        assert exc.problem.effective_domain is ProblemDomain.METHOD
+        assert not exc.problem.is_retryable
+        assert exc.problem.params_as(ModelUnknownParams).model == "gpt-5.1"
         assert exc.status == 422
         assert exc.status_text == "Unprocessable Entity"
         assert exc.api_url == _BASE_URL
-        assert exc.error_type == "ModelNotFoundError"
-        assert exc.server_message == RefusedRunBodies.UNSERVED_MODEL_DETAIL
-        assert exc.user_action is not None
-        assert exc.user_action.detail == RefusedRunBodies.UNSERVED_MODEL_NEXT_STEP
+        assert exc.response_body == ProblemBodies.MODEL_UNKNOWN_BODY
         assert str(exc) == (
-            f"API {route} failed (422): {RefusedRunBodies.UNSERVED_MODEL_DETAIL}\nNext step: {RefusedRunBodies.UNSERVED_MODEL_NEXT_STEP}"
+            f"API {route} failed (422): The method names the llm model 'gpt-5.1', which no catalog knows.\n"
+            "Next step: Ask the method's owner to name a model that exists in place of 'gpt-5.1'."
         )
-
-    def test_a_bundle_refused_at_load_carries_every_member(self, mocker: MockerFixture) -> None:
-        """The dev plane's refusal of a bundle naming an unknown model: every member, and the itemized diagnostic."""
-        exc = self._raised(self._client(), mocker, _response(422, text=RefusedRunBodies.UNKNOWN_MODEL_AT_LOAD), _ROUTE_CALLS[0][1])
-
-        assert exc.type_uri == "https://docs.pipelex.com/latest/errors/validate-bundle-error/"
-        assert exc.title == "Validate bundle"
-        assert exc.instance == "/v1/execute"
-        assert exc.request_id == "req_a3dd6900-7909-48d3-b551-0140e73ac7fc"
-        assert exc.error_type == "ValidateBundleError"
-        assert exc.error_domain == "input"
-        assert exc.retryable is False
-        assert exc.server_message == RefusedRunBodies.UNKNOWN_MODEL_DETAIL
-        assert exc.user_action is not None
-        assert exc.user_action.kind == "change_input"
-        assert exc.user_action.detail == RefusedRunBodies.UNKNOWN_MODEL_NEXT_STEP
-        assert exc.validation_errors is not None
-        assert len(exc.validation_errors) == 1
-        item = exc.validation_errors[0]
-        assert item.category == "pipe_validation"
-        assert item.message == RefusedRunBodies.UNKNOWN_MODEL_DETAIL
-        # The protocol's neutral item: the runner's locators ride model_extra until a client narrows them.
-        assert (item.model_extra or {})["pipe_code"] == "draft_pitch"
-        assert (item.model_extra or {})["suggestions"] == ["gpt-5.5", "gpt-5.4", "gpt-5.6-sol", "gpt-5.4-pro", "gpt-5.6-luna"]
-        # A member this package does not name stays reachable on the decoded document.
-        assert exc.problem is not None
-        assert exc.problem["error_category"] == "configuration"
-        assert exc.response_body == RefusedRunBodies.UNKNOWN_MODEL_AT_LOAD
-        # The message names the failing pipe and the model, then the next step.
-        assert str(exc) == (
-            f"API POST /v1/execute failed (422): {RefusedRunBodies.UNKNOWN_MODEL_DETAIL}\nNext step: {RefusedRunBodies.UNKNOWN_MODEL_NEXT_STEP}"
-        )
-
-    def test_a_run_failed_at_a_pipe_states_its_reason_once(self, mocker: MockerFixture) -> None:
-        """When the reason already says the next step, the message does not repeat it."""
-        exc = self._raised(self._client(), mocker, _response(422, text=RefusedRunBodies.COMBINE_FAILURE_AT_RUN), _ROUTE_CALLS[0][1])
-
-        assert exc.type_uri == "https://docs.pipelex.com/latest/errors/stuff-factory-error/"
-        assert exc.title == "Stuff factory"
-        assert exc.request_id == "req_d4212542-63a6-4ddb-87c9-4b968785c8c5"
-        assert exc.error_type == "StuffFactoryError"
-        assert exc.error_domain == "input"
-        # The runner did not say whether a retry helps: unknown, not False.
-        assert exc.retryable is None
-        assert exc.validation_errors is None
-        assert exc.user_action is not None
-        assert exc.user_action.kind == "change_input"
-        assert exc.user_action.detail == RefusedRunBodies.COMBINE_FAILURE_NEXT_STEP
-        assert exc.server_message is not None
-        assert str(exc) == f"API POST /v1/execute failed (422): {exc.server_message}"
-        assert "Next step:" not in str(exc)
 
     @pytest.mark.parametrize(
-        ("topic", "status", "body", "expected_message", "expected_server_message", "expected_error_type"),
+        ("topic", "params", "expected"),
         [
-            (
-                "legacy detail object",
-                500,
-                RefusedRunBodies.LEGACY_DETAIL_OBJECT,
-                "API POST /v1/execute failed (500): Pipe 'summarize' failed: the input is empty",
-                "Pipe 'summarize' failed: the input is empty",
-                "PipeRunError",
-            ),
-            ("plain detail string", 404, RefusedRunBodies.PLAIN_DETAIL_STRING, "API POST /v1/execute failed (404): Not Found", "Not Found", None),
-            ("title only", 422, RefusedRunBodies.TITLE_ONLY, "API POST /v1/execute failed (422): Malformed request", None, None),
-            (
-                "gateway html page",
-                502,
-                RefusedRunBodies.GATEWAY_HTML,
-                f"API POST /v1/execute failed (502): {RefusedRunBodies.GATEWAY_HTML}",
-                None,
-                None,
-            ),
-            ("empty body", 503, "", "API POST /v1/execute failed (503): Service Unavailable", None, None),
+            ("numbers read as numbers", {"limit": 60, "window": 1.5}, AccountRateLimitedParams(limit=60, window=1.5)),
+            ("an integral number reads as an integer", {"limit": 60.0, "window": 60.0}, AccountRateLimitedParams(limit=60, window=60)),
+            ("a count written as a string", {"limit": "60", "window": 60}, None),
+            ("a window written as a boolean", {"limit": 60, "window": True}, None),
+            ("a fractional count", {"limit": 60.5, "window": 60}, None),
         ],
     )
-    def test_an_answer_that_is_no_problem_document_still_raises_the_typed_error(
-        self,
-        topic: str,
-        status: int,
-        body: str,
-        expected_message: str,
-        expected_server_message: str | None,
-        expected_error_type: str | None,
-        mocker: MockerFixture,
+    def test_a_codes_parameters_read_as_json_types_them(self, topic: str, params: dict[str, Any], expected: AccountRateLimitedParams | None) -> None:
+        """The generated parameters model reads a number strictly, as the problem model does: a string or a boolean is never coerced."""
+        body = json.dumps({**ProblemBodies.RATE_LIMITED, "params": params})
+        exc = self._response_error(self._client(_answering(429, text=body)), lambda client: client.models())
+
+        assert exc.problem.code == "account.rate_limited", topic
+        if expected is None:
+            with pytest.raises(ValidationError):
+                exc.problem.params_as(AccountRateLimitedParams)
+        else:
+            read = exc.problem.params_as(AccountRateLimitedParams)
+            assert read == expected, topic
+            assert type(read.window) is type(expected.window), topic
+
+    def test_a_method_that_does_not_validate_carries_its_faults_as_items(self) -> None:
+        """A run route's refusal of an invalid method keeps one typed item per fault, with its fix."""
+        exc = self._response_error(self._client(_answering(422, text=ProblemBodies.METHOD_INVALID_BODY)), _execute)
+
+        assert exc.problem.code == "method.invalid"
+        assert exc.problem.errors is not None
+        item = exc.problem.errors[0]
+        assert item.code == "method.concept_unresolved"
+        assert item.effective_domain is ProblemDomain.METHOD
+        assert item.suggestions == ["legal.Clause"]
+        assert item.location is not None
+        assert (item.location.pipe, item.location.line) == ("extract_clauses", 30)
+        assert item.suggested_fix is not None
+        assert item.suggested_fix.is_applicable
+        assert isinstance(item.suggested_fix.ops[0], RemapValueOp)
+        assert item.suggested_fix.ops[0].mapping == {"legal.Clausee": "legal.Clause"}
+
+    @pytest.mark.parametrize(
+        ("topic", "status", "body", "expected_code"),
+        [
+            ("an answer written before the protocol's core members", 422, LegacyAnswerBodies.UNKNOWN_MODEL_AT_LOAD, "client.response_unreadable"),
+            # A server error that is no problem document may stand in front of a run that started.
+            ("a legacy detail object", 500, LegacyAnswerBodies.LEGACY_DETAIL_OBJECT, "client.outcome_unknown"),
+            ("a framework's unmatched route", 404, LegacyAnswerBodies.PLAIN_DETAIL_STRING, "client.response_unreadable"),
+            ("a gateway's html page", 502, LegacyAnswerBodies.GATEWAY_HTML, "client.outcome_unknown"),
+            ("an empty 503 on a route that creates a run", 503, "", "client.outcome_unknown"),
+            ("a gateway's time limit", 504, '{"message":"Endpoint request timed out"}', "client.outcome_unknown"),
+            ("a framework's refusal of the method", 405, '{"detail":"Method Not Allowed"}', "request.method_not_allowed"),
+        ],
+    )
+    def test_an_answer_that_is_no_problem_document_reads_as_a_registered_code(self, topic: str, status: int, body: str, expected_code: str) -> None:
+        """Whatever the body, the error carries a problem under a registered code, the status and the raw text."""
+        exc = self._response_error(self._client(_answering(status, text=body)), _execute)
+
+        assert exc.problem.code == expected_code, topic
+        assert exc.status == status
+        assert exc.response_body == body
+        lines = str(exc).split("\n")
+        assert lines[0] == f"API POST /v1/execute failed ({status}): {exc.problem.detail}", topic
+        assert lines[-1] == f"Next step: {exc.problem.next_step.detail}", topic
+        if body:
+            assert len(lines) == 3, topic
+            assert lines[1].startswith("The server answered: "), topic
+        else:
+            assert len(lines) == 2, topic
+
+    def test_the_message_quotes_what_the_server_said_and_the_problem_keeps_the_registrys_words(self) -> None:
+        """A body that is no problem document is quoted on its own line of the message, never in the problem, which stays the client's."""
+        exc = self._response_error(self._client(_answering(401, text='{"detail":"Not authenticated"}')), lambda client: client.models())
+
+        assert str(exc) == (
+            "API GET /v1/models failed (401): "
+            "The runtime answered with the HTTP status 401 and a body that is not a problem document the client can read.\n"
+            'The server answered: {"detail":"Not authenticated"}\n'
+            f"Next step: {exc.problem.next_step.detail}"
+        )
+        assert exc.problem.as_wire() == make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": 401}).as_wire()
+        assert "Not authenticated" not in json.dumps(exc.problem.as_wire())
+
+    @pytest.mark.parametrize(
+        ("topic", "status", "body", "expected_line"),
+        [
+            ("a success that is not the route's answer", 200, "OK", "The server answered: OK"),
+            (
+                "a page on several lines reads on one",
+                502,
+                "<html>\n  <body>\n    <h1>502 Bad Gateway</h1>\n  </body>\n</html>\n",
+                "The server answered: <html> <body> <h1>502 Bad Gateway</h1> </body> </html>",
+            ),
+            ("a long page is cut", 502, "<p>" + "x" * 600 + "</p>", "The server answered: <p>" + "x" * 497 + "…"),
+        ],
+    )
+    def test_the_quote_of_the_body_is_one_bounded_line(self, topic: str, status: int, body: str, expected_line: str) -> None:
+        exc = self._response_error(self._client(_answering(status, text=body)), lambda client: client.version())
+
+        assert str(exc).split("\n")[1] == expected_line, topic
+        assert exc.response_body == body, topic
+
+    def test_a_problem_whose_delay_is_a_date_is_read_once_and_never_quoted(self, mocker: MockerFixture) -> None:
+        """The body is read once, so a clock moving between two reads of a `Retry-After` date cannot make the problem's own JSON read as another."""
+        moments = (_CLOCK_START + timedelta(seconds=index_tick) for index_tick in itertools.count())
+
+        def ticking_now(**_: object) -> datetime:
+            return next(moments)
+
+        clock = mocker.patch("mthds.protocol.problem.answers.datetime", wraps=datetime)
+        clock.now.side_effect = ticking_now
+        retry_at = format_datetime(_CLOCK_START + timedelta(seconds=30), usegmt=True)
+        decode = mocker.spy(problem_answers, "decode_json")
+
+        exc = self._response_error(
+            self._client(_answering(429, text=ProblemBodies.RATE_LIMITED_BODY, headers={"Retry-After": retry_at})),
+            lambda client: client.models(),
+        )
+
+        assert exc.problem.code == "account.rate_limited"
+        assert exc.problem.retry_after == 30
+        assert "The server answered" not in str(exc)
+        assert decode.call_count == 1
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    @pytest.mark.parametrize("status", [500, 502, 503, 504])
+    def test_a_server_error_that_is_no_problem_leaves_a_run_routes_outcome_unknown(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], status: int
     ) -> None:
-        """Whatever the body, the error carries the status and the raw text, and its message the best reason there is."""
-        exc = self._raised(self._client(), mocker, _response(status, text=body), _ROUTE_CALLS[0][1])
+        """A gateway's or a proxy's 5xx may stand in front of a run that started, so a run route never reads it as a plain unreadable answer."""
+        exc = self._response_error(self._client(_answering(status, text='{"message":"Endpoint request timed out"}')), call)
 
-        assert exc.status == status, topic
-        assert exc.response_body == body
-        assert str(exc) == expected_message
-        assert exc.server_message == expected_server_message
-        assert exc.error_type == expected_error_type
-        assert exc.user_action is None
-        assert exc.validation_errors is None
+        if creates_run:
+            assert exc.problem.code == "client.outcome_unknown", f"{route} {status}"
+            assert exc.problem.outcome_is_unknown
+            assert not exc.problem.is_retryable
+            assert exc.problem.status is None
+        else:
+            expected_code = "runtime.unavailable" if status == 503 else "client.response_unreadable"
+            assert exc.problem.code == expected_code, f"{route} {status}"
+        assert exc.status == status
 
-    def test_a_long_raw_body_is_cut_short_in_the_message_and_kept_whole_on_the_error(self, mocker: MockerFixture) -> None:
-        """A page of text is quoted up to a limit in the message; `response_body` holds all of it."""
-        body = "x" * 2000
-        exc = self._raised(self._client(), mocker, _response(502, text=body), _ROUTE_CALLS[0][1])
+    def test_an_empty_503_on_a_read_says_the_runtime_is_unavailable_with_the_delay_it_asks_for(self) -> None:
+        """A read creates nothing, so a 503 with no problem document reads as runtime.unavailable, retry_after from the header."""
+        exc = self._response_error(self._client(_answering(503, headers={"Retry-After": "5"})), lambda client: client.models())
 
-        assert str(exc) == f"API POST /v1/execute failed (502): {'x' * 500}…"
-        assert exc.response_body == body
+        assert exc.problem.code == "runtime.unavailable"
+        assert exc.problem.status == 503
+        assert exc.problem.retry_after == 5
+        assert exc.problem.is_retryable
 
-    def test_a_filtered_models_read_names_its_query_in_the_message(self, mocker: MockerFixture) -> None:
-        """The endpoint in the message is the one requested, query string included."""
-        exc = self._raised(
-            self._client(), mocker, _response(401, text='{"detail":"Invalid API key"}'), lambda client: client.models(ModelCategory.LLM)
+    def test_a_retryable_problem_takes_its_delay_from_the_header(self) -> None:
+        """A problem with a retry of yes and no retry_after takes the `Retry-After` header's; the raw header stays on the error."""
+        exc = self._response_error(
+            self._client(_answering(429, text=ProblemBodies.RATE_LIMITED_BODY, headers={"Retry-After": "17", "X-Request-ID": "req_rate"})),
+            _ROUTE_CALLS[1][2],
         )
 
-        assert str(exc) == "API GET /v1/models?type=llm failed (401): Invalid API key"
-
-    def test_the_answers_headers_and_the_requested_url_stay_on_the_error(self, mocker: MockerFixture) -> None:
-        """A rate-limited answer keeps its `Retry-After`; the error names the URL but keeps nothing of the request, which carries the key."""
-        request = httpx.Request("POST", f"{_BASE_URL}/v1/start", headers={"Authorization": "Bearer test-token"})
-        response = httpx.Response(
-            429, text='{"detail":"Too many requests"}', headers={"Retry-After": "17", "X-Request-ID": "req_rate"}, request=request
-        )
-        exc = self._raised(self._client(), mocker, response, _ROUTE_CALLS[1][1])
-
+        assert exc.problem.code == "account.rate_limited"
+        assert exc.problem.retry_after == 17
+        assert exc.problem.is_retryable
         assert exc.headers["retry-after"] == "17"
+        assert exc.headers["x-request-id"] == "req_rate"
         assert exc.request_url == f"{_BASE_URL}/v1/start"
-        assert exc.request_id == "req_rate"
         for value in vars(exc).values():
             assert not isinstance(value, (httpx.Request, httpx.Response))
         assert "test-token" not in repr(vars(exc))
 
-    def test_a_202_on_execute_still_raises_run_still_running(self, mocker: MockerFixture) -> None:
-        """The protocol's async degrade keeps its own error, ahead of the non-2xx handling."""
-        client = self._client()
-        response = _response(202, text='{"pipeline_run_id":"run_7f3a"}', headers={"Location": "/v1/runs/run_7f3a", "Retry-After": "5"})
-        mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=response))
+    @pytest.mark.parametrize("status", [600, 999])
+    def test_a_problem_answered_with_a_status_http_does_not_define_takes_no_status(self, status: int) -> None:
+        """A parser may hand over a status past `599`, which no problem's `status` holds, so a body that leaves it out reads as sent."""
+        members = {member: value for member, value in ProblemBodies.MODEL_UNKNOWN.items() if member != "status"}
 
-        with pytest.raises(RunStillRunningError) as exc_info:
-            asyncio.run(client.execute(pipe_code="answer"))
-        assert not isinstance(exc_info.value, ApiResponseError)
-        assert exc_info.value.run_id == "run_7f3a"
-        assert exc_info.value.location == "/v1/runs/run_7f3a"
-        assert exc_info.value.retry_after_seconds == 5
+        exc = self._response_error(self._client(_answering(status, text=json.dumps(members))), lambda client: client.models())
 
-    @pytest.mark.parametrize(("route", "call"), _ROUTE_CALLS)
+        assert exc.problem.as_wire() == members
+        assert exc.status == status
+        assert "The server answered" not in str(exc)
+
+    @pytest.mark.parametrize(
+        ("topic", "depth", "expected_code"),
+        [
+            ("a body at the nesting limit reads as received", MAX_BODY_NESTING, "model.unknown"),
+            ("a body past it is unreadable", MAX_BODY_NESTING + 1, "client.response_unreadable"),
+        ],
+    )
+    def test_a_problem_nested_in_an_extra_member_reads_up_to_the_limit(self, topic: str, depth: int, expected_code: str) -> None:
+        """The body's whole nesting counts, its own object included, and a problem read at the limit is written back whole, status filled in."""
+        members = {member: value for member, value in ProblemBodies.MODEL_UNKNOWN.items() if member != "status"}
+        trace = "[" * (depth - 1) + "]" * (depth - 1)
+        body = json.dumps(members)[:-1] + f', "trace": {trace}}}'
+        exc = self._response_error(self._client(_answering(422, text=body)), lambda client: client.models())
+
+        assert exc.problem.code == expected_code, topic
+        if expected_code == "model.unknown":
+            assert exc.problem.as_wire() == {**json.loads(body), "status": 422}, topic
+        else:
+            assert exc.problem.as_wire()["params"] == {"status": 422}, topic
+
+    @pytest.mark.parametrize(
+        ("topic", "literal"), [("a delay past a double's range", '"retry_after":1e999'), ("an extra member past it", '"load":-1e999')]
+    )
+    def test_a_problem_holding_a_number_json_readers_read_as_infinite_is_unreadable(self, topic: str, literal: str) -> None:
+        """A number that reads as an infinity makes the body no JSON a reader can read, as the constant `Infinity` does, so no problem carries it."""
+        body = ProblemBodies.RATE_LIMITED_BODY[:-1] + "," + literal + "}"
+        exc = self._response_error(self._client(_answering(429, text=body)), lambda client: client.models())
+
+        assert exc.problem.code == "client.response_unreadable", topic
+        assert exc.problem.as_wire()["params"] == {"status": 429}, topic
+        assert exc.response_body == body, topic
+
+    @pytest.mark.parametrize(
+        ("topic", "header"),
+        [("a superscript digit", "²"), ("arabic-indic digits", "١٢"), ("digits too many to convert", "9" * 5000)],
+    )
+    def test_a_retry_after_header_the_client_cannot_read_gives_no_delay(self, topic: str, header: str) -> None:
+        """A `Retry-After` that is not ASCII digits, or too long to convert, is unreadable: the call still raises the typed error, with no delay."""
+        headers = {b"Retry-After": header.encode()}
+        rate_limited = self._response_error(
+            self._client(_answering(429, text=ProblemBodies.RATE_LIMITED_BODY, headers=headers)), lambda client: client.models()
+        )
+        unavailable = self._response_error(self._client(_answering(503, headers=headers)), lambda client: client.models())
+        degraded = self._raised(
+            self._client(_answering(202, text='{"pipeline_run_id":"run_7f3a"}', headers=headers)), lambda client: client.execute(pipe_code="answer")
+        )
+
+        assert (rate_limited.problem.code, rate_limited.problem.retry_after) == ("account.rate_limited", None), topic
+        assert "retry_after" not in rate_limited.problem.as_wire(), topic
+        assert (unavailable.problem.code, unavailable.problem.retry_after) == ("runtime.unavailable", None), topic
+        assert isinstance(degraded, RunStillRunningError), topic
+        assert degraded.retry_after_seconds is None, topic
+
+    @pytest.mark.parametrize(
+        ("topic", "status", "body", "header", "expected_request_id"),
+        [
+            ("a gateway's page names the request in the header alone", 502, LegacyAnswerBodies.GATEWAY_HTML, "req_gateway", "req_gateway"),
+            (
+                "a problem's own id wins over the header",
+                422,
+                ProblemBodies.MODEL_UNKNOWN_BODY,
+                "req_header",
+                "req_b7d2c66f-b2d5-4dc7-bd4f-6cf98abfbdc0",
+            ),
+            ("a problem that names none takes the header's", 429, ProblemBodies.RATE_LIMITED_BODY, " req_rate ", "req_rate"),
+            (
+                "a problem's own id is trimmed as the header's is",
+                422,
+                json.dumps({**ProblemBodies.MODEL_UNKNOWN, "request_id": " req_padded\n"}),
+                "req_header",
+                "req_padded",
+            ),
+            ("nothing names the request", 502, LegacyAnswerBodies.GATEWAY_HTML, None, None),
+        ],
+    )
+    def test_the_error_names_the_request_from_the_problem_or_the_header(
+        self, topic: str, status: int, body: str, header: str | None, expected_request_id: str | None
+    ) -> None:
+        """The request id falls back on `X-Request-ID`, on the error alone: the problem stays what the runtime sent or what the client states."""
+        headers = {"X-Request-ID": header} if header is not None else {}
+        exc = self._response_error(self._client(_answering(status, text=body, headers=headers)), lambda client: client.models())
+
+        assert exc.request_id == expected_request_id, topic
+        if exc.problem.code == "client.response_unreadable":
+            assert exc.problem.as_wire() == make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": status}).as_wire(), topic
+        else:
+            assert exc.problem.as_wire() == json.loads(body), topic
+
+    def test_a_filtered_models_read_names_its_query_in_the_message(self) -> None:
+        """The endpoint in the message is the one requested, query string included."""
+        exc = self._response_error(
+            self._client(_answering(401, text='{"detail":"Invalid API key"}')), lambda client: client.models(ModelCategory.LLM)
+        )
+
+        assert str(exc).startswith("API GET /v1/models?type=llm failed (401): ")
+        assert exc.request_url == f"{_BASE_URL}/v1/models?type=llm"
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    @pytest.mark.parametrize(
+        ("topic", "body"), [("a body that is not json", "OK"), ("json that is not the route's answer", '["not", "an", "answer"]')]
+    )
+    def test_a_success_the_client_cannot_read_is_an_unreadable_answer(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, body: str
+    ) -> None:
+        """A 2xx whose body is not the route's answer is unreadable, never a pydantic error, and on a run route it leaves the outcome unknown."""
+        status = 202 if route == "POST /v1/start" else 200
+        exc = self._response_error(self._client(_answering(status, text=body)), call)
+
+        if creates_run:
+            assert exc.problem.as_wire() == make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN).as_wire(), f"{route}, {topic}"
+        else:
+            assert exc.problem.code == "client.response_unreadable", f"{route}, {topic}"
+            assert exc.problem.as_wire()["params"] == {"status": status}
+        assert exc.status == status
+        assert str(exc).split("\n")[1] == f"The server answered: {body}"
+
+    @pytest.mark.parametrize(
+        ("topic", "route", "status", "body", "expected_run_id"),
+        [
+            ("an execute whose output is not one", "POST /v1/execute", 200, '{"pipeline_run_id":"run_7f3a","pipe_output":42}', "run_7f3a"),
+            ("an execute with no output", "POST /v1/execute", 200, '{"pipeline_run_id":"run_7f3a"}', "run_7f3a"),
+            ("an execute naming an empty run", "POST /v1/execute", 200, '{"pipeline_run_id":"","pipe_output":{}}', None),
+            ("a start whose run id is no string", "POST /v1/start", 202, '{"pipeline_run_id":42}', None),
+            ("a start naming an empty run", "POST /v1/start", 202, '{"pipeline_run_id":""}', None),
+            ("a start naming an empty run with members of its own", "POST /v1/start", 201, '{"pipeline_run_id":"","state":"queued"}', None),
+            ("a start naming no run", "POST /v1/start", 202, '{"status":"accepted"}', None),
+            ("a start whose body is not json", "POST /v1/start", 202, "Accepted", None),
+        ],
+    )
+    def test_a_run_routes_success_the_client_cannot_read_names_the_run_it_gives(
+        self, topic: str, route: str, status: int, body: str, expected_run_id: str | None
+    ) -> None:
+        """The runtime accepted the request, so the run may exist: `client.outcome_unknown`, naming the run when the body gives a usable id."""
+        call = next(call for label, _, call in _ROUTE_CALLS if label == route)
+        exc = self._response_error(self._client(_answering(status, text=body)), call)
+
+        params = {"pipeline_run_id": expected_run_id} if expected_run_id is not None else None
+        expected = make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN, params=params, pipeline_run_id=expected_run_id)
+        assert exc.problem.as_wire() == expected.as_wire(), topic
+        assert exc.problem.pipeline_run_id == expected_run_id, topic
+        assert exc.problem.outcome_is_unknown, topic
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    @pytest.mark.parametrize(
+        ("topic", "literal"),
+        [("the constant NaN", "NaN"), ("the constant Infinity", "Infinity"), ("a number past a double's range", "1e999")],
+    )
+    def test_a_success_body_is_decoded_by_the_rules_of_an_error_body(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, literal: str
+    ) -> None:
+        """A success whose body holds a number JSON cannot write is unreadable, as an error body holding it is, whatever the route parses."""
+        status = 202 if route == "POST /v1/start" else 200
+        # One body every route's answer validates from, so that only the literal can make it unreadable.
+        answer: dict[str, Any] = {**ExecuteWireResponses.REDUCED, "is_valid": True, "models": [], "protocol_version": "1.0.0"}
+        body = json.dumps(answer)[:-1] + f', "load": {literal}}}'
+        exc = self._response_error(self._client(_answering(status, text=body)), call)
+
+        if creates_run:
+            assert exc.problem.as_wire() == make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN).as_wire(), f"{route}, {topic}"
+        else:
+            assert exc.problem.code == "client.response_unreadable", f"{route}, {topic}"
+            assert exc.problem.as_wire()["params"] == {"status": status}
+
+    @pytest.mark.parametrize("literal", ["NaN", "1e999"])
+    def test_a_202_on_execute_whose_body_is_no_json_names_no_run(self, literal: str) -> None:
+        """A 202 body is decoded by the same rules, so one holding a number JSON cannot write names no run the client can read."""
+        handler = _answering(202, text=f'{{"pipeline_run_id":"run_7f3a","load":{literal}}}')
+        exc = self._response_error(self._client(handler), lambda client: client.execute(pipe_code="answer"))
+
+        assert exc.problem.code == "client.outcome_unknown", literal
+        assert exc.problem.pipeline_run_id is None, literal
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    @pytest.mark.parametrize(
+        ("topic", "failure", "code_on_a_read", "code_on_a_run"),
+        [
+            ("no connection opened", httpx.ConnectError, "client.unreachable", "client.unreachable"),
+            ("the connection attempt timed out", httpx.ConnectTimeout, "client.unreachable", "client.unreachable"),
+            ("the request was refused locally", httpx.LocalProtocolError, "client.unreachable", "client.unreachable"),
+            ("no free connection in the pool", httpx.PoolTimeout, "client.timeout", "client.timeout"),
+            ("no answer in time", httpx.ReadTimeout, "client.timeout", "client.outcome_unknown"),
+            ("the connection dropped mid-answer", httpx.ReadError, "client.unreachable", "client.outcome_unknown"),
+            ("the server closed without an answer", httpx.RemoteProtocolError, "client.unreachable", "client.outcome_unknown"),
+        ],
+    )
+    def test_a_request_that_got_no_answer_is_a_transport_error(
+        self,
+        route: str,
+        creates_run: bool,
+        call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]],
+        topic: str,
+        failure: type[httpx.TransportError],
+        code_on_a_read: str,
+        code_on_a_run: str,
+    ) -> None:
+        """No answer raises ApiTransportError on every route, and a request that may have created a run is never offered for a retry."""
+        exc = self._raised(self._client(_failing(failure)), call)
+
+        assert isinstance(exc, ApiTransportError), topic
+        expected_code = code_on_a_run if creates_run else code_on_a_read
+        assert exc.problem.code == expected_code, f"{route}: {topic}"
+        assert isinstance(exc.__cause__, httpx.TransportError)
+        assert exc.api_url == _BASE_URL
+        assert str(exc).startswith(f"API {route} failed: {exc.problem.detail}\nNext step: ")
+        if expected_code == "client.outcome_unknown":
+            assert exc.problem.outcome_is_unknown
+            assert not exc.problem.is_retryable
+        if expected_code == "client.timeout":
+            assert exc.problem.as_wire()["params"] == {"seconds": 30}
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    @pytest.mark.parametrize(
+        ("topic", "base_url"),
+        [("no scheme", "api.example.com"), ("a host read as a scheme", "localhost:8081"), ("a scheme not sent to", "ftp://example.com")],
+    )
+    def test_a_base_url_the_client_cannot_send_to_is_a_setting_to_fix(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, base_url: str
+    ) -> None:
+        """The real httpx transport refuses the scheme before connecting, so the call reads as `client.not_configured`, never as a retry."""
+        client = MthdsAPIClient(api_key="test-token", base_url=base_url, request_timeout_seconds=30.0)
+        exc = self._raised(client, call)
+
+        assert isinstance(exc, ClientNotConfiguredError), f"{route}, {topic}: {exc!r}"
+        assert isinstance(exc.__cause__, httpx.UnsupportedProtocol)
+        assert exc.problem.code == "client.not_configured", f"{route} creates a run: {creates_run}"
+        assert exc.problem.as_wire()["params"] == {"setting": "base_url"}
+        assert not exc.problem.is_retryable
+        assert not exc.problem.outcome_is_unknown
+
+    def test_a_202_on_execute_raises_run_still_running(self) -> None:
+        """The protocol's async degrade reads as `client.follow_failed` naming the run, with the 202's hints on the error."""
+        handler = _answering(202, text='{"pipeline_run_id":"run_7f3a"}', headers={"Location": "/v1/runs/run_7f3a", "Retry-After": "5"})
+        exc = self._raised(self._client(handler), lambda client: client.execute(pipe_code="answer"))
+
+        assert isinstance(exc, RunStillRunningError)
+        assert not isinstance(exc, ApiResponseError)
+        assert exc.run_id == "run_7f3a"
+        assert exc.location == "/v1/runs/run_7f3a"
+        assert exc.retry_after_seconds == 5
+        assert exc.problem.code == "client.follow_failed"
+        assert exc.problem.as_wire()["params"] == {"pipeline_run_id": "run_7f3a"}
+        # The run exists, so the problem names it as the protocol's member too.
+        assert exc.problem.pipeline_run_id == "run_7f3a"
+        assert exc.problem.outcome_is_unknown
+        assert str(exc).endswith("\nNext step: Read the run 'run_7f3a' by its id rather than start it again.")
+
+    @pytest.mark.parametrize(
+        ("topic", "body"),
+        [("an empty object", "{}"), ("an empty run id", '{"pipeline_run_id":""}'), ("a body that is not json", "Accepted"), ("no body", "")],
+    )
+    def test_a_202_on_execute_naming_no_run_leaves_the_outcome_unknown(self, topic: str, body: str) -> None:
+        """A 202 that names no run says the runtime accepted the request, so the run may exist: `client.outcome_unknown`, never repeated."""
+        exc = self._response_error(self._client(_answering(202, text=body)), lambda client: client.execute(pipe_code="answer"))
+
+        assert exc.problem.code == "client.outcome_unknown", topic
+        assert exc.problem.outcome_is_unknown, topic
+        assert not exc.problem.is_retryable, topic
+        assert exc.problem.pipeline_run_id is None, topic
+        assert exc.status == 202, topic
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    @pytest.mark.parametrize(("topic", "status"), [("a success", 200), ("an accepted start", 202), ("an unavailable runtime", 503)])
+    def test_a_body_whose_encoding_cannot_be_decoded_is_no_usable_answer(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, status: int
+    ) -> None:
+        """A broken gzip stream is a request that got no usable answer once it had left, whatever the status, as the TypeScript client reads it."""
+        broken = b"this was never gzip"
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            headers = {"Content-Encoding": "gzip", "Content-Type": "application/json", "Retry-After": "3"}
+            return httpx.Response(status, stream=httpx.ByteStream(broken), headers=headers, request=request)
+
+        exc = self._raised(self._client(handle), call)
+
+        assert isinstance(exc, ApiTransportError), f"{route}, {topic}: {exc!r}"
+        assert isinstance(exc.__cause__, httpx.DecodingError), f"{route}, {topic}"
+        if creates_run:
+            expected = make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN)
+        else:
+            expected = make_client_problem(CoreCode.CLIENT_UNREACHABLE, params={"base_url": _BASE_URL})
+        assert exc.problem.as_wire() == expected.as_wire(), f"{route}, {topic}"
+        assert exc.problem.outcome_is_unknown is creates_run, f"{route}, {topic}"
+        assert exc.problem.retry_after is None, f"{route}, {topic}"
+        assert exc.api_url == _BASE_URL
+        assert exc.request_url == f"{_BASE_URL}{route.split(' ')[1]}"
+        assert str(exc) == f"API {route} failed: {exc.problem.detail}\nNext step: {exc.problem.next_step.detail}", f"{route}, {topic}"
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
     def test_a_client_built_on_this_one_raises_its_own_subclass_from_every_route(
-        self, route: str, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], mocker: MockerFixture
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]
     ) -> None:
         """Overriding the protected seam re-types every inherited route's error, which base handlers still catch."""
-        client = _NarrowingClient(api_key="test-token", base_url=_BASE_URL)
-        exc = self._raised(client, mocker, _response(422, text=RefusedRunBodies.UNKNOWN_MODEL_AT_LOAD), call)
+        client = self._client(_answering(422, text=ProblemBodies.MODEL_UNKNOWN_BODY), client_class=_NarrowingClient)
+        exc = self._response_error(client, call)
 
-        assert isinstance(exc, _NarrowedApiResponseError)
-        assert exc.category == "configuration"
-        assert exc.validation_errors is not None
-        assert exc.validation_errors[0].pipe_code == "draft_pitch"
-        assert str(exc) == f"API {route} failed (422)\nNext step: {RefusedRunBodies.UNKNOWN_MODEL_NEXT_STEP}"
+        assert isinstance(exc, _NarrowedApiResponseError), f"{route} creates a run: {creates_run}"
+        assert exc.request_id == "req_b7d2c66f-b2d5-4dc7-bd4f-6cf98abfbdc0"
+        assert exc.problem.code == "model.unknown"
+        assert str(exc) == f"API {route} failed (422)\nNext step: Ask the method's owner to name a model that exists in place of 'gpt-5.1'."
