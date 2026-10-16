@@ -1,12 +1,26 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from typing_extensions import override
 
+from mthds.protocol.problem.client_problems import make_client_problem
+from mthds.protocol.problem.registry import CoreCode
+
+if TYPE_CHECKING:
+    from mthds.protocol.problem.models import Problem
+
 
 class PipelineRequestError(Exception):
-    """Raised when a request to an MTHDS runner is malformed or fails client-side.
+    """The root of every error a request to an MTHDS runner raises, carrying the failure as a problem.
+
+    `problem` is the protocol's problem document for the failure: the runtime's own when it answered
+    with one, and otherwise the problem the client states for it under a registered code, such as
+    `client.argument_invalid` for an argument refused before any request left (the code this class
+    carries when it is raised bare), `client.unreachable` for a runtime no connection reached, or
+    `client.response_unreadable` for an answer that is no problem document. A program branches on
+    `problem.code`, and on `problem.effective_domain`, `problem.effective_retry` and
+    `problem.is_retryable`, never on the wording of the message, which is for a person.
 
     A subclass survives pickling and copying whatever its `__init__` asks for: the error is rebuilt
     from its message and its instance attributes without calling `__init__` again, so a subclass
@@ -14,6 +28,16 @@ class PipelineRequestError(Exception):
     process pool, a task queue) as itself rather than as a `TypeError`. A subclass that defines its
     own `__new__` or keeps state in `__slots__` provides its own `__reduce__`.
     """
+
+    def __init__(self, message: str, *, problem: Problem) -> None:
+        """Build the error.
+
+        Args:
+            message: What failed, for a person.
+            problem: The failure as the protocol's problem document.
+        """
+        super().__init__(message)
+        self.problem = problem
 
     @override
     def __reduce__(self) -> tuple[Any, ...]:
@@ -23,3 +47,18 @@ class PipelineRequestError(Exception):
 def _rebuild_request_error(cls: type[PipelineRequestError], args: tuple[Any, ...]) -> PipelineRequestError:
     """Recreate a request error from its `args`, leaving its attributes to the pickled state."""
     return cls.__new__(cls, *args)
+
+
+def make_argument_invalid_error(message: str, *, argument: str, reason: str) -> PipelineRequestError:
+    """The error for an argument refused before any request left: `client.argument_invalid`.
+
+    Args:
+        message: What is wrong with the argument, for a person.
+        argument: The argument refused, by name.
+        reason: Why it was refused, as an identifier such as `not_a_string` or `mutually_exclusive`.
+
+    Returns:
+        A `PipelineRequestError` carrying the problem `client.argument_invalid` with `argument` and `reason`.
+    """
+    problem = make_client_problem(CoreCode.CLIENT_ARGUMENT_INVALID, params={"argument": argument, "reason": reason})
+    return PipelineRequestError(message, problem=problem)

@@ -89,11 +89,12 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             RunResultExecute — the completed run: `pipeline_run_id` + `pipe_output`.
 
         Raises:
-            RunStillRunningError: If the server answers 202 (the protocol's
-                optional async degrade) instead of a final result.
-            ApiResponseError: If the server answers non-2xx (the API runner), with
-                the members of its problem document typed.
-            ClientAuthenticationError: If an API token is missing for API execution.
+            PipelineRequestError: For every failure of the call, carrying it as a
+                problem document under a registered code (`exc.problem`). The API
+                runner raises its subclasses: `RunStillRunningError` when the server
+                answers 202 (the protocol's optional async degrade) instead of a final
+                result, `ApiResponseError` when it answers non-2xx or a success the
+                client cannot read, and `ApiTransportError` when no answer came back.
         """
         ...
 
@@ -129,9 +130,11 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             (no output yet)
 
         Raises:
-            ApiResponseError: If the server answers non-2xx (the API runner), with
-                the members of its problem document typed.
-            ClientAuthenticationError: If an API token is missing for API execution.
+            PipelineRequestError: For every failure of the call, carrying it as a
+                problem document under a registered code (`exc.problem`). The API
+                runner raises its subclasses: `ApiResponseError` when the server
+                answers non-2xx or a success the client cannot read, and
+                `ApiTransportError` when no answer came back.
         """
         ...
 
@@ -155,7 +158,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         Returns:
             The 200-diagnostic verdict union, discriminated on `is_valid`: a
             `ValidationReport` (`is_valid: true`, structural artifacts) or an
-            `InvalidValidationReport` (`is_valid: false`, `validation_errors[]`).
+            `InvalidValidationReport` (`is_valid: false`, its faults in `errors[]`).
             An invalid bundle is a produced verdict, NOT a raised 422 — non-2xx is
             reserved for "no verdict could be produced". (The local CLI runner is the
             documented exception: it surfaces an invalid bundle as a raised

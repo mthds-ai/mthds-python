@@ -101,7 +101,7 @@ from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from mthds.protocol.exceptions import PipelineRequestError
+from mthds.protocol.exceptions import make_argument_invalid_error
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -179,7 +179,7 @@ def _escape_lone_surrogates(dumped: str) -> str:
 def _refuse_json_constant(constant: str) -> NoReturn:
     """Refuse the three constants `json.loads` accepts as an extension and `JSON.parse` rejects."""
     msg = f"Method file source is not valid JSON; expected a [{{ name, content }}] array (got `{constant}`)."
-    raise PipelineRequestError(msg)
+    raise make_argument_invalid_error(msg, argument="source", reason="not_json")
 
 
 def serialize_method_files(files: Sequence[MethodFile]) -> str:
@@ -245,18 +245,18 @@ def parse_method_files(source: str | None) -> list[MethodFile]:
         parsed = json.loads(source, parse_constant=_refuse_json_constant, parse_int=float)
     except (ValueError, RecursionError) as exc:
         msg = "Method file source is not valid JSON; expected a [{ name, content }] array."
-        raise PipelineRequestError(msg) from exc
+        raise make_argument_invalid_error(msg, argument="source", reason="not_json") from exc
 
     if not isinstance(parsed, list):
         msg = "Method file source must be a JSON array of { name, content } entries."
-        raise PipelineRequestError(msg)
+        raise make_argument_invalid_error(msg, argument="source", reason="not_an_array")
 
     files: list[MethodFile] = []
     for entry in cast("list[Any]", parsed):
         method_file = _method_file_from_entry(entry)
         if method_file is None:
             msg = "Each method file entry must be an object with string `name` and string `content`."
-            raise PipelineRequestError(msg)
+            raise make_argument_invalid_error(msg, argument="source", reason="entry_malformed")
         if not _is_blank(method_file.content):
             files.append(method_file)
     return files
