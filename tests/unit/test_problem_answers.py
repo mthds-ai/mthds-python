@@ -191,8 +191,10 @@ class TestProblemAnswers:
         ],
     )
     def test_an_answer_that_is_no_problem_document_reads_by_its_status(self, topic: str, status: int, creates_run: bool, expected_code: str) -> None:
-        problem = read_answer(status=status, body=LegacyAnswerBodies.PLAIN_DETAIL_STRING, headers={}, creates_run=creates_run)
+        reading = read_answer(status=status, body=LegacyAnswerBodies.PLAIN_DETAIL_STRING, headers={}, creates_run=creates_run)
+        problem = reading.problem
 
+        assert reading.from_body is False, topic
         assert problem.code == expected_code, topic
         if expected_code == "client.response_unreadable":
             assert problem.as_wire()["params"] == {"status": status}
@@ -202,6 +204,13 @@ class TestProblemAnswers:
             assert problem.status is None, topic
         else:
             assert problem.status == status
+
+    def test_a_problem_document_reads_as_the_bodys_own(self) -> None:
+        """The reading says the problem is the body's, so that a caller never reads the body again to tell."""
+        reading = read_answer(status=422, body=ProblemBodies.MODEL_UNKNOWN_BODY, headers={}, creates_run=True)
+
+        assert reading.from_body is True
+        assert reading.problem.as_wire() == ProblemBodies.MODEL_UNKNOWN
 
     def test_unreadable_answer_names_the_status(self) -> None:
         problem = unreadable_answer(200)

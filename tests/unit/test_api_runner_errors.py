@@ -1,8 +1,11 @@
 """Tests for how MthdsAPIClient reads every failure of every route as a problem, httpx's transport mocked."""
 
 import asyncio
+import itertools
 import json
 from collections.abc import Callable, Coroutine, Mapping
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from typing import Any, NoReturn
 
 import httpx
@@ -13,6 +16,7 @@ from typing_extensions import override
 
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import ModelCategory
+from mthds.protocol.problem import answers as problem_answers
 from mthds.protocol.problem.answers import MAX_BODY_NESTING
 from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.models import Problem, ProblemDomain, RemapValueOp
@@ -22,6 +26,7 @@ from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, Cl
 from tests.unit.test_data import ExecuteWireResponses, LegacyAnswerBodies, ProblemBodies
 
 _BASE_URL = "http://localhost:8081"
+_CLOCK_START = datetime(2026, 10, 16, 12, 0, 0, tzinfo=UTC)
 
 
 def _execute(client: MthdsAPIClient) -> Coroutine[Any, Any, object]:
@@ -72,7 +77,9 @@ class _NarrowingClient(MthdsAPIClient):
     """A client built on the base that raises its own error subclass through the protected seam."""
 
     @override
-    def _raise_api_response_error(self, *, method: str, endpoint: str, response: httpx.Response, problem: Problem) -> NoReturn:
+    def _raise_api_response_error(
+        self, *, method: str, endpoint: str, response: httpx.Response, problem: Problem, problem_from_body: bool
+    ) -> NoReturn:
         request_id = (problem.model_extra or {}).get("request_id")
         msg = f"API {method} /v1/{endpoint} failed ({response.status_code})"
         raise _NarrowedApiResponseError(
@@ -243,6 +250,28 @@ class TestMthdsAPIClientErrors:
 
         assert str(exc).split("\n")[1] == expected_line, topic
         assert exc.response_body == body, topic
+
+    def test_a_problem_whose_delay_is_a_date_is_read_once_and_never_quoted(self, mocker: MockerFixture) -> None:
+        """The body is read once, so a clock moving between two reads of a `Retry-After` date cannot make the problem's own JSON read as another."""
+        moments = (_CLOCK_START + timedelta(seconds=index_tick) for index_tick in itertools.count())
+
+        def ticking_now(**_: object) -> datetime:
+            return next(moments)
+
+        clock = mocker.patch("mthds.protocol.problem.answers.datetime", wraps=datetime)
+        clock.now.side_effect = ticking_now
+        retry_at = format_datetime(_CLOCK_START + timedelta(seconds=30), usegmt=True)
+        decode = mocker.spy(problem_answers, "decode_json")
+
+        exc = self._response_error(
+            self._client(_answering(429, text=ProblemBodies.RATE_LIMITED_BODY, headers={"Retry-After": retry_at})),
+            lambda client: client.models(),
+        )
+
+        assert exc.problem.code == "account.rate_limited"
+        assert exc.problem.retry_after == 30
+        assert "The server answered" not in str(exc)
+        assert decode.call_count == 1
 
     @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
     @pytest.mark.parametrize("status", [500, 502, 503, 504])

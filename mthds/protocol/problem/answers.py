@@ -87,6 +87,17 @@ _NOT_A_BRACKET = re.compile(r"[^\[\]{}]+")
 _BRACKET_STEPS: dict[str, int] = {"[": 1, "{": 1, "]": -1, "}": -1}
 
 
+class AnswerReading(NamedTuple):
+    """An answer read as a problem: `from_body` is true when `problem` is the body's own problem document.
+
+    A caller that shows a person what the server said quotes the body only when `from_body` is false,
+    since the problem is then one the client states in the registry's words.
+    """
+
+    problem: Problem
+    from_body: bool
+
+
 class DecodedBody(NamedTuple):
     """A body decoded as JSON: `is_json` is false when it is not JSON, and `value` is then `None`."""
 
@@ -311,8 +322,12 @@ def unreadable_answer(status: int) -> Problem:
     return make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": status})
 
 
-def read_answer(*, status: int, body: str, headers: Mapping[str, str], creates_run: bool) -> Problem:
+def read_answer(*, status: int, body: str, headers: Mapping[str, str], creates_run: bool) -> AnswerReading:
     """Read an error answer as a problem, whatever its body.
+
+    The body is decoded once, and the reading says whether the problem is the body's own, so that a
+    caller never reads the body again to tell, which could read a `Retry-After` date otherwise a
+    second later.
 
     Args:
         status: The answer's HTTP status.
@@ -321,12 +336,18 @@ def read_answer(*, status: int, body: str, headers: Mapping[str, str], creates_r
         creates_run: Whether the request may have created a run, as `POST /execute` and `POST /start` do.
 
     Returns:
-        The runtime's problem when the body is one, else `client.outcome_unknown` for a server error
-        on a route that creates a run, else the code the status names, else `client.response_unreadable`.
+        The runtime's problem when the body is one, `from_body` true, else, `from_body` false,
+        `client.outcome_unknown` for a server error on a route that creates a run, else the code the
+        status names, else `client.response_unreadable`.
     """
     problem = read_problem_document(body, status=status, headers=headers)
     if problem is not None:
-        return problem
+        return AnswerReading(problem=problem, from_body=True)
+    return AnswerReading(problem=_status_problem(status=status, headers=headers, creates_run=creates_run), from_body=False)
+
+
+def _status_problem(*, status: int, headers: Mapping[str, str], creates_run: bool) -> Problem:
+    """The problem of an error answer whose body is no problem document, read from its status alone."""
     if creates_run and _is_server_error(status):
         return make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN)
     code = STATUS_READINGS.get(status)

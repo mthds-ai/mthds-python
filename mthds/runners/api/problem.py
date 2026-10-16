@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from mthds.protocol.problem.answers import read_answer, read_problem_document
+from mthds.protocol.problem.answers import AnswerReading, read_answer
 from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.registry import CoreCode
 
@@ -47,7 +47,7 @@ def lower_case_headers(headers: httpx.Headers) -> dict[str, str]:
     return {name.lower(): value for name, value in headers.items()}
 
 
-def answer_excerpt(response: httpx.Response, *, problem: Problem) -> str | None:
+def answer_excerpt(response: httpx.Response, *, problem_from_body: bool) -> str | None:
     """The start of an answer's body, for a person, when the body is not the problem an error carries.
 
     An answer that is no problem document, such as a gateway's `{"detail":"Not authenticated"}` or a
@@ -59,15 +59,17 @@ def answer_excerpt(response: httpx.Response, *, problem: Problem) -> str | None:
 
     Args:
         response: The runner's answer.
-        problem: The problem the error carries for it.
+        problem_from_body: Whether the problem the error carries is the body's own problem document,
+            as the reading of the answer says (`mthds.protocol.problem.answers.AnswerReading.from_body`);
+            the body is never read again to tell.
 
     Returns:
         The excerpt, or `None` when the body is empty or is the problem the error carries.
     """
+    if problem_from_body:
+        return None
     text = " ".join(response.text.split())
     if not text:
-        return None
-    if read_problem_document(response.text, status=response.status_code, headers=lower_case_headers(response.headers)) == problem:
         return None
     if len(text) <= ANSWER_EXCERPT_LIMIT:
         return text
@@ -95,15 +97,16 @@ def answer_request_id(response: httpx.Response, *, problem: Problem) -> str | No
     return response.headers.get(REQUEST_ID_HEADER, "").strip() or None
 
 
-def read_response_problem(response: httpx.Response, *, creates_run: bool) -> Problem:
-    """Read an error answer as a problem, whatever its body.
+def read_error_answer(response: httpx.Response, *, creates_run: bool) -> AnswerReading:
+    """Read an error answer as a problem, whatever its body, saying whether the problem is the body's own.
 
     Args:
         response: The runner's answer.
         creates_run: Whether the request may have created a run, as `POST /execute` and `POST /start` do.
 
     Returns:
-        The runtime's problem document, else the problem the client reads from the answer's status.
+        The runtime's problem document, else the problem the client reads from the answer's status,
+        with `from_body` saying which.
     """
     return read_answer(
         status=response.status_code,

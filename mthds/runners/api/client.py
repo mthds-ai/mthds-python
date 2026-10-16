@@ -17,7 +17,7 @@ from mthds.protocol.problem.registry import CoreCode
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
 from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
-from mthds.runners.api.problem import answer_excerpt, answer_request_id, lower_case_headers, read_response_problem, transport_failure_problem
+from mthds.runners.api.problem import answer_excerpt, answer_request_id, lower_case_headers, read_error_answer, transport_failure_problem
 from mthds.runners.api.user_agent import AppInfo, build_user_agent, mthds_python_token
 from mthds.runners.types import RunnerType
 
@@ -273,16 +273,21 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             ApiResponseError: If the answer is a non-2xx, or a success the client cannot read.
         """
         if not response.is_success:
+            reading = read_error_answer(response, creates_run=creates_run)
             self._raise_api_response_error(
-                method=method, endpoint=endpoint, response=response, problem=read_response_problem(response, creates_run=creates_run)
+                method=method, endpoint=endpoint, response=response, problem=reading.problem, problem_from_body=reading.from_body
             )
         decoded = decode_json(response.text)
         if not decoded.is_json:
-            self._raise_api_response_error(method=method, endpoint=endpoint, response=response, problem=unreadable_answer(response.status_code))
+            self._raise_api_response_error(
+                method=method, endpoint=endpoint, response=response, problem=unreadable_answer(response.status_code), problem_from_body=False
+            )
         try:
             return parse(decoded.value)
         except ValidationError:
-            self._raise_api_response_error(method=method, endpoint=endpoint, response=response, problem=unreadable_answer(response.status_code))
+            self._raise_api_response_error(
+                method=method, endpoint=endpoint, response=response, problem=unreadable_answer(response.status_code), problem_from_body=False
+            )
 
     # ── Protocol surface ─────────────────────────────────────────────────
 
@@ -424,8 +429,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         content = to_json(body)
         response = await self._request("POST", "validate", content=content, creates_run=False)
         if not response.is_success:
+            reading = read_error_answer(response, creates_run=False)
             self._raise_api_response_error(
-                method="POST", endpoint="validate", response=response, problem=read_response_problem(response, creates_run=False)
+                method="POST", endpoint="validate", response=response, problem=reading.problem, problem_from_body=reading.from_body
             )
         return response
 
@@ -517,7 +523,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         response = await self._request("GET", "version", content=None, creates_run=False)
         return self._parse_answer(method="GET", endpoint="version", response=response, creates_run=False, parse=VersionInfo.model_validate)
 
-    def _raise_api_response_error(self, *, method: str, endpoint: str, response: httpx.Response, problem: Problem) -> NoReturn:
+    def _raise_api_response_error(
+        self, *, method: str, endpoint: str, response: httpx.Response, problem: Problem, problem_from_body: bool
+    ) -> NoReturn:
         """Raise the `ApiResponseError` of an answer that is a failure, carrying the problem it reads as.
 
         Every route calls this for a non-2xx answer and for a success it cannot read, so it is the one
@@ -532,14 +540,16 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             endpoint: The endpoint below the protocol prefix, query included, exactly as the route sent it
                 (`execute`, `models?type=llm`): it names the request in the message and gives `request_url`.
             response: The runner's answer.
-            problem: The problem the answer reads as (`mthds.runners.api.problem.read_response_problem`
+            problem: The problem the answer reads as (`mthds.runners.api.problem.read_error_answer`
                 for a non-2xx, `mthds.protocol.problem.answers.unreadable_answer` for a success it cannot read).
+            problem_from_body: Whether `problem` is the body's own problem document, as the reading of the
+                answer says; when it is not, the message quotes the body.
 
         Raises:
             ApiResponseError: Always.
         """
         msg = f"API {method} /{self._API_PREFIX}/{endpoint} failed ({response.status_code}): {problem.detail}"
-        excerpt = answer_excerpt(response, problem=problem)
+        excerpt = answer_excerpt(response, problem_from_body=problem_from_body)
         if excerpt is not None:
             msg = f"{msg}\nThe server answered: {excerpt}"
         raise ApiResponseError(
@@ -573,7 +583,11 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         started_run_id = cast("dict[str, Any]", raw).get("pipeline_run_id") if isinstance(raw, dict) else None
         if not isinstance(started_run_id, str) or not started_run_id:
             self._raise_api_response_error(
-                method="POST", endpoint="execute", response=response, problem=make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN)
+                method="POST",
+                endpoint="execute",
+                response=response,
+                problem=make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN),
+                problem_from_body=False,
             )
         problem = make_client_problem(CoreCode.CLIENT_FOLLOW_FAILED, params={"pipeline_run_id": started_run_id}, pipeline_run_id=started_run_id)
         msg = (
