@@ -265,30 +265,30 @@
       "name": "problem-with-a-mistyped-member"
     },
     {
-      "description": "A body holding the NaN constant, which JSON does not define, is not JSON, so it reads as an unreadable answer.",
+      "description": "A problem body holding the NaN constant in an extra member is not JSON, which does not define that constant, so it reads as an unreadable answer rather than as its problem.",
       "expected": {
         "code": "client.response_unreadable",
-        "detail": "The runtime answered with the HTTP status 503 and a body that is not a problem document the client can read.",
+        "detail": "The runtime answered with the HTTP status 500 and a body that is not a problem document the client can read.",
         "domain": "runtime",
         "next_step": {
           "detail": "Report this to whoever runs the runtime, with the status and the body.",
           "kind": "report"
         },
         "params": {
-          "status": 503
+          "status": 500
         },
         "retry": "no",
         "title": "The runtime's answer could not be read",
         "type": "https://mthds.ai/errors/client.response_unreadable"
       },
       "input": {
-        "body": "{\"type\":\"https://mthds.ai/errors/runtime.unavailable\",\"title\":\"The runtime or a service it depends on is unavailable\",\"status\":503,\"detail\":\"The runtime, or a service it depends on, is unavailable.\",\"code\":\"runtime.unavailable\",\"domain\":\"runtime\",\"retry\":\"yes\",\"next_step\":{\"kind\":\"wait\",\"detail\":\"Wait, then send the request again.\"},\"params\":{},\"retry_after\":NaN}",
+        "body": "{\"type\":\"https://mthds.ai/errors/runtime.unexpected\",\"title\":\"An unexpected error occurred\",\"status\":500,\"detail\":\"The runtime met an unexpected error.\",\"code\":\"runtime.unexpected\",\"domain\":\"runtime\",\"retry\":\"no\",\"next_step\":{\"kind\":\"report\",\"detail\":\"Report this to whoever runs the runtime.\"},\"load\":NaN}",
         "headers": {
           "content-type": "application/problem+json"
         },
         "kind": "response",
         "route": "GET /models",
-        "status": 503
+        "status": 500
       },
       "name": "json-constant-nan"
     },
