@@ -27,6 +27,7 @@ The models follow the protocol's reader rules (the "Errors" section of the stand
 
 from __future__ import annotations
 
+import math
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, TypeAlias, TypeVar, cast
 
@@ -65,8 +66,8 @@ def _json_integer(value: Any) -> Any:
 
 
 def _json_number(value: Any) -> Any:
-    """Accept a JSON number only, never a string or a boolean; an integral value reads as an integer."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    """Accept a JSON number only, never a string, a boolean, an infinity or `NaN`; an integral value reads as an integer."""
+    if isinstance(value, bool) or not isinstance(value, int | float) or (isinstance(value, float) and not math.isfinite(value)):
         error_type = "json_number"
         msg = "A JSON number is required."
         raise PydanticCustomError(error_type, msg)
@@ -79,7 +80,7 @@ JsonInteger: TypeAlias = Annotated[int, BeforeValidator(_json_integer)]
 """A JSON integer: `422` and `422.0` read as `422`, while `"422"` and `true` are refused."""
 
 JsonNumber: TypeAlias = Annotated[int | float, BeforeValidator(_json_number)]
-"""A JSON number: an integral value reads as an `int`, as a JavaScript reader sees it, and a string or a boolean is refused."""
+"""A JSON number: an integral value reads as an `int`, as a JavaScript reader sees it, and a string, a boolean, an infinity or `NaN` is refused."""
 
 
 class FixSafety(StrEnum):

@@ -6,8 +6,9 @@ empty body, and a framework's own refusal is JSON of another shape. `read_answer
 as a problem under a registered code, so that a caller branches on one shape:
 
 - **A problem document reads as received.** The body is decoded as JSON, refusing the constants
-  `NaN` and `Infinity` that JSON does not define and a body nested past the decoder's limit, and it
-  is a problem document when it validates as `Problem`. Its members are kept as sent, undeclared
+  `NaN` and `Infinity` that JSON does not define, a number past the range of a double, which would
+  read as an infinity, and a body nested past the decoder's limit, and it is a problem document
+  when it validates as `Problem`. Its members are kept as sent, undeclared
   ones included; `status` is filled from the answer when the body leaves it out, and `retry_after`
   from the `Retry-After` header when the body gives none and its retry verdict is `yes`.
 - **A status that names one code reads as that code.** When the body is no problem document, the
@@ -29,7 +30,7 @@ import math
 import re
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
-from typing import TYPE_CHECKING, Any, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast
 
 from pydantic import ValidationError
 
@@ -45,6 +46,9 @@ RETRY_AFTER_HEADER = "retry-after"
 # A `Retry-After` delay in seconds, as HTTP writes it: ASCII digits only, never a Unicode digit such as `²`.
 _DELAY_SECONDS = re.compile(r"[0-9]+")
 
+# How much of a refused number literal the decoder's message quotes.
+_NUMBER_EXCERPT_LENGTH = 40
+
 
 class DecodedBody(NamedTuple):
     """A body decoded as JSON: `is_json` is false when it is not JSON, and `value` is then `None`."""
@@ -58,17 +62,34 @@ def _refuse_constant(name: str) -> Any:
     raise ValueError(msg)
 
 
-def _parse_int(text: str) -> int | float:
-    """A JSON integer, one too long for Python's bounded conversion reading as a float, as a JavaScript reader reads it."""
+def _refuse_non_finite(text: str) -> NoReturn:
+    msg = f"The number {text[:_NUMBER_EXCERPT_LENGTH]} is past the range of a JSON reader's numbers, where it reads as an infinity."
+    raise ValueError(msg)
+
+
+def _parse_int(text: str) -> int:
+    """A JSON integer, refused when it is past the range of a double, where a JavaScript reader reads it as an infinity.
+
+    An integer too long for Python's bounded conversion raises `ValueError` from `int` itself, and is
+    far past that range too.
+    """
+    value = int(text)
     try:
-        return int(text)
-    except ValueError:
-        return float(text)
+        float(value)
+    except OverflowError:
+        _refuse_non_finite(text)
+    return value
 
 
 def _parse_float(text: str) -> int | float:
-    """A JSON number with a fraction or an exponent, an integral value reading as an integer, as a JavaScript reader sees it."""
+    """A JSON number with a fraction or an exponent, an integral value reading as an integer, as a JavaScript reader sees it.
+
+    A literal past the range of a double, such as `1e999`, which Python and a JavaScript reader both
+    read as an infinity, is refused.
+    """
     value = float(text)
+    if not math.isfinite(value):
+        _refuse_non_finite(text)
     if value.is_integer():
         return int(value)
     return value
@@ -78,10 +99,10 @@ def decode_json(text: str) -> DecodedBody:
     """Decode a body as JSON, as every reader of the protocol does.
 
     The constants `NaN`, `Infinity` and `-Infinity`, which Python's decoder accepts and JSON does not
-    define, are refused, and so is a body nested past the decoder's limit. Numbers read as a
+    define, are refused, and so is a number past the range of a double, such as `1e999`, which
+    would read as an infinity, and a body nested past the decoder's limit. Numbers read as a
     JavaScript reader reads them: one with no fractional part reads as an integer, so that `2.0`
-    reads as `2`, and an integer too long for Python's bounded conversion reads as a float rather
-    than making the body unreadable.
+    reads as `2`.
     """
     try:
         value = json.loads(text, parse_constant=_refuse_constant, parse_float=_parse_float, parse_int=_parse_int)

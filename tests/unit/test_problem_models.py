@@ -41,6 +41,8 @@ class TestProblemModels:
             ("a status outside the HTTP range", {"status": 99}),
             ("a boolean where a number belongs", {"retry_after": True}),
             ("a negative delay", {"retry_after": -1}),
+            ("an infinite delay, which JSON cannot write", {"retry_after": float("inf")}),
+            ("a delay that is not a number", {"retry_after": float("nan")}),
             ("a null member", {"params": None}),
             ("a code outside the code pattern", {"code": "Account.RateLimited"}),
             ("a code with no family", {"code": "rate_limited"}),

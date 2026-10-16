@@ -22,6 +22,10 @@ class TestProblemAnswers:
             ("an html page", LegacyAnswerBodies.GATEWAY_HTML, False, None),
             ("an empty body", "", False, None),
             ("a truncated object", '{"detail": "refu', False, None),
+            ("an exponent past a double's range, which reads as an infinity", '{"retry_after": 1e999}', False, None),
+            ("a negative one", "[-1e999]", False, None),
+            ("an integer past a double's range", "[" + "9" * 400 + "]", False, None),
+            ("the largest double", "[1.7976931348623157e308]", True, [int(1.7976931348623157e308)]),
         ],
     )
     def test_decode_json_reads_as_every_reader_of_the_protocol_does(self, topic: str, text: str, is_json: bool, value: object) -> None:
@@ -46,12 +50,9 @@ class TestProblemAnswers:
                 return
         pytest.skip("no tried nesting depth exhausts this interpreter's JSON decoder")
 
-    def test_an_integer_too_long_for_python_reads_as_a_number(self) -> None:
-        """An integer past Python's conversion limit is still JSON, as it is for a JavaScript reader."""
-        decoded = decode_json("[" + "1" * 5000 + "]")
-
-        assert decoded.is_json
-        assert decoded.value == [float("inf")]
+    def test_an_integer_too_long_for_python_is_not_json(self) -> None:
+        """An integer past Python's conversion limit is far past a double's range, where a JavaScript reader reads an infinity, so it is refused."""
+        assert decode_json("[" + "1" * 5000 + "]") == (False, None)
 
     @pytest.mark.parametrize(
         ("topic", "value", "expected"),

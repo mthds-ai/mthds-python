@@ -202,6 +202,18 @@ class TestMthdsAPIClientErrors:
         assert "test-token" not in repr(vars(exc))
 
     @pytest.mark.parametrize(
+        ("topic", "literal"), [("a delay past a double's range", '"retry_after":1e999'), ("an extra member past it", '"load":-1e999')]
+    )
+    def test_a_problem_holding_a_number_json_readers_read_as_infinite_is_unreadable(self, topic: str, literal: str) -> None:
+        """A number that reads as an infinity makes the body no JSON a reader can read, as the constant `Infinity` does, so no problem carries it."""
+        body = ProblemBodies.RATE_LIMITED_BODY[:-1] + "," + literal + "}"
+        exc = self._response_error(self._client(_answering(429, text=body)), lambda client: client.models())
+
+        assert exc.problem.code == "client.response_unreadable", topic
+        assert exc.problem.as_wire()["params"] == {"status": 429}, topic
+        assert exc.response_body == body, topic
+
+    @pytest.mark.parametrize(
         ("topic", "header"),
         [("a superscript digit", "²"), ("arabic-indic digits", "١٢"), ("digits too many to convert", "9" * 5000)],
     )
