@@ -5,9 +5,9 @@ a proxy in front of the runtime answers with an HTML page, a server that is star
 empty body, and a framework's own refusal is JSON of another shape. `read_answer` reads each of them
 as a problem under a registered code, so that a caller branches on one shape:
 
-- **A problem document reads as received.** The body is decoded as JSON, refusing the constants
-  `NaN` and `Infinity` that JSON does not define, a number past the range of a double, which would
-  read as an infinity, and a body nested past the decoder's limit, and it is a problem document
+- **A problem document reads as received.** The body is decoded as JSON, refusing a body nested
+  deeper than `MAX_BODY_NESTING`, the constants `NaN` and `Infinity` that JSON does not define and a
+  number past the range of a double, which would read as an infinity, and it is a problem document
   when it validates as `Problem`. Its members are kept as sent, undeclared
   ones included; `status` is filled from the answer when the body leaves it out, and `retry_after`
   from the `Retry-After` header when the body gives none and its retry verdict is `yes`.
@@ -25,6 +25,7 @@ route's answer.
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import re
@@ -48,6 +49,19 @@ _DELAY_SECONDS = re.compile(r"[0-9]+")
 
 # How much of a refused number literal the decoder's message quotes.
 _NUMBER_EXCERPT_LENGTH = 40
+
+MAX_BODY_NESTING = 512
+"""The deepest nesting of arrays and objects a body may have and still be read, the limit the TypeScript client pins too.
+
+No problem document comes near it. A body nested deeper is refused before it is parsed, so that every
+reader draws the line at the same depth whatever its decoder's own limit, and so that neither the
+decoder nor the validation that walks the decoded value can run out of stack.
+"""
+
+# A JSON string, its escapes included, whose brackets are text rather than nesting.
+_JSON_STRING = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"')
+_NOT_A_BRACKET = re.compile(r"[^\[\]{}]+")
+_BRACKET_STEPS: dict[str, int] = {"[": 1, "{": 1, "]": -1, "}": -1}
 
 
 class DecodedBody(NamedTuple):
@@ -95,15 +109,29 @@ def _parse_float(text: str) -> int | float:
     return value
 
 
+def nests_deeper_than(text: str, *, limit: int) -> bool:
+    """Whether a body nests arrays and objects deeper than `limit`, a bracket inside a string not counting.
+
+    The brackets are counted without parsing, so that a body too deep to read is refused before any
+    decoder walks it; a body with no more opening brackets than `limit` cannot pass it and is not scanned.
+    """
+    if text.count("[") + text.count("{") <= limit:
+        return False
+    brackets = _NOT_A_BRACKET.sub("", _JSON_STRING.sub("", text))
+    return max(itertools.accumulate(map(_BRACKET_STEPS.__getitem__, brackets)), default=0) > limit
+
+
 def decode_json(text: str) -> DecodedBody:
     """Decode a body as JSON, as every reader of the protocol does.
 
-    The constants `NaN`, `Infinity` and `-Infinity`, which Python's decoder accepts and JSON does not
-    define, are refused, and so is a number past the range of a double, such as `1e999`, which
-    would read as an infinity, and a body nested past the decoder's limit. Numbers read as a
-    JavaScript reader reads them: one with no fractional part reads as an integer, so that `2.0`
-    reads as `2`.
+    A body nested deeper than `MAX_BODY_NESTING` is refused before it is parsed. The constants
+    `NaN`, `Infinity` and `-Infinity`, which Python's decoder accepts and JSON does not define, are
+    refused, and so is a number past the range of a double, such as `1e999`, which would read as an
+    infinity. Numbers read as a JavaScript reader reads them: one with no fractional part reads as an
+    integer, so that `2.0` reads as `2`.
     """
+    if nests_deeper_than(text, limit=MAX_BODY_NESTING):
+        return DecodedBody(is_json=False, value=None)
     try:
         value = json.loads(text, parse_constant=_refuse_constant, parse_float=_parse_float, parse_int=_parse_int)
     except (ValueError, RecursionError):

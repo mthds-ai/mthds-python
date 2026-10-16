@@ -12,6 +12,7 @@ from pytest_mock import MockerFixture
 from typing_extensions import override
 
 from mthds.protocol.exceptions import PipelineRequestError
+from mthds.protocol.problem.answers import MAX_BODY_NESTING
 from mthds.protocol.models import ModelCategory
 from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.models import Problem, ProblemDomain, RemapValueOp
@@ -268,6 +269,26 @@ class TestMthdsAPIClientErrors:
         for value in vars(exc).values():
             assert not isinstance(value, (httpx.Request, httpx.Response))
         assert "test-token" not in repr(vars(exc))
+
+    @pytest.mark.parametrize(
+        ("topic", "depth", "expected_code"),
+        [
+            ("a body at the nesting limit reads as received", MAX_BODY_NESTING, "model.unknown"),
+            ("a body past it is unreadable", MAX_BODY_NESTING + 1, "client.response_unreadable"),
+        ],
+    )
+    def test_a_problem_nested_in_an_extra_member_reads_up_to_the_limit(self, topic: str, depth: int, expected_code: str) -> None:
+        """The body's whole nesting counts, its own object included, and a problem read at the limit is written back whole, status filled in."""
+        members = {member: value for member, value in ProblemBodies.MODEL_UNKNOWN.items() if member != "status"}
+        trace = "[" * (depth - 1) + "]" * (depth - 1)
+        body = json.dumps(members)[:-1] + f', "trace": {trace}}}'
+        exc = self._response_error(self._client(_answering(422, text=body)), lambda client: client.models())
+
+        assert exc.problem.code == expected_code, topic
+        if expected_code == "model.unknown":
+            assert exc.problem.as_wire() == {**json.loads(body), "status": 422}, topic
+        else:
+            assert exc.problem.as_wire()["params"] == {"status": 422}, topic
 
     @pytest.mark.parametrize(
         ("topic", "literal"), [("a delay past a double's range", '"retry_after":1e999'), ("an extra member past it", '"load":-1e999')]

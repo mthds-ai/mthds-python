@@ -31,6 +31,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, TypeAlias, TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, model_validator
+from pydantic_core import to_jsonable_python
 
 from mthds.protocol.problem.json_types import JsonInteger, JsonNumber
 from mthds.protocol.problem.registry import (
@@ -84,8 +85,41 @@ class _ProblemPart(BaseModel):
         return members
 
     def as_wire(self) -> dict[str, Any]:
-        """The members this was read or built from, in JSON types, undeclared members included."""
-        return self.model_dump(mode="json", exclude_unset=True)
+        """The members this was read or built from, in JSON types, undeclared members included.
+
+        The members are written by walking the model, each declared member that was set in the order
+        the model declares it, then each undeclared one, rather than through pydantic's serializer,
+        which refuses a value nested past its own depth limit of a few hundred levels as a circular
+        reference. A reader accepts a body nested up to `mthds.protocol.problem.answers.MAX_BODY_NESTING`,
+        so every problem it reads can be written back.
+        """
+        wire: dict[str, Any] = {}
+        for name in type(self).model_fields:
+            if name in self.model_fields_set:
+                wire[name] = _wire_value(getattr(self, name))
+        for name, value in (self.model_extra or {}).items():
+            wire[name] = _wire_value(value)
+        return wire
+
+
+def _wire_value(value: Any) -> Any:
+    """A member's value in JSON types, a container walked one level per call, with no depth limit of its own."""
+    if isinstance(value, _ProblemPart):
+        return value.as_wire()
+    if isinstance(value, dict):
+        wire_object: dict[str, Any] = {}
+        for key, item in cast("dict[str, Any]", value).items():
+            wire_object[key] = _wire_value(item)
+        return wire_object
+    if isinstance(value, list | tuple):
+        wire_array: list[Any] = []
+        for item in cast("list[Any] | tuple[Any, ...]", value):
+            wire_array.append(_wire_value(item))
+        return wire_array
+    # A string, a member of a string enum among them, a number, a boolean or null is already a JSON value.
+    if value is None or isinstance(value, str | int | float):
+        return value
+    return to_jsonable_python(value)
 
 
 def _family_of(code: str) -> str:

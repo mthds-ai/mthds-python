@@ -3,7 +3,15 @@ from datetime import UTC, datetime
 
 import pytest
 
-from mthds.protocol.problem.answers import decode_json, parse_retry_after, read_answer, read_problem_document, unreadable_answer
+from mthds.protocol.problem.answers import (
+    MAX_BODY_NESTING,
+    decode_json,
+    nests_deeper_than,
+    parse_retry_after,
+    read_answer,
+    read_problem_document,
+    unreadable_answer,
+)
 from mthds.protocol.problem.registry import STATUS_READINGS, CoreCode
 from tests.unit.test_data import LegacyAnswerBodies, ProblemBodies
 
@@ -35,20 +43,22 @@ class TestProblemAnswers:
         assert decoded.is_json is is_json, topic
         assert decoded.value == value, topic
 
-    def test_a_body_nested_past_the_decoders_limit_is_not_json(self) -> None:
-        """A body that exhausts the decoder reads as not JSON rather than raising `RecursionError`.
-
-        The depth that trips it is an interpreter build constant, which rose by an order of
-        magnitude in CPython 3.14, so the depth is discovered rather than pinned.
-        """
-        for depth in (10_000, 200_000, 2_000_000):
-            text = "[" * depth + "]" * depth
-            try:
-                json.loads(text)
-            except RecursionError:
-                assert decode_json(text) == (False, None)
-                return
-        pytest.skip("no tried nesting depth exhausts this interpreter's JSON decoder")
+    @pytest.mark.parametrize(
+        ("topic", "text", "is_json"),
+        [
+            ("arrays at the limit", "[" * MAX_BODY_NESTING + "]" * MAX_BODY_NESTING, True),
+            ("arrays past it", "[" * (MAX_BODY_NESTING + 1) + "]" * (MAX_BODY_NESTING + 1), False),
+            ("objects at the limit", '{"a":' * MAX_BODY_NESTING + "1" + "}" * MAX_BODY_NESTING, True),
+            ("objects past it", '{"a":' * (MAX_BODY_NESTING + 1) + "1" + "}" * (MAX_BODY_NESTING + 1), False),
+            ("brackets inside a string are text", '["' + "[{" * MAX_BODY_NESTING + '"]', True),
+            ("an escaped quote keeps the string open", '["\\"' + "[" * (MAX_BODY_NESTING + 1) + '"]', True),
+            ("far past any decoder's own limit", "[" * 200_000 + "]" * 200_000, False),
+        ],
+    )
+    def test_a_body_nested_past_the_limit_is_not_json(self, topic: str, text: str, is_json: bool) -> None:
+        """Every reader refuses a body nested deeper than the one limit the twins pin, before parsing it, and a bracket in a string never counts."""
+        assert decode_json(text).is_json is is_json, topic
+        assert nests_deeper_than(text, limit=MAX_BODY_NESTING) is not is_json, topic
 
     def test_an_integer_too_long_for_python_is_not_json(self) -> None:
         """An integer past Python's conversion limit is far past a double's range, where a JavaScript reader reads an infinity, so it is refused."""
