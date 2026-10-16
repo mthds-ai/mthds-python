@@ -197,9 +197,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     async def _send(self, method: str, url: str, *, content: bytes | None, request_timeout: float) -> httpx.Response:
         """Issue one HTTP request and return the raw response (status interpretation is the caller's).
 
-        The body is read whole before returning. A body whose content encoding cannot be decoded,
-        such as a broken gzip stream, is read as an empty body, so that the answer's status still
-        decides how it reads rather than the decoding failure escaping as no answer at all.
+        The body is read whole before returning, so an answer whose body cannot be read, such as one
+        whose content encoding cannot be decoded (a broken gzip stream), raises rather than returns.
 
         Args:
             method: HTTP method ("GET" or "POST").
@@ -212,6 +211,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         Raises:
             httpx.TransportError: If no answer came back; `_request` reads it as a problem.
+            httpx.DecodingError: If the answer's body cannot be decoded, which is no usable answer either;
+                `_request` reads it as a problem too.
         """
         if not self.client:
             self.start_client()
@@ -221,16 +222,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         headers = {"Accept": "application/json", "User-Agent": self.user_agent}
         if content is not None:
             headers["Content-Type"] = "application/json"
-        request = self.client.build_request(method, url, content=content, headers=headers, timeout=request_timeout)
-        response = await self.client.send(request, stream=True)
-        try:
-            await response.aread()
-        except httpx.DecodingError:
-            undecoded_headers = [(name, value) for name, value in response.headers.items() if name.lower() != "content-encoding"]
-            return httpx.Response(response.status_code, headers=undecoded_headers, request=request)
-        finally:
-            await response.aclose()
-        return response
+        return await self.client.request(method, url, content=content, headers=headers, timeout=request_timeout)
 
     async def _request(self, method: str, endpoint: str, *, content: bytes | None, creates_run: bool) -> httpx.Response:
         """Send one request through `_send`, reading a request that got no answer as a problem.
@@ -239,8 +231,11 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         `ApiTransportError` on every route: `client.unreachable` when nothing left,
         `client.timeout` when a call that creates nothing got no answer in time, and
         `client.outcome_unknown` when a request that creates a run left and no answer came
-        back. A documented protected extension seam: a client built on this one sends its own
-        routes through it too.
+        back. An answer whose body cannot be read, such as one whose content encoding cannot be
+        decoded, is no usable answer either, and the request had left: it reads as a connection
+        lost, `client.unreachable`, or `client.outcome_unknown` on a route that creates a run, as
+        the TypeScript client reads it. A documented protected extension seam: a client built on
+        this one sends its own routes through it too.
 
         Args:
             method: HTTP method ("GET" or "POST").
@@ -252,7 +247,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             The answer, whatever its status.
 
         Raises:
-            ApiTransportError: If no answer came back.
+            ApiTransportError: If no answer came back, or its body cannot be read.
             ClientNotConfiguredError: If the base URL does not make a valid URL, or names no scheme the
                 client sends to, `http` or `https` (`client.not_configured`).
         """
@@ -264,7 +259,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             # client sends to, so no repeat can succeed, and it must not read as an unreachable runtime.
             msg = f"API base URL '{self.base_url}' does not start with http:// or https://: {exc}"
             raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "base_url"})) from exc
-        except httpx.TransportError as exc:
+        except (httpx.TransportError, httpx.DecodingError) as exc:
+            # `httpx.DecodingError` is no `httpx.TransportError`, so it is named beside it.
             problem = transport_failure_problem(exc, creates_run=creates_run, base_url=self.base_url, timeout_seconds=self.request_timeout_seconds)
             msg = f"API {method} /{self._API_PREFIX}/{endpoint} failed: {problem.detail}"
             raise ApiTransportError(msg, problem=problem, api_url=self.base_url, request_url=url) from exc

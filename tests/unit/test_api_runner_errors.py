@@ -588,18 +588,32 @@ class TestMthdsAPIClientErrors:
         assert exc.problem.pipeline_run_id is None, topic
         assert exc.status == 202, topic
 
-    def test_a_body_whose_encoding_cannot_be_decoded_reads_by_its_status(self) -> None:
-        """A broken gzip stream is read as an empty body, so the answer's status still decides how it reads."""
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    @pytest.mark.parametrize(("topic", "status"), [("a success", 200), ("an accepted start", 202), ("an unavailable runtime", 503)])
+    def test_a_body_whose_encoding_cannot_be_decoded_is_no_usable_answer(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, status: int
+    ) -> None:
+        """A broken gzip stream is a request that got no usable answer once it had left, whatever the status, as the TypeScript client reads it."""
         broken = b"this was never gzip"
 
         def handle(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(503, stream=httpx.ByteStream(broken), headers={"Content-Encoding": "gzip", "Retry-After": "3"}, request=request)
+            headers = {"Content-Encoding": "gzip", "Content-Type": "application/json", "Retry-After": "3"}
+            return httpx.Response(status, stream=httpx.ByteStream(broken), headers=headers, request=request)
 
-        exc = self._response_error(self._client(handle), lambda client: client.models())
+        exc = self._raised(self._client(handle), call)
 
-        assert exc.problem.code == "runtime.unavailable"
-        assert exc.problem.retry_after == 3
-        assert exc.response_body == ""
+        assert isinstance(exc, ApiTransportError), f"{route}, {topic}: {exc!r}"
+        assert isinstance(exc.__cause__, httpx.DecodingError), f"{route}, {topic}"
+        if creates_run:
+            expected = make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN)
+        else:
+            expected = make_client_problem(CoreCode.CLIENT_UNREACHABLE, params={"base_url": _BASE_URL})
+        assert exc.problem.as_wire() == expected.as_wire(), f"{route}, {topic}"
+        assert exc.problem.outcome_is_unknown is creates_run, f"{route}, {topic}"
+        assert exc.problem.retry_after is None, f"{route}, {topic}"
+        assert exc.api_url == _BASE_URL
+        assert exc.request_url == f"{_BASE_URL}{route.split(' ')[1]}"
+        assert str(exc) == f"API {route} failed: {exc.problem.detail}\nNext step: {exc.problem.next_step.detail}", f"{route}, {topic}"
 
     @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
     def test_a_client_built_on_this_one_raises_its_own_subclass_from_every_route(

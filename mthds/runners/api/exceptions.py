@@ -8,10 +8,12 @@ Every route raises only these, so `except PipelineRequestError` catches every fa
   from the answer when the body is none (see `mthds.protocol.problem.answers`); a success it cannot
   read on `execute` or `start` leaves the outcome unknown, `client.outcome_unknown`, since the
   runtime accepted the request.
-- `ApiTransportError`: no answer came back. Its problem is `client.unreachable` when no request
+- `ApiTransportError`: no usable answer came back. Its problem is `client.unreachable` when no request
   left, `client.timeout` when a call that creates nothing got no answer in time, and
   `client.outcome_unknown` when a request that creates a run left and no answer came back, so the
-  run may exist.
+  run may exist. An answer whose body cannot be read, such as one whose content encoding cannot be
+  decoded, is none either: `client.outcome_unknown` on a route that creates a run, and
+  `client.unreachable` on any other.
 - `RunStillRunningError`: `/execute` answered `202`, the protocol's optional degrade, so the run
   goes on on the runtime and the client does not follow it: `client.follow_failed`, naming the run.
 - `ClientNotConfiguredError`: the client has no API key, no base URL, or a base URL it cannot send to: `client.not_configured`.
@@ -91,7 +93,7 @@ class ApiResponseError(PipelineRequestError):
 
 
 class ApiTransportError(PipelineRequestError):
-    """No answer came back: the runtime was unreachable, it did not answer in time, or the connection was lost.
+    """No usable answer came back: the runtime was unreachable or did not answer in time, the connection was lost, or the body was unreadable.
 
     `problem` is `client.unreachable`, `client.timeout` or `client.outcome_unknown`. On
     `client.outcome_unknown` the request created a run or may have, so it is never repeated

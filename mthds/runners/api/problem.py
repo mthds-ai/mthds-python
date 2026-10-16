@@ -11,6 +11,10 @@ module hands it an httpx response, and states the problem of a request that got 
 - **The request left and no answer came back** (the time limit passed, or the connection was lost):
   `client.outcome_unknown` on a route that creates a run, since the run may exist, and otherwise
   `client.timeout` naming the time limit, or `client.unreachable` for a lost connection.
+- **An answer came back whose body cannot be read** (its content encoding cannot be decoded, such as a
+  broken gzip stream): no usable answer, read as a connection lost after the request left, so
+  `client.outcome_unknown` on a route that creates a run and `client.unreachable` on any other, as the
+  TypeScript client reads it, whatever the answer's status.
 """
 
 from __future__ import annotations
@@ -117,11 +121,16 @@ def read_error_answer(response: httpx.Response, *, creates_run: bool) -> AnswerR
     )
 
 
-def transport_failure_problem(failure: httpx.TransportError, *, creates_run: bool, base_url: str, timeout_seconds: float) -> Problem:
-    """The problem of a request that got no answer.
+def transport_failure_problem(
+    failure: httpx.TransportError | httpx.DecodingError, *, creates_run: bool, base_url: str, timeout_seconds: float
+) -> Problem:
+    """The problem of a request that got no usable answer.
+
+    A body httpx cannot decode (`httpx.DecodingError`) arrives only once the request has left, so it
+    reads as a connection lost after the request left.
 
     Args:
-        failure: What httpx raised.
+        failure: What httpx raised: a transport failure, or a body it cannot decode.
         creates_run: Whether the request may have created a run.
         base_url: The base URL the client is configured with.
         timeout_seconds: The client's time limit for the request.
