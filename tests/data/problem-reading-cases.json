@@ -959,6 +959,32 @@
       "name": "start-accepted-with-a-run-id-that-is-no-string"
     },
     {
+      "description": "A 202 on /start whose pipeline_run_id is the empty string names no run the client can read, so it reads as client.outcome_unknown naming no run, as a 202 on /execute naming none does.",
+      "expected": {
+        "code": "client.outcome_unknown",
+        "detail": "The connection was lost after a request that creates a run had left, so the run may exist.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Read the run if its id is known, and otherwise leave the outcome unknown rather than send the request again automatically.",
+          "kind": "read_run"
+        },
+        "params": {},
+        "retry": "outcome_unknown",
+        "title": "The call may have created a run",
+        "type": "https://mthds.ai/errors/client.outcome_unknown"
+      },
+      "input": {
+        "body": "{\"pipeline_run_id\":\"\"}",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "kind": "response",
+        "route": "POST /start",
+        "status": 202
+      },
+      "name": "start-success-with-an-empty-run-id"
+    },
+    {
       "description": "A 202 on /execute acknowledges a run the client does not follow, so it reads as client.follow_failed naming the run, in its params and as the problem's pipeline_run_id, since the run exists.",
       "expected": {
         "code": "client.follow_failed",
