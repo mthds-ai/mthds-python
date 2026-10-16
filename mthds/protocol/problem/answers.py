@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
@@ -40,6 +41,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 RETRY_AFTER_HEADER = "retry-after"
+
+# A `Retry-After` delay in seconds, as HTTP writes it: ASCII digits only, never a Unicode digit such as `²`.
+_DELAY_SECONDS = re.compile(r"[0-9]+")
 
 
 class DecodedBody(NamedTuple):
@@ -94,15 +98,20 @@ def parse_retry_after(value: str | None, *, now: datetime | None = None) -> int 
         now: The time to count an HTTP date from; the current time when not given.
 
     Returns:
-        The delay in whole seconds, never negative, or `None` when the header is absent or unreadable.
+        The delay in whole seconds, never negative, or `None` when the header is absent or unreadable:
+        a number of seconds is ASCII digits only, as HTTP writes it, and one too long to convert reads
+        as unreadable.
     """
     if value is None:
         return None
     text = value.strip()
     if not text:
         return None
-    if text.isdigit():
-        return int(text)
+    if _DELAY_SECONDS.fullmatch(text):
+        try:
+            return int(text)
+        except ValueError:
+            return None
     try:
         moment = parsedate_to_datetime(text)
     except (TypeError, ValueError):

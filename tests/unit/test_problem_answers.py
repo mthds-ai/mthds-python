@@ -65,6 +65,9 @@ class TestProblemAnswers:
             ("negative", "-5", None),
             ("a fraction", "1.5", None),
             ("garbage", "soon", None),
+            ("a superscript digit, which is no ASCII digit", "²", None),
+            ("arabic-indic digits, which are no ASCII digits", "١٢", None),
+            ("digits too many to convert", "9" * 5000, None),
         ],
     )
     def test_parse_retry_after_reads_seconds_and_http_dates(self, topic: str, value: str | None, expected: int | None) -> None:

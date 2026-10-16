@@ -1,7 +1,7 @@
 """Tests for how MthdsAPIClient reads every failure of every route as a problem, httpx's transport mocked."""
 
 import asyncio
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 from typing import Any, NoReturn
 
 import httpx
@@ -37,8 +37,8 @@ _ROUTE_CALLS: list[tuple[str, bool, Callable[[MthdsAPIClient], Coroutine[Any, An
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
-def _answering(status_code: int, *, text: str = "", headers: dict[str, str] | None = None) -> Handler:
-    """A transport handler answering every request with `status_code`, `text` as its body."""
+def _answering(status_code: int, *, text: str = "", headers: Mapping[str, str] | Mapping[bytes, bytes] | None = None) -> Handler:
+    """A transport handler answering every request with `status_code`, `text` as its body; header bytes carry a value that is not ASCII."""
 
     def handle(request: httpx.Request) -> httpx.Response:
         return httpx.Response(status_code, text=text, headers=headers or {}, request=request)
@@ -200,6 +200,27 @@ class TestMthdsAPIClientErrors:
         for value in vars(exc).values():
             assert not isinstance(value, (httpx.Request, httpx.Response))
         assert "test-token" not in repr(vars(exc))
+
+    @pytest.mark.parametrize(
+        ("topic", "header"),
+        [("a superscript digit", "²"), ("arabic-indic digits", "١٢"), ("digits too many to convert", "9" * 5000)],
+    )
+    def test_a_retry_after_header_the_client_cannot_read_gives_no_delay(self, topic: str, header: str) -> None:
+        """A `Retry-After` that is not ASCII digits, or too long to convert, is unreadable: the call still raises the typed error, with no delay."""
+        headers = {b"Retry-After": header.encode()}
+        rate_limited = self._response_error(
+            self._client(_answering(429, text=ProblemBodies.RATE_LIMITED_BODY, headers=headers)), lambda client: client.models()
+        )
+        unavailable = self._response_error(self._client(_answering(503, headers=headers)), lambda client: client.models())
+        degraded = self._raised(
+            self._client(_answering(202, text='{"pipeline_run_id":"run_7f3a"}', headers=headers)), lambda client: client.execute(pipe_code="answer")
+        )
+
+        assert (rate_limited.problem.code, rate_limited.problem.retry_after) == ("account.rate_limited", None), topic
+        assert "retry_after" not in rate_limited.problem.as_wire(), topic
+        assert (unavailable.problem.code, unavailable.problem.retry_after) == ("runtime.unavailable", None), topic
+        assert isinstance(degraded, RunStillRunningError), topic
+        assert degraded.retry_after_seconds is None, topic
 
     def test_a_filtered_models_read_names_its_query_in_the_message(self) -> None:
         """The endpoint in the message is the one requested, query string included."""
