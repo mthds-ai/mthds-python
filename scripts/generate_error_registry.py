@@ -56,19 +56,27 @@ def _constant(name: str) -> str:
     return name.replace(".", "_").upper()
 
 
+# A word with the spaces that follow it, or the spaces a text opens with: the pieces a long literal is
+# cut between, which join back into the text exactly, every space kept.
+_LITERAL_PIECE = re.compile(r"[^ ]+ *| +")
+
+
 def _literal(text: str) -> str:
-    """A Python string literal for `text`, split into an implicit concatenation when it is long."""
+    """A Python string literal for `text`, split into an implicit concatenation when it is long.
+
+    The text is cut only after a run of spaces, each chunk keeping the spaces it ends on, so that the
+    chunks concatenate back into `text` exactly, a double space or a leading one included.
+    """
     if len(text) <= _CHUNK_LENGTH:
         return json.dumps(text, ensure_ascii=False)
     chunks: list[str] = []
     current = ""
-    for word in text.split(" "):
-        candidate = f"{current} {word}" if current else word
-        if len(candidate) > _CHUNK_LENGTH and current:
-            chunks.append(current + " ")
-            current = word
+    for piece in _LITERAL_PIECE.findall(text):
+        if current and len((current + piece).rstrip(" ")) > _CHUNK_LENGTH:
+            chunks.append(current)
+            current = piece
         else:
-            current = candidate
+            current += piece
     chunks.append(current)
     inner = "\n".join(f"    {json.dumps(chunk, ensure_ascii=False)}" for chunk in chunks)
     return f"(\n{inner}\n)"
