@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from pydantic import BaseModel, ValidationError
-from pytest_mock import MockerFixture
+from pytest_mock import MockerFixture, MockType
 
+from mthds.method_tree.file_entry import FileEntry, HashFileEntry
 from mthds.runners.pipelex.runner import PipelexRunner, PipelexRunnerError
-from tests.unit.test_data import CliWorkingMemoryDumps
+from tests.unit.test_data import CliWorkingMemoryDumps, MethodFileMaps
 
 if TYPE_CHECKING:
     from mthds.protocol.pipeline_inputs import PipelineInputs
@@ -22,20 +23,88 @@ class _PydanticInput(BaseModel):
 
 
 class TestPipelexRunner:
-    def test_validate_empty_contents_raises_without_invoking_cli(self, mocker: MockerFixture) -> None:
-        """An empty `mthds_contents` must fail fast — validating an empty temp
-        directory would otherwise return a passing `ValidationReport()` for a
-        request that validated nothing (greptile P1 on PR #25; the API path
-        treats empty input as a validation failure, so the local runner must
-        match). The CLI is never invoked.
+    @pytest.mark.parametrize(
+        ("topic", "files", "expected_in_message"),
+        [
+            ("an empty map", {}, "holds no file"),
+            (
+                "a hash entry, with no blob store to resolve it",
+                {"card.html": HashFileEntry(sha256=MethodFileMaps.CARD_SHA256, size=13)},
+                "hash entries",
+            ),
+            ("a key climbing out of the tree", {"../escape.mthds": MethodFileMaps.BUNDLE}, "is not a tree path"),
+            ("a dotfile", {".env": "KEY=value", "main.mthds": MethodFileMaps.BUNDLE}, "membership rule"),
+            ("an entry that is no file entry", {"main.mthds": cast("FileEntry", object())}, "neither text nor a file entry"),
+        ],
+    )
+    def test_a_files_map_this_runner_cannot_write_is_refused(
+        self, mocker: MockerFixture, tmp_path: Path, topic: str, files: dict[str, FileEntry], expected_in_message: str
+    ) -> None:
+        """A map that is no method tree this runner can write is refused before anything is written or the CLI runs.
+
+        An empty map would otherwise validate an empty directory and pass (greptile P1 on PR #25),
+        a hash entry names bytes this runner, which keeps no blob store, does not hold, a key
+        that is not a tree path would write outside the run's directory, and an entry the map cannot
+        be written with is this runner's error rather than a bare serialization error.
         """
         mocker.patch("mthds.runners.pipelex.runner._ensure_pipelex", return_value="pipelex")
+        mocker.patch("mthds.runners.pipelex.runner.tempfile.mkdtemp", return_value=str(tmp_path / "run"))
         run_subprocess = mocker.patch("mthds.runners.pipelex.runner.run_subprocess")
 
-        with pytest.raises(PipelexRunnerError, match="at least one bundle"):
-            asyncio.run(PipelexRunner().validate(mthds_contents=[]))
+        for call in (PipelexRunner().validate(files=files), PipelexRunner().execute(pipe_code="answer", files=files)):
+            with pytest.raises(PipelexRunnerError, match=expected_in_message):
+                asyncio.run(call)
 
         run_subprocess.assert_not_called()
+        assert list(tmp_path.rglob("*")) == [], topic
+
+    def test_validate_writes_the_tree_and_validates_its_directory(self, mocker: MockerFixture, tmp_path: Path) -> None:
+        """The tree is written out as a directory, each file at its tree path, and `pipelex validate bundle` reads that directory."""
+        mocker.patch("mthds.runners.pipelex.runner._ensure_pipelex", return_value="pipelex")
+        mocker.patch("mthds.runners.pipelex.runner.tempfile.mkdtemp", return_value=str(tmp_path))
+        mocker.patch("mthds.runners.pipelex.runner.shutil.rmtree")
+        run_subprocess = mocker.patch("mthds.runners.pipelex.runner.run_subprocess")
+
+        report = asyncio.run(PipelexRunner(library_dirs=["/libs"]).validate(files=MethodFileMaps.INLINE, allow_signatures=True))
+
+        assert report.is_valid is True
+        method_dir = tmp_path / "method"
+        assert run_subprocess.call_args.args[0] == ["pipelex", "-L", "/libs", "validate", "bundle", str(method_dir), "--allow-signatures"]
+        assert (method_dir / "main.mthds").read_text(encoding="utf-8") == MethodFileMaps.BUNDLE
+        assert (method_dir / "templates" / "logo.png").read_bytes() == MethodFileMaps.LOGO
+        assert sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*") if path.is_file()) == [
+            "method/main.mthds",
+            "method/templates/logo.png",
+        ]
+
+    def test_execute_writes_the_tree_beside_the_run_files(self, mocker: MockerFixture, tmp_path: Path) -> None:
+        """A run's tree is its own directory: the inputs, the working memory and the results sit beside it, never inside it."""
+        run_subprocess = _patch_cli_writing_working_memory(mocker, tmp_path, CliWorkingMemoryDumps.REF_STRING)
+
+        asyncio.run(
+            PipelexRunner().execute(pipe_code="answer", files=MethodFileMaps.INLINE, inputs={"question": {"concept": "Text", "content": "why?"}})
+        )
+
+        method_dir = tmp_path / "method"
+        assert run_subprocess.call_args.args[0] == [
+            "pipelex",
+            "run",
+            "bundle",
+            str(method_dir),
+            "--pipe",
+            "answer",
+            "-i",
+            str(tmp_path / "inputs.json"),
+            "--working-memory-path",
+            str(tmp_path / "working_memory.json"),
+            "-o",
+            str(tmp_path / "results"),
+            "--no-pretty-print",
+        ]
+        assert sorted(path.relative_to(method_dir).as_posix() for path in method_dir.rglob("*") if path.is_file()) == [
+            "main.mthds",
+            "templates/logo.png",
+        ]
 
     @pytest.mark.parametrize(
         ("kwargs", "expected_in_message"),
@@ -58,14 +127,14 @@ class TestPipelexRunner:
         run_subprocess.assert_not_called()
 
     def test_execute_rejects_missing_target(self, mocker: MockerFixture) -> None:
-        """With neither pipe_code nor mthds_contents the CLI invocation would
+        """With neither pipe_code nor files the CLI invocation would
         be malformed; the runner must reject upfront for parity with the API
         runner (greptile P2 on PR #26).
         """
         mocker.patch("mthds.runners.pipelex.runner._ensure_pipelex", return_value="pipelex")
         run_subprocess = mocker.patch("mthds.runners.pipelex.runner.run_subprocess")
 
-        with pytest.raises(PipelexRunnerError, match="pipe_code or mthds_contents"):
+        with pytest.raises(PipelexRunnerError, match="pipe_code or files"):
             asyncio.run(PipelexRunner().execute())
 
         run_subprocess.assert_not_called()
@@ -144,8 +213,8 @@ class TestPipelexRunner:
         assert [(error["loc"], error["type"]) for error in errors] == [(("root", "answer", "concept"), "string_type")], topic
 
 
-def _patch_cli_writing_working_memory(mocker: MockerFixture, tmp_path: Path, working_memory: dict[str, Any]) -> None:
-    """Stand in for the `pipelex` CLI: a run that succeeds and writes `working_memory` where it was asked to."""
+def _patch_cli_writing_working_memory(mocker: MockerFixture, tmp_path: Path, working_memory: dict[str, Any]) -> MockType:
+    """Stand in for the `pipelex` CLI: a run that succeeds and writes `working_memory` where it was asked to; returns the stand-in."""
     mocker.patch("mthds.runners.pipelex.runner._ensure_pipelex", return_value="pipelex")
     mocker.patch("mthds.runners.pipelex.runner.tempfile.mkdtemp", return_value=str(tmp_path))
     mocker.patch("mthds.runners.pipelex.runner.shutil.rmtree")
@@ -155,4 +224,4 @@ def _patch_cli_writing_working_memory(mocker: MockerFixture, tmp_path: Path, wor
         working_memory_path.write_text(json.dumps(working_memory), encoding="utf-8")
         return mocker.Mock(returncode=0)
 
-    mocker.patch("mthds.runners.pipelex.runner.run_subprocess", side_effect=write_working_memory)
+    return mocker.patch("mthds.runners.pipelex.runner.run_subprocess", side_effect=write_working_memory)

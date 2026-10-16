@@ -1,14 +1,15 @@
-import json
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from pydantic_core import to_json
 
 from mthds.method_tree.digest import sha256_hex
 from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeSourceError
 from mthds.method_tree.file_entry import (
     MAX_JSON_DEPTH,
     Base64FileEntry,
+    FileEntry,
     HashFileEntry,
     InMemoryBlobStore,
     encode_file_entry,
@@ -21,15 +22,24 @@ from mthds.method_tree.vocabulary import TreeRefusalCode
 
 class TestMethodTreeFileEntry:
     @pytest.mark.parametrize(
-        ("data", "by_hash", "expected"),
+        ("data", "by_hash", "expected", "expected_json"),
         [
-            pytest.param(b"# Greetings\n", False, "# Greetings\n", id="text travels as a string"),
-            pytest.param(b"\xff\x00", False, {"base64": "/wA="}, id="bytes that are not UTF-8 travel as Base64"),
-            pytest.param(b"hi", True, {"sha256": sha256_hex(b"hi"), "size": 2}, id="bytes the receiver holds travel by hash"),
+            pytest.param(b"# Greetings\n", False, "# Greetings\n", '"# Greetings\\n"', id="text travels as a string"),
+            pytest.param(b"\xff\x00", False, Base64FileEntry(base64="/wA="), '{"base64":"/wA="}', id="bytes that are not UTF-8 travel as Base64"),
+            pytest.param(
+                b"hi",
+                True,
+                HashFileEntry(sha256=sha256_hex(b"hi"), size=2),
+                '{"sha256":"' + sha256_hex(b"hi") + '","size":2}',
+                id="bytes the receiver holds travel by hash",
+            ),
         ],
     )
-    def test_encode_file_entry(self, data: bytes, by_hash: bool, expected: str | dict[str, str | int]):
-        assert encode_file_entry(data, by_hash=by_hash) == expected
+    def test_encode_file_entry(self, data: bytes, by_hash: bool, expected: FileEntry, expected_json: str):
+        """Each entry is the typed form, and `to_json` writes it exactly as the wire has it."""
+        entry = encode_file_entry(data, by_hash=by_hash)
+        assert entry == expected
+        assert to_json(entry).decode("utf-8") == expected_json
 
     @pytest.mark.parametrize(
         "fields",
@@ -65,7 +75,7 @@ class TestMethodTreeFileEntry:
         tree = list_method_tree(tmp_path)
         contents = {tree_path: tree.file_location(tree_path).read_bytes() for tree_path in tree.tree_paths}
         held = contents["card.html"]
-        document = json.dumps(encode_file_map(contents, held_by_receiver=frozenset({sha256_hex(held)})))
+        document = to_json(encode_file_map(contents, held_by_receiver=frozenset({sha256_hex(held)}))).decode("utf-8")
         reading = read_file_map(document, blob_store=InMemoryBlobStore([held]))
         assert reading.tree.digest == tree.digest
         assert reading.contents == contents

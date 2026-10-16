@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.23.0] - 2026-10-17
+
+### Added
+
+- **Sending a method by hash**: `MthdsAPIClient.missing_blobs` and `upload_blob` call the protocol's optional blob routes, typed by `BlobRef`, `MissingBlobsRequest`, `MissingBlobsResult`, `MissingBlob` and `UploadTarget`, and `prepare_files` and `prepare_files_from_contents` build a request's `files` from a listed tree or from bytes at hand: inline when the map, written as compact JSON in UTF-8 so that Base64 counts as its encoded text, is at most `DEFAULT_INLINE_TREE_MAX_BYTES` (256 KiB), or when the runner keeps no blob store, and otherwise uploading only the blobs the runner lacks and sending every file by hash. Files are read and hashed off the event loop, an upload carries exactly its target's headers and never the API key, and a refused one raises `BlobUploadError`, whose URL keeps no userinfo, query or fragment.
+- **`VersionInfo.blob_store`**: the `version()` handshake reads whether the runner keeps a blob store, false when the runner does not say.
+- **`EmptyMethodTreeError`**: `list_method_tree` and `list_method_tree_at_root` refuse a directory whose own tree is empty with this `MethodTreeRefusedError`, which also carries the listing's `root`, `excluded_files`, `excluded_directories` and `raw_paths`, so a caller that lists a directory to find the packages and repositories nested in it learns them even when the directory holds nothing but nested packages. The refusal's code stays `empty_tree` and its record stays the conformance corpus's, so a caller catching `MethodTreeRefusedError` is unaffected; its message now says when the root is itself a virtual environment.
+- **Resolving a file reference over a set of tree paths**: `resolve_reference_in_paths` runs the standard's resolution steps, the same implementation `resolve_reference` runs, in a set of tree paths rather than a `MethodTree`, for a runtime that holds only a tree's listing; with `holder=None` it resolves from the root a reference written in no file of the tree, `is_one_file_tree` gives the one-file tree's refusal, and a refusal as not in the tree names no membership rule, which a set of paths does not record. Steps 1 and 3 in URL context are public as `url_path_of` and `percent_decode_url_path`, which refuses as `reference_invalid`, naming the path, what step 3 refuses, and `lexical_join` takes `holder=None` to join from the root.
+
+### Changed
+
+- **A method travels as `files` (Breaking)**: `MthdsAPIClient.execute`, `start` and `validate`, the `MTHDSProtocol` interface and `PipelexRunner` take the method as `files`, a map from tree path to file entry typed `MethodFiles`, in place of `mthds_contents`, and the protected `_post_validate` seam takes `files` too; an empty map is refused before any request. A runner that still accepts inline `mthds_contents` receives it through `extra`, and `PipelexRunner` writes the map out as a directory for `pipelex run bundle` and `pipelex validate bundle`, refusing a hash entry.
+- **Typed file entries (Breaking)**: `encode_file_entry` and `encode_file_map` return `FileEntry` values, a `str`, a `Base64FileEntry` or a `HashFileEntry`, instead of plain dictionaries, and `pydantic_core.to_json` writes them in their wire form.
+
 ## [v0.22.0] - 2026-10-16
 
 ### Added
