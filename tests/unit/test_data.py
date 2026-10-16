@@ -1,5 +1,7 @@
 """Shared test data constants for unit tests."""
 
+import json
+from pathlib import Path
 from typing import Any, ClassVar
 
 from mthds.protocol.input_form import (
@@ -936,3 +938,15 @@ class RefusedRunBodies:
         '"retryable":"false","user_action":{"kind":"change_input","detail":""},'
         '"validation_errors":[{"category":"pipe_validation","message":"ok"},{"message":"no category"}]}'
     )
+
+
+class VendoredRegistry:
+    """The vendored core error registry and the generator that turns it into a module."""
+
+    REPO_ROOT: ClassVar[Path] = Path(__file__).resolve().parents[2]
+    DIRECTORY: ClassVar[Path] = REPO_ROOT / "vendor" / "mthds-error-registry"
+    SNAPSHOT_PATH: ClassVar[Path] = DIRECTORY / "mthds-error-registry.json"
+    SIDECAR_PATH: ClassVar[Path] = DIRECTORY / "source.json"
+    GENERATOR_PATH: ClassVar[Path] = REPO_ROOT / "scripts" / "generate_error_registry.py"
+    SNAPSHOT: ClassVar[dict[str, Any]] = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+    SIDECAR: ClassVar[dict[str, Any]] = json.loads(SIDECAR_PATH.read_text(encoding="utf-8"))

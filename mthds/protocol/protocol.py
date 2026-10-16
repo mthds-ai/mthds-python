@@ -31,6 +31,18 @@ leaves those alone leaves this number exactly where it is, so it never tracks
 Version") for what bumps it.
 """
 
+CORE_ERROR_REGISTRY_VERSION: Final[str] = "7.1.0"
+"""The version of the MTHDS core error registry this SDK reads problems against.
+
+The registry is published with each release of the standard and carries that release's
+number, so this is the standard version whose registry is vendored under
+`vendor/mthds-error-registry/` and generated into `mthds.protocol.problem.registry`. A new
+code moves no protocol number, so this moves on its own: following a registry release is a
+re-vendor (`make vendor-error-registry`), a regeneration (`make generate-error-registry`)
+and this one edit, and `tests/unit/test_error_registry_vendored.py` fails until all three
+agree.
+"""
+
 
 @runtime_checkable
 class MTHDSProtocol(Protocol, Generic[PipeOutputT]):

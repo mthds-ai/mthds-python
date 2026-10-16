@@ -78,16 +78,22 @@ make fui                      - Shorthand -> fix-unused-imports
 make check-TODOs              - Check for TODOs
 make vendor-tree-corpus CONFORMANCE=<path>
                               - Vendor the method-tree corpus from a conformance checkout
+make vendor-error-registry MTHDS=<path> REF=<ref>
+                              - Vendor the core error registry from an mthds checkout at a ref or tag
+make generate-error-registry  - Generate mthds/protocol/problem/registry.py from the vendored registry
+make check-error-registry     - Check offline that the vendored registry, its declared version and the module agree
+make check-error-registry-upstream MTHDS=<path> REF=<tag>
+                              - Check that the vendored registry is the one an mthds ref publishes (never required)
 
 make c                        - Shorthand -> format lint pyright mypy
 make cc                       - Shorthand -> cleanderived c
-make check                    - Shorthand -> cc check-unused-imports pylint
-make agent-check              - Shorthand -> fix-unused-imports format lint pyright mypy
+make check                    - Shorthand -> cc check-unused-imports pylint check-error-registry
+make agent-check              - Shorthand -> fix-unused-imports format lint pyright mypy check-error-registry
 
 endef
 export HELP
 
-.PHONY: all help env env-verbose check-uv check-uv-verbose lock install update build test test-with-prints t tp gha-tests agent-test format lint pyright mypy pylint merge-check-ruff-format merge-check-ruff-lint merge-check-pyright merge-check-mypy merge-check-pylint check-unused-imports fix-unused-imports check-TODOs vendor-tree-corpus cleanderived cleanenv cleanall c cc check agent-check li
+.PHONY: all help env env-verbose check-uv check-uv-verbose lock install update build test test-with-prints t tp gha-tests agent-test format lint pyright mypy pylint merge-check-ruff-format merge-check-ruff-lint merge-check-pyright merge-check-mypy merge-check-pylint check-unused-imports fix-unused-imports check-TODOs vendor-tree-corpus vendor-error-registry generate-error-registry check-error-registry check-error-registry-upstream cleanderived cleanenv cleanall c cc check agent-check li
 
 all help:
 	@echo "$$HELP"
@@ -300,6 +306,27 @@ vendor-tree-corpus: env
 	@if [ -z "$(CONFORMANCE)" ]; then echo "Give the conformance checkout: make vendor-tree-corpus CONFORMANCE=<path>"; exit 1; fi
 	$(VENV_PYTHON) scripts/vendor_method_tree_corpus.py "$(CONFORMANCE)"
 
+# The core error registry is vendored byte for byte from an mthds checkout at a ref or a tag (the
+# sidecar records which), and mthds/protocol/problem/registry.py is generated from it. The offline
+# check also runs in `make agent-check` and as tests/unit/test_error_registry_vendored.py.
+vendor-error-registry: env
+	$(call PRINT_TITLE,"Vendoring the core error registry from mthds")
+	@if [ -z "$(MTHDS)" ] || [ -z "$(REF)" ]; then echo "Give the mthds checkout and the ref: make vendor-error-registry MTHDS=<path> REF=<ref or tag>"; exit 1; fi
+	$(VENV_PYTHON) scripts/vendor_error_registry.py "$(MTHDS)" --ref "$(REF)"
+
+generate-error-registry: env
+	$(call PRINT_TITLE,"Generating the core error registry module")
+	$(VENV_PYTHON) scripts/generate_error_registry.py
+
+check-error-registry: env
+	$(call PRINT_TITLE,"Checking the vendored core error registry")
+	$(VENV_PYTHON) scripts/generate_error_registry.py --check
+
+check-error-registry-upstream: env
+	$(call PRINT_TITLE,"Checking the vendored core error registry against mthds")
+	@if [ -z "$(MTHDS)" ] || [ -z "$(REF)" ]; then echo "Give the mthds checkout and the ref: make check-error-registry-upstream MTHDS=<path> REF=<tag>"; exit 1; fi
+	$(VENV_PYTHON) scripts/vendor_error_registry.py "$(MTHDS)" --ref "$(REF)" --check
+
 ##########################################################################################
 ### SHORTHANDS
 ##########################################################################################
@@ -310,10 +337,10 @@ c: format lint pyright mypy
 cc: cleanderived c
 	@echo "> done: cc = cleanderived format lint pyright mypy"
 
-check: cc check-unused-imports pylint
+check: cc check-unused-imports pylint check-error-registry
 	@echo "> done: check"
 
-agent-check: fix-unused-imports format lint pyright mypy
+agent-check: fix-unused-imports format lint pyright mypy check-error-registry
 	@echo "> done: agent-check"
 
 li: lock install

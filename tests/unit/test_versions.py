@@ -2,11 +2,11 @@ import pytest
 
 from mthds.package.manifest.schema import MTHDS_STANDARD_VERSION, is_mthds_version_satisfied, is_valid_semver, is_valid_version_constraint
 from mthds.package.semver import SemVerError
-from mthds.protocol.protocol import PROTOCOL_VERSION
+from mthds.protocol.protocol import CORE_ERROR_REGISTRY_VERSION, PROTOCOL_VERSION
 
 
 class TestVersions:
-    """The two numbers this library copies from the standard's cut, and how a manifest constraint is evaluated against one of them."""
+    """The numbers this library copies from the standard's cuts, and how a manifest constraint is evaluated against one of them."""
 
     def test_constants_match_the_standards_cut(self):
         # Pinned deliberately: these are copies of a cut made in the standard
@@ -14,8 +14,10 @@ class TestVersions:
         # cut moving there is exactly what this asserts against.
         assert MTHDS_STANDARD_VERSION == "7.0.0"
         assert PROTOCOL_VERSION == "1.0.0"
+        assert CORE_ERROR_REGISTRY_VERSION == "7.1.0"
         assert is_valid_semver(MTHDS_STANDARD_VERSION)
         assert is_valid_semver(PROTOCOL_VERSION)
+        assert is_valid_semver(CORE_ERROR_REGISTRY_VERSION)
 
     @pytest.mark.parametrize(
         ("topic", "constraint", "is_satisfied"),
