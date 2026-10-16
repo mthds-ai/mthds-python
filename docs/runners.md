@@ -84,7 +84,7 @@ Every failure of every route of the API runner, `MthdsAPIClient`, raises a `Pipe
 | A success whose body is not the route's answer, on `/execute` or `/start`, a `/start` answer whose `pipeline_run_id` is empty included | `ApiResponseError` | `client.outcome_unknown`, since the runtime accepted the request and the run may exist, naming the run in its parameters and as its `pipeline_run_id` when the body gives the run's id as a non-empty string |
 | A `202` on `/execute` naming its run | `RunStillRunningError` | `client.follow_failed`, naming the run in its parameters and as the problem's `pipeline_run_id`, since the run exists |
 | A `202` on `/execute` naming no run | `ApiResponseError` | `client.outcome_unknown`, since the runtime accepted the request and the run may exist under an id the client never learned |
-| No request left: no connection opened, a proxy refused it | `ApiTransportError` | `client.unreachable`, naming the base URL |
+| No request left: no connection opened, a proxy refused it, or httpx refused to write the request | `ApiTransportError` | `client.unreachable`, naming the base URL |
 | No answer in time on a route that creates nothing | `ApiTransportError` | `client.timeout`, naming the time limit |
 | A request to `/execute` or `/start` left and no answer came back | `ApiTransportError` | `client.outcome_unknown`, since the run may exist |
 | An argument refused before any request left | `PipelineRequestError` | `client.argument_invalid`, naming the argument and the reason |

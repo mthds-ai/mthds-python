@@ -253,9 +253,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         Raises:
             ApiTransportError: If no answer came back.
             ClientNotConfiguredError: If the base URL does not make a valid URL, or names no scheme the
-                client sends to, `http` or `https` (`client.not_configured`), or if httpx refuses to
-                write the request because a header holds a value HTTP cannot carry, which reads as
-                the API key (`client.not_configured` naming `api_key`).
+                client sends to, `http` or `https` (`client.not_configured`).
         """
         url = self._url(endpoint)
         try:
@@ -265,12 +263,6 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             # client sends to, so no repeat can succeed, and it must not read as an unreachable runtime.
             msg = f"API base URL '{self.base_url}' does not start with http:// or https://: {exc}"
             raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "base_url"})) from exc
-        except httpx.LocalProtocolError:
-            # httpx refused to write the request, so nothing left and no repeat changes it: a header holds a
-            # value HTTP cannot carry, and the API key is the header value a caller sets. httpx's message
-            # quotes that value, which may be the key, so the failure is not chained to this error.
-            msg = "The request could not be written: the API key holds a character an HTTP header cannot carry."
-            raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "api_key"})) from None
         except httpx.TransportError as exc:
             problem = transport_failure_problem(exc, creates_run=creates_run, base_url=self.base_url, timeout_seconds=self.request_timeout_seconds)
             msg = f"API {method} /{self._API_PREFIX}/{endpoint} failed: {problem.detail}"
