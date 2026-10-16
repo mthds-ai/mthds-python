@@ -442,6 +442,8 @@ class TestMthdsAPIClientErrors:
         assert exc.retry_after_seconds == 5
         assert exc.problem.code == "client.follow_failed"
         assert exc.problem.as_wire()["params"] == {"pipeline_run_id": "run_7f3a"}
+        # The run exists, so the problem names it as the protocol's member too.
+        assert exc.problem.pipeline_run_id == "run_7f3a"
         assert exc.problem.outcome_is_unknown
         assert str(exc).endswith("\nNext step: Read the run 'run_7f3a' by its id rather than start it again.")
 

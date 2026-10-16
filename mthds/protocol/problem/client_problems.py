@@ -16,6 +16,10 @@ standard states the same failure in the same words:
   may be empty; an integral number reads as an integer, as a JavaScript client writes it.
 - `status` is given only for a code the client reads from an answer's status, never for a code of
   its own, which describes no answer.
+- `pipeline_run_id` is given when a run exists that the client knows the id of, as after a `202`
+  naming its run (`client.follow_failed`), since the protocol has a problem carry that member
+  whenever a run exists. It is given explicitly rather than taken from the parameters, because a
+  code may name a run that does not exist, as `run.not_found` does.
 """
 
 from __future__ import annotations
@@ -109,6 +113,7 @@ def make_client_problem(
     params: Mapping[str, Any] | None = None,
     status: int | None = None,
     retry_after: float | None = None,
+    pipeline_run_id: str | None = None,
 ) -> Problem:
     """Build the problem a client states for `code`, from the registry alone.
 
@@ -117,6 +122,7 @@ def make_client_problem(
         params: The code's parameters, by name; an optional or operator-only one may be left out.
         status: The status of the answer the problem reads, for a code read from an answer's status.
         retry_after: The delay before a retry, for a code whose retry verdict is `yes`.
+        pipeline_run_id: The run the problem belongs to, when a run exists and the client knows its id.
 
     Returns:
         The problem, as `Problem` reads it.
@@ -151,4 +157,6 @@ def make_client_problem(
         members["status"] = status
     if retry_after is not None:
         members["retry_after"] = _json_value(retry_after)
+    if pipeline_run_id is not None:
+        members["pipeline_run_id"] = pipeline_run_id
     return Problem.model_validate(members)

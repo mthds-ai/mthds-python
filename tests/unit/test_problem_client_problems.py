@@ -73,6 +73,21 @@ class TestClientProblems:
             "params": {},
         }
 
+    @pytest.mark.parametrize(
+        ("topic", "code", "params", "pipeline_run_id"),
+        [
+            ("a run the client stopped following", CoreCode.CLIENT_FOLLOW_FAILED, {"pipeline_run_id": "run_7f3a"}, "run_7f3a"),
+            ("a run that may exist, its id known", CoreCode.CLIENT_OUTCOME_UNKNOWN, {"pipeline_run_id": "run_7f3a"}, "run_7f3a"),
+            ("a run that may exist, its id unknown", CoreCode.CLIENT_OUTCOME_UNKNOWN, {}, None),
+        ],
+    )
+    def test_a_problem_names_the_run_that_exists(self, topic: str, code: CoreCode, params: dict[str, Any], pipeline_run_id: str | None) -> None:
+        """`pipeline_run_id` is the problem's member when a run exists and its id is known, and is left out otherwise."""
+        problem = make_client_problem(code, params=params, pipeline_run_id=pipeline_run_id)
+
+        assert problem.pipeline_run_id == pipeline_run_id, topic
+        assert ("pipeline_run_id" in problem.as_wire()) is (pipeline_run_id is not None), topic
+
     def test_a_code_without_parameters_carries_no_params(self) -> None:
         problem = make_client_problem(CoreCode.CLIENT_ABORTED)
 

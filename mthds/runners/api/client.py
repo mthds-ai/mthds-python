@@ -571,7 +571,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         started_run_id = cast("dict[str, Any]", raw).get("pipeline_run_id") if isinstance(raw, dict) else None
         if not isinstance(started_run_id, str) or not started_run_id:
             self._raise_api_response_error(method="POST", endpoint="execute", response=response, problem=unreadable_answer(response.status_code))
-        problem = make_client_problem(CoreCode.CLIENT_FOLLOW_FAILED, params={"pipeline_run_id": started_run_id})
+        problem = make_client_problem(CoreCode.CLIENT_FOLLOW_FAILED, params={"pipeline_run_id": started_run_id}, pipeline_run_id=started_run_id)
         msg = (
             f"execute() was accepted asynchronously (202): run {started_run_id} is still running server-side. "
             "Poll its results (hosted) or use start()."
