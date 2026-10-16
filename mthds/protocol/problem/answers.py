@@ -205,7 +205,8 @@ def parse_http_date(text: str, *, now: datetime) -> datetime | None:
         now: The time the two-digit year of the RFC 850 form is read against.
 
     Returns:
-        The moment in UTC, or `None` when `text` is in none of the three forms or names no real moment.
+        The moment in UTC, or `None` when `text` is in none of the three forms, names no real moment,
+        or names a leap second that carries it past the end of the year 9999.
     """
     match_found = _IMF_FIXDATE.fullmatch(text) or _ASCTIME_DATE.fullmatch(text)
     if match_found is not None:
@@ -227,9 +228,13 @@ def parse_http_date(text: str, *, now: datetime) -> datetime | None:
             int(match_found["minute"]),
             tzinfo=UTC,
         )
+        return minute_start + timedelta(seconds=second)
     except ValueError:
+        # A day the month does not have, or an hour or a minute the day does not have.
         return None
-    return minute_start + timedelta(seconds=second)
+    except OverflowError:
+        # A leap second in the last minute of the year 9999 carries the moment past the last one a date holds.
+        return None
 
 
 def _rfc850_year(two_digits: int, *, now: datetime) -> int:
