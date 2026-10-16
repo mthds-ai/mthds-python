@@ -271,8 +271,6 @@ class TestMethodTreeReferences:
         [
             pytest.param("a%2Fb", id="encoded slash"),
             pytest.param("a%2fb", id="encoded slash in lowercase"),
-            pytest.param("a%5Cb", id="encoded backslash"),
-            pytest.param("a\\b", id="backslash written as is"),
             pytest.param("logo%0A.png", id="encoded line feed"),
             pytest.param("logo%00.png", id="encoded NUL"),
             pytest.param("logo%7F.png", id="encoded DEL"),
@@ -288,11 +286,29 @@ class TestMethodTreeReferences:
         ],
     )
     def test_percent_decode_url_path_refuses_what_step_three_refuses(self, url_path: str):
-        """A malformed escape, a backslash, bytes that are not UTF-8, or a decoded slash or control character is malformed."""
+        """A malformed escape, bytes that are not UTF-8, or a decoded slash or control character is malformed."""
         with pytest.raises(MethodTreeRefusedError) as refused:
             percent_decode_url_path(url_path)
         assert refused.value.refusal.code == TreeRefusalCode.REFERENCE_INVALID
         assert refused.value.refusal.names == [url_path]
+
+    @pytest.mark.parametrize(
+        ("url_path", "explanation"),
+        [
+            pytest.param("a\\b", "holds a backslash.", id="backslash written as is"),
+            pytest.param("a%5Cb", "percent-decodes to a '/', a backslash or a control character, which no segment may hold.", id="encoded backslash"),
+            pytest.param(
+                "a%5cb", "percent-decodes to a '/', a backslash or a control character, which no segment may hold.", id="encoded in lowercase"
+            ),
+        ],
+    )
+    def test_percent_decode_url_path_words_a_written_and_a_decoded_backslash_apart(self, url_path: str, explanation: str):
+        """A backslash written as is and one an escape decodes to are both malformed, each refused in its own words."""
+        with pytest.raises(MethodTreeRefusedError) as refused:
+            percent_decode_url_path(url_path)
+        assert refused.value.refusal.code == TreeRefusalCode.REFERENCE_INVALID
+        assert refused.value.refusal.names == [url_path]
+        assert refused.value.message == f"The URL path {url_path!r} {explanation}"
 
     @pytest.mark.parametrize(
         ("path", "expected"),

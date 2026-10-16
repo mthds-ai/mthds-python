@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 from urllib.parse import unquote
 
 from mthds.method_tree.discovery import kind_at_tree_path
@@ -77,31 +77,33 @@ def is_file_reference(reference: str, *, context: ReferenceContext) -> bool:
             return bool(path_part) and not path_part.startswith("//")
 
 
-def _decode_segment(segment: str) -> str | None:
-    """One segment of a URL's path percent-decoded as UTF-8, or None when its bytes are not UTF-8."""
-    try:
-        return unquote(segment, encoding="utf-8", errors="strict")
-    except UnicodeDecodeError:
-        return None
+class _DecodingViolation(NamedTuple):
+    """Why step 3 refuses a URL's path, in words that follow the name of what is refused."""
+
+    explanation: str
 
 
-def _decoding_violation(url_path: str) -> str | None:
-    """Why step 3 refuses a URL's path, in words that follow the name of what is refused, or None when it decodes."""
+def _percent_decoded(url_path: str) -> str | _DecodingViolation:
+    """Step 3 in URL context: the path with each segment percent-decoded once, or why the step refuses it.
+
+    A backslash written as is is the form check's to refuse, which `_reference_path` runs first; it is
+    refused here too, in its own words, so that `percent_decode_url_path` never lets one through.
+    """
+    if "\\" in url_path:
+        return _DecodingViolation("holds a backslash.")
+    decoded_segments: list[str] = []
     for segment in url_path.split("/"):
         if MALFORMED_PERCENT_ESCAPE.search(segment):
-            return "holds a '%' not followed by two hexadecimal digits; write a literal '%' as '%25'."
-        decoded = _decode_segment(segment)
-        if decoded is None:
-            return "percent-decodes to bytes that are not UTF-8."
+            return _DecodingViolation("holds a '%' not followed by two hexadecimal digits; write a literal '%' as '%25'.")
+        try:
+            decoded = unquote(segment, encoding="utf-8", errors="strict")
+        except UnicodeDecodeError:
+            return _DecodingViolation("percent-decodes to bytes that are not UTF-8.")
         # A control character written as is stays, for the result check to refuse; one only an escape yields is refused here.
         if "/" in decoded or "\\" in decoded or _count_control_characters(decoded) > _count_control_characters(segment):
-            return "percent-decodes to a '/', a backslash or a control character, which no segment may hold."
-    return None
-
-
-def _percent_decoded(url_path: str) -> str:
-    """Step 3 in URL context for a path `_decoding_violation` lets through."""
-    return "/".join(unquote(segment, encoding="utf-8", errors="strict") for segment in url_path.split("/"))
+            return _DecodingViolation("percent-decodes to a '/', a backslash or a control character, which no segment may hold.")
+        decoded_segments.append(decoded)
+    return "/".join(decoded_segments)
 
 
 def percent_decode_url_path(url_path: str) -> str:
@@ -119,15 +121,15 @@ def percent_decode_url_path(url_path: str) -> str:
         The path with each segment percent-decoded as UTF-8, its `/` separators those written.
 
     Raises:
-        MethodTreeRefusedError: As `reference_invalid`, naming the path, when a segment holds a `%` not
-            followed by two hexadecimal digits or a backslash, written or decoded, or when it decodes to
-            bytes that are not UTF-8, to a `/` or to a control character.
+        MethodTreeRefusedError: As `reference_invalid`, naming the path, when it holds a backslash, or
+            when a segment holds a `%` not followed by two hexadecimal digits or decodes to bytes that are
+            not UTF-8, to a `/`, to a backslash or to a control character.
     """
-    violation = _decoding_violation(url_path)
-    if violation is not None:
-        msg = f"The URL path {url_path!r} {violation}"
+    decoding = _percent_decoded(url_path)
+    if isinstance(decoding, _DecodingViolation):
+        msg = f"The URL path {url_path!r} {decoding.explanation}"
         raise MethodTreeRefusedError(msg, refusal=TreeRefusal(code=TreeRefusalCode.REFERENCE_INVALID, names=[url_path]))
-    return _percent_decoded(url_path)
+    return decoding
 
 
 def _where_written(holder: str | None) -> str:
@@ -157,10 +159,10 @@ def _reference_path(reference: str, *, holder: str | None, context: ReferenceCon
             url_path = url_path_of(reference)
             if url_path.startswith("/") or "\\" in url_path:
                 raise _refuse(reference, holder=holder, code=TreeRefusalCode.REFERENCE_INVALID, explanation="starts with '/' or holds a backslash.")
-            violation = _decoding_violation(url_path)
-            if violation is not None:
-                raise _refuse(reference, holder=holder, code=TreeRefusalCode.REFERENCE_INVALID, explanation=violation)
-            path = _percent_decoded(url_path)
+            decoding = _percent_decoded(url_path)
+            if isinstance(decoding, _DecodingViolation):
+                raise _refuse(reference, holder=holder, code=TreeRefusalCode.REFERENCE_INVALID, explanation=decoding.explanation)
+            path = decoding
     return nfc(path)
 
 
