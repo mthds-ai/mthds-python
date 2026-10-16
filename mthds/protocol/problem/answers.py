@@ -34,8 +34,7 @@ import itertools
 import json
 import math
 import re
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast
 
 from pydantic import ValidationError
@@ -54,6 +53,17 @@ _DELAY_SECONDS = re.compile(r"[0-9]+")
 
 # The largest delay a JavaScript reader holds exactly, `Number.MAX_SAFE_INTEGER`; a larger one is unreadable to both twins.
 _MAX_EXACT_SECONDS = 2**53 - 1
+
+# The three forms of an HTTP date a recipient accepts (RFC 9110, section 5.6.7), names case-sensitive.
+_MONTHS: tuple[str, ...] = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+_MONTH = "(?P<month>" + "|".join(_MONTHS) + ")"
+_DAY_NAME = "(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)"
+_DAY_NAME_LONG = "(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)"
+_TIME_OF_DAY = "(?P<hour>[0-9]{2}):(?P<minute>[0-9]{2}):(?P<second>[0-9]{2})"
+_IMF_FIXDATE = re.compile(f"{_DAY_NAME}, (?P<day>[0-9]{{2}}) {_MONTH} (?P<year>[0-9]{{4}}) {_TIME_OF_DAY} GMT")
+_RFC850_DATE = re.compile(f"{_DAY_NAME_LONG}, (?P<day>[0-9]{{2}})-{_MONTH}-(?P<year>[0-9]{{2}}) {_TIME_OF_DAY} GMT")
+_ASCTIME_DATE = re.compile(f"{_DAY_NAME} {_MONTH} (?P<day>[0-9]{{2}}| [0-9]) {_TIME_OF_DAY} (?P<year>[0-9]{{4}})")
+_LEAP_SECOND = 60
 
 # How much of a refused number literal the decoder's message quotes.
 _NUMBER_EXCERPT_LENGTH = 40
@@ -151,7 +161,8 @@ def parse_retry_after(value: str | None, *, now: datetime | None = None) -> int 
     """The delay a `Retry-After` header asks for, in seconds.
 
     Args:
-        value: The header's value: a number of seconds, or an HTTP date.
+        value: The header's value: a number of seconds, or an HTTP date in one of the three forms
+            `parse_http_date` reads.
         now: The time to count an HTTP date from; the current time when not given.
 
     Returns:
@@ -170,14 +181,65 @@ def parse_retry_after(value: str | None, *, now: datetime | None = None) -> int 
         except ValueError:
             return None
         return seconds if seconds <= _MAX_EXACT_SECONDS else None
-    try:
-        moment = parsedate_to_datetime(text)
-    except (TypeError, ValueError):
+    current = now or datetime.now(tz=UTC)
+    moment = parse_http_date(text, now=current)
+    if moment is None:
         return None
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=UTC)
-    delta = (moment - (now or datetime.now(tz=UTC))).total_seconds()
+    delta = (moment - current).total_seconds()
     return max(0, math.ceil(delta))
+
+
+def parse_http_date(text: str, *, now: datetime) -> datetime | None:
+    """An HTTP date, in exactly the three forms a recipient must accept (RFC 9110, section 5.6.7), and no other.
+
+    The forms are the IMF-fixdate `Sun, 06 Nov 1994 08:49:37 GMT`, the obsolete RFC 850 form
+    `Sunday, 06-Nov-94 08:49:37 GMT` and the asctime form `Sun Nov  6 08:49:37 1994`, every name
+    case-sensitive as the grammar writes it. The day name is part of the form but not checked against
+    the date. The RFC 850 form's two-digit year reads as the year ending in those digits from 49 years
+    before `now` to 50 years after it, so that a date that would be more than 50 years ahead reads as
+    the most recent past year with those digits, as the RFC requires. A second of `60`, a leap
+    second, counts as the next minute.
+
+    Args:
+        text: The date, with no surrounding whitespace.
+        now: The time the two-digit year of the RFC 850 form is read against.
+
+    Returns:
+        The moment in UTC, or `None` when `text` is in none of the three forms or names no real moment.
+    """
+    match_found = _IMF_FIXDATE.fullmatch(text) or _ASCTIME_DATE.fullmatch(text)
+    if match_found is not None:
+        year = int(match_found["year"])
+    else:
+        match_found = _RFC850_DATE.fullmatch(text)
+        if match_found is None:
+            return None
+        year = _rfc850_year(int(match_found["year"]), now=now)
+    second = int(match_found["second"])
+    if second > _LEAP_SECOND:
+        return None
+    try:
+        minute_start = datetime(
+            year,
+            _MONTHS.index(match_found["month"]) + 1,
+            int(match_found["day"]),
+            int(match_found["hour"]),
+            int(match_found["minute"]),
+            tzinfo=UTC,
+        )
+    except ValueError:
+        return None
+    return minute_start + timedelta(seconds=second)
+
+
+def _rfc850_year(two_digits: int, *, now: datetime) -> int:
+    """The year ending in `two_digits` that lies from 49 years before `now` to 50 years after it."""
+    year = now.year - now.year % 100 + two_digits
+    if year > now.year + 50:
+        return year - 100
+    if year <= now.year - 50:
+        return year + 100
+    return year
 
 
 def _is_server_error(status: int) -> bool:
