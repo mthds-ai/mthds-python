@@ -1,4 +1,5 @@
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -7,10 +8,10 @@ from pytest_mock import MockerFixture
 from mthds.method_tree import discovery, lister
 from mthds.method_tree.digest import digest_of_contents
 from mthds.method_tree.discovery import DirectoryEntry, EntryKind, on_disk_name
-from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeLimitError, TreeSourceError
+from mthds.method_tree.exceptions import EmptyMethodTreeError, MethodTreeRefusedError, TreeLimitError, TreeSourceError
 from mthds.method_tree.lister import list_method_tree, list_method_tree_at_root
-from mthds.method_tree.models import TreeLimits
-from mthds.method_tree.vocabulary import TreeLimitKind, TreeRefusalCode
+from mthds.method_tree.models import MethodTree, TreeExclusion, TreeLimits
+from mthds.method_tree.vocabulary import ExclusionRule, TreeLimitKind, TreeRefusalCode
 from mthds.package.discovery import find_package_manifest
 from tests.unit.method_tree.test_data import HostCapability
 
@@ -195,6 +196,88 @@ class TestMethodTreeLister:
         assert tree.tree_paths == ["main.mthds"]
         assert manifest is not None
         assert manifest.address == "github.com/acme/letters"
+
+    @pytest.mark.parametrize(
+        "list_tree",
+        [pytest.param(list_method_tree, id="found by discovery"), pytest.param(list_method_tree_at_root, id="at a fixed root")],
+    )
+    @pytest.mark.parametrize(
+        ("files", "excluded_files", "excluded_directories"),
+        [
+            pytest.param(
+                {"invoicing/METHODS.toml": MANIFEST_TEXT, "invoicing/invoice.mthds": 'domain = "invoicing"\n'},
+                {},
+                {"invoicing": TreeExclusion(rule=ExclusionRule.NESTED_PACKAGE, directory="invoicing")},
+                id="a directory holding only a nested package",
+            ),
+            pytest.param(
+                {
+                    ".env": "SECRET=1\n",
+                    ".gitignore": "build/\n",
+                    "__pycache__/m.pyc": "",
+                    "build/draft.mthds": 'domain = "draft"\n',
+                    "packages/billing/METHODS.toml": MANIFEST_TEXT,
+                    "packages/billing/bill.mthds": 'domain = "billing"\n',
+                    "vendor/.git": "gitdir: ../.git/modules/vendor\n",
+                    "vendor/tool.mthds": 'domain = "tool"\n',
+                },
+                {
+                    ".env": TreeExclusion(rule=ExclusionRule.DOT_SEGMENT),
+                    ".gitignore": TreeExclusion(rule=ExclusionRule.DOT_SEGMENT),
+                },
+                {
+                    "__pycache__": TreeExclusion(rule=ExclusionRule.PYCACHE_OR_NODE_MODULES),
+                    "build": TreeExclusion(rule=ExclusionRule.GITIGNORE),
+                    "packages/billing": TreeExclusion(rule=ExclusionRule.NESTED_PACKAGE, directory="packages/billing"),
+                    "vendor": TreeExclusion(rule=ExclusionRule.NESTED_REPOSITORY, directory="vendor"),
+                },
+                id="nested packages and repositories among other exclusions",
+            ),
+        ],
+    )
+    def test_empty_tree_carries_what_the_listing_kept_out(
+        self,
+        tmp_path: Path,
+        list_tree: Callable[[Path], MethodTree],
+        files: dict[str, str],
+        excluded_files: dict[str, TreeExclusion],
+        excluded_directories: dict[str, TreeExclusion],
+    ):
+        """A directory whose own tree is empty is refused as `empty_tree`, and the error says what the listing kept out."""
+        _write(tmp_path, files)
+        with pytest.raises(MethodTreeRefusedError) as refused:
+            list_tree(tmp_path)
+        error = refused.value
+        assert isinstance(error, EmptyMethodTreeError)
+        assert error.refusal.model_dump(mode="json", exclude_none=True) == {"code": "empty_tree", "names": []}
+        assert "keeps every file out" in error.message
+        assert error.root == tmp_path.resolve()
+        assert error.excluded_files == excluded_files
+        assert error.excluded_directories == excluded_directories
+        assert error.raw_paths == {}
+
+    def test_empty_tree_of_a_virtual_environment_root_says_so(self, tmp_path: Path):
+        """A root that is itself a virtual environment is never walked, so the refusal keeps nothing out below it."""
+        _write(tmp_path, {"pyvenv.cfg": "home = /usr/bin\n", "main.mthds": 'domain = "letters"\n', "invoicing/METHODS.toml": MANIFEST_TEXT})
+        with pytest.raises(EmptyMethodTreeError) as refused:
+            list_method_tree(tmp_path)
+        assert "its root is a Python virtual environment" in refused.value.message
+        assert refused.value.excluded_files == {}
+        assert refused.value.excluded_directories == {}
+
+    def test_empty_tree_spells_an_excluded_directory_as_held(self, tmp_path: Path):
+        """A nested package whose name the file system holds decomposed is named in NFC and found again through `raw_paths`."""
+        _write(tmp_path, {"café/METHODS.toml": MANIFEST_TEXT, "café/menu.mthds": 'domain = "menu"\n'})
+        held_names = [entry.name for entry in tmp_path.iterdir()]
+        assert len(held_names) == 1
+        expected_raw_paths = {} if held_names[0] == "café" else {"café": held_names[0]}
+        with pytest.raises(EmptyMethodTreeError) as refused:
+            list_method_tree(tmp_path)
+        error = refused.value
+        assert error.excluded_directories == {"café": TreeExclusion(rule=ExclusionRule.NESTED_PACKAGE, directory="café")}
+        assert error.raw_paths == expected_raw_paths
+        on_disk = error.raw_paths.get("café", "café")
+        assert (error.root / on_disk / "METHODS.toml").read_text(encoding="utf-8") == MANIFEST_TEXT
 
     def test_digest_of_a_listed_tree_matches_its_contents(self, tmp_path: Path):
         _write(tmp_path, {"a.txt": "a", "sub/b.txt": "b"})
