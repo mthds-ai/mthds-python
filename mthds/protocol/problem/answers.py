@@ -52,6 +52,9 @@ RETRY_AFTER_HEADER = "retry-after"
 # A `Retry-After` delay in seconds, as HTTP writes it: ASCII digits only, never a Unicode digit such as `²`.
 _DELAY_SECONDS = re.compile(r"[0-9]+")
 
+# The largest delay a JavaScript reader holds exactly, `Number.MAX_SAFE_INTEGER`; a larger one is unreadable to both twins.
+_MAX_EXACT_SECONDS = 2**53 - 1
+
 # How much of a refused number literal the decoder's message quotes.
 _NUMBER_EXCERPT_LENGTH = 40
 
@@ -153,8 +156,8 @@ def parse_retry_after(value: str | None, *, now: datetime | None = None) -> int 
 
     Returns:
         The delay in whole seconds, never negative, or `None` when the header is absent or unreadable:
-        a number of seconds is ASCII digits only, as HTTP writes it, and one too long to convert reads
-        as unreadable.
+        a number of seconds is ASCII digits only, as HTTP writes it, and one larger than a double
+        holds exactly, past `2**53 - 1`, reads as unreadable, as a JavaScript reader reads it.
     """
     if value is None:
         return None
@@ -163,9 +166,10 @@ def parse_retry_after(value: str | None, *, now: datetime | None = None) -> int 
         return None
     if _DELAY_SECONDS.fullmatch(text):
         try:
-            return int(text)
+            seconds = int(text)
         except ValueError:
             return None
+        return seconds if seconds <= _MAX_EXACT_SECONDS else None
     try:
         moment = parsedate_to_datetime(text)
     except (TypeError, ValueError):

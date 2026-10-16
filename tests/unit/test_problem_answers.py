@@ -79,6 +79,8 @@ class TestProblemAnswers:
             ("a superscript digit, which is no ASCII digit", "²", None),
             ("arabic-indic digits, which are no ASCII digits", "١٢", None),
             ("digits too many to convert", "9" * 5000, None),
+            ("the largest delay a double holds exactly", str(2**53 - 1), 2**53 - 1),
+            ("a delay past it", str(2**53), None),
         ],
     )
     def test_parse_retry_after_reads_seconds_and_http_dates(self, topic: str, value: str | None, expected: int | None) -> None:
