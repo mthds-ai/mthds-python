@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **The core error registry, generated**: `mthds.protocol.problem.registry` is generated from the standard's core error registry `7.1.0`, vendored byte for byte in `vendor/mthds-error-registry/` with its source commit, and gives a constant per core code (`CoreCode`), a typed parameters model per code, each code's entry (`CORE_CODE_SPECS`) and the readings a client falls back on; `CORE_ERROR_REGISTRY_VERSION` in `mthds.protocol.protocol` declares the version, and `make check-error-registry` fails when the vendored files, the declared version and the generated module disagree.
+- **`Problem` and `ProblemItem`**: `mthds.protocol.problem.models` reads the protocol's problem document as received, its undeclared members on `model_extra`, with `effective_domain`, `effective_retry` and `effective_step_kind` reading a value the protocol does not list by the code's family, `is_retryable` true only for a retry of `yes`, `outcome_is_unknown`, `params_as` to read the parameters as the code's model, and each fault of `errors` and its `suggested_fix` typed; `make_client_problem` in `mthds.protocol.problem.client_problems` states a client's own problem from the registry.
+
+### Changed
+
+- **Every request error carries a problem (Breaking)**: `PipelineRequestError(message, *, problem)` requires the failure as a `Problem`, read on `exc.problem`, and every error this package raises carries one under a registered code: an argument refused before any request leaves, by `options`, `method_files` or the client, carries `client.argument_invalid` naming the argument and the reason, and `RunStillRunningError`, raised on a `202` from `execute`, carries `client.follow_failed`. A subclass built elsewhere passes a problem to the constructor.
+- **`ApiResponseError` reads every answer as a problem by its code (Breaking)**: a failed answer raises `ApiResponseError` carrying the runtime's problem document, with `status` and `retry_after` filled from the answer when the body leaves them out, and an answer that is no problem document, or a success whose body is not the route's answer, reads as the problem its status names for `405` and `503` on a route that creates nothing, else as `client.response_unreadable`, instead of raising a pydantic or JSON error. The members `type_uri`, `title`, `instance`, `server_message`, `error_type`, `request_id`, `error_domain`, `retryable`, `user_action` and `validation_errors` are gone, read from `exc.problem` instead (`request_id` on its `model_extra`), and so are `ProblemDocument` and `UserAction`; `mthds.runners.api.problem.read_response_problem` reads an answer, and the protected `_raise_api_response_error` receives the problem.
+- **A request that gets no answer raises `ApiTransportError` (Breaking)**: httpx's transport exceptions no longer escape a route; the request raises `ApiTransportError`, carrying `client.unreachable` when no request left, `client.timeout` when none came back in time, and on `execute` and `start` `client.outcome_unknown` once the request has left, since the run may exist. An answer whose content encoding cannot be decoded reads as an empty body, so its status still decides the problem. The client never repeats a request by itself.
+- **`ClientNotConfiguredError` replaces `ClientAuthenticationError` (Breaking)**: the client raises it, a `PipelineRequestError` carrying `client.not_configured` and the setting, when no API key or base URL resolves at construction, or when the base URL does not make a valid URL.
+- **The validate verdict's items are problem items (Breaking)**: `InvalidValidationReport.errors` replaces `validation_errors`, each fault a `ProblemItem` with its `code`, `detail`, `params`, `location` and `suggested_fix`, both arms carry advisory `warnings` in the same schema, and the invalid arm's `message` is optional; the reports are generic over the item type, and `ValidationDiagnostic` is gone.
+
 ## [v0.22.0] - 2026-10-16
 
 ### Added
