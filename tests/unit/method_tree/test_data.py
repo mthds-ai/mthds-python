@@ -32,3 +32,24 @@ class HostCapability:
     NORMALIZATION_SENSITIVE_NAMES: ClassVar[str] = "normalization_sensitive_names"
     SYMBOLIC_LINKS: ClassVar[str] = "symbolic_links"
     NAMED_PIPES: ClassVar[str] = "named_pipes"
+
+
+class ReferenceTree:
+    """A tree known only by its set of tree paths, and the files in it that hold references."""
+
+    TREE_PATHS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "main.mthds",
+            "templates/letter.html",
+            "templates/logo.png",
+            "templates/partials/header.html",
+            "shared/logo.png",
+            "assets/100%.txt",
+            "assets/caf\u00e9.txt",
+            "assets/my logo.png",
+        }
+    )
+    BUNDLE: ClassVar[str] = "main.mthds"
+    TEMPLATE: ClassVar[str] = "templates/letter.html"
+    PARTIAL: ClassVar[str] = "templates/partials/header.html"
+    LONE_BUNDLE: ClassVar[str] = "greet.mthds"

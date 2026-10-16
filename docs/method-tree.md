@@ -67,6 +67,30 @@ A tree travels as a JSON object mapping each tree path to a file entry: a string
 
 The cache's layout is versioned: a package lives at `{cache_root}/v2/{address}/{version}/`, where `CACHE_LAYOUT` in `mthds/package/package_cache.py` names the version. Copies written before standard `7.0.0` sit at `{cache_root}/{address}/{version}/` and hold the whole clone minus `.git/`, which is not the package's tree, so they are never read: a package found only there is fetched again, and those copies can be deleted.
 
+## Resolving a file reference
+
+A file reference is a path written in a file of the tree, its holder, that names another file of the same tree: a bundle field naming a file (path context) or a relative URL in a template, such as an image's `src` (URL context). `resolve_reference(reference, holder=…, context=…, tree=…)` resolves one by the standard's [resolution steps](https://mthds.ai/latest/spec/method-tree/#file-references), against the directory of the holder, and returns the tree path it names. A URL naming a scheme, holding an authority or with no path is no file reference: the call returns None and the caller leaves the URL exactly as written. A refused reference raises `MethodTreeRefusedError`, whose `refusal.code` is that of the first step that fails: `reference_invalid`, `reference_not_a_tree_path`, `reference_leaves_tree`, `reference_not_in_tree` or, in the one-file tree of a bundle named alone, `reference_in_one_file_tree`. A refusal as not in the tree names the path the reference resolved to, `.` for the root, and, for a tree listed from a directory, the rule that kept the file out. Whether a reference names a file is decided by a lookup in the tree's set of paths, and the file it names is never opened.
+
+```python
+from mthds.method_tree.references import resolve_reference_in_paths
+from mthds.method_tree.vocabulary import ReferenceContext
+
+tree_paths = frozenset({"main.mthds", "templates/letter.html", "shared/logo.png"})
+
+resolve_reference_in_paths("../shared/logo.png", holder="templates/letter.html", context=ReferenceContext.URL, tree_paths=tree_paths)
+# "shared/logo.png"
+resolve_reference_in_paths("shared/logo.png", holder=None, context=ReferenceContext.PATH, tree_paths=tree_paths)
+# "shared/logo.png", resolved from the root
+```
+
+`resolve_reference_in_paths(reference, holder=…, context=…, tree_paths=…, is_one_file_tree=…)` runs the same steps in a set of tree paths rather than a `MethodTree`, for a runtime that holds a tree's listing and nothing else of where it came from, such as one reading a method's files from a store that keys them by hash. Its `holder` may be None, for a reference written in no file of the tree, such as one in a bundle sent as text beside the files of its tree: it resolves from the root, exactly as a reference written in a file at the root does. `is_one_file_tree` says the paths are those of the one-file tree of a `.mthds` file named alone, so that a reference reaching for another file is refused as `reference_in_one_file_tree` with the advice to hand over the method's directory. A set of paths records no membership rule, so a refusal as not in the tree names none. The two functions share one implementation of the steps, and `resolve_reference` adds only the rule that kept a file out. In both, a holder that is not one of the tree's paths raises `ValueError`, a caller's mistake rather than a refusal.
+
+Three steps are public on their own, for a runtime that takes a reference apart itself:
+
+- `url_path_of(reference)` is step 1 in URL context: the URL's path, what is left once its fragment and then its query are dropped. Tabs and line breaks are kept, so that the result check can refuse them.
+- `percent_decode_url_path(url_path)` is step 3: it splits the path at each `/`, then percent-decodes each segment once as UTF-8, so `%2E%2E` decodes to `..` while `%2F` never becomes a separator and `%252F` decodes to `%2F`. It refuses as `reference_invalid`, naming the path, a `%` not followed by two hexadecimal digits, a backslash written or decoded, bytes that are not UTF-8, and an escape that decodes to a `/` or to a control character. It leaves a leading `/` for the form check of step 2 and a control character written as is for the result check of step 6, and it does not normalize to NFC, which is step 4.
+- `lexical_join(holder=…, path=…)` is step 5: the path joined to the holder's directory, the root when `holder` is None, each `.` dropped and each `..` removing the segment before it, or None when a `..` climbs above the root.
+
 ## The lock records tree digests
 
 A `methods.lock` entry records the package's `digest`, the tree digest of its cached copy read back as written, which `verify_lock_file` recomputes and compares. A lock written before standard `7.0.0` records a `hash` instead, from an algorithm that concatenated paths and contents with no separator, so two different directories could share one hash; `parse_lock_file` refuses such an entry, saying that running `lock` regenerates it, and never verifies the old hash.
