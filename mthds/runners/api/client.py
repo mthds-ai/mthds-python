@@ -18,7 +18,7 @@ from mthds.protocol.problem.registry import CoreCode
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
 from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
-from mthds.runners.api.problem import answer_excerpt, lower_case_headers, read_response_problem, transport_failure_problem
+from mthds.runners.api.problem import answer_excerpt, answer_request_id, lower_case_headers, read_response_problem, transport_failure_problem
 from mthds.runners.api.user_agent import AppInfo, build_user_agent, mthds_python_token
 from mthds.runners.types import RunnerType
 
@@ -550,6 +550,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             response_body=response.text,
             headers=lower_case_headers(response.headers),
             request_url=self._url(endpoint),
+            request_id=answer_request_id(response, problem=problem),
         )
 
     def _raise_if_execute_degraded(self, response: httpx.Response) -> None:

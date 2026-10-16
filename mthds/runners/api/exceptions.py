@@ -50,7 +50,9 @@ class ApiResponseError(PipelineRequestError):
 
     The transport's view rides beside it: `status` and `status_text`, `headers` (names in lower case,
     so `headers.get("retry-after")` reads the raw delay), `response_body` the raw text,
-    `request_url` the URL requested and `api_url` the runner's base URL. The error keeps this plain
+    `request_url` the URL requested and `api_url` the runner's base URL. `request_id` is the id to
+    hand to support: the problem's own `request_id` member when the runtime sent one, else the
+    answer's `X-Request-ID` header, which is never added to the problem. The error keeps this plain
     data and never the request itself, which carries the API key.
     """
 
@@ -65,6 +67,7 @@ class ApiResponseError(PipelineRequestError):
         response_body: str,
         headers: dict[str, str] | None = None,
         request_url: str | None = None,
+        request_id: str | None = None,
     ) -> None:
         """Build the error; its message is `message` followed by the problem's next step.
 
@@ -77,6 +80,8 @@ class ApiResponseError(PipelineRequestError):
             response_body: The answer's body, as text.
             headers: The answer's headers, names in lower case.
             request_url: The URL the request was sent to.
+            request_id: The id the runtime knows the request by
+                (`mthds.runners.api.problem.answer_request_id`).
         """
         super().__init__(_with_next_step(message, problem), problem=problem)
         self.api_url = api_url
@@ -85,6 +90,7 @@ class ApiResponseError(PipelineRequestError):
         self.response_body = response_body
         self.headers: dict[str, str] = headers or {}
         self.request_url = request_url
+        self.request_id = request_id
 
 
 class ApiTransportError(PipelineRequestError):

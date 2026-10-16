@@ -38,6 +38,9 @@ _NOTHING_SENT: tuple[type[httpx.TransportError], ...] = (
 # How much of an answer's body an error's message quotes; the error's `response_body` keeps it whole.
 ANSWER_EXCERPT_LIMIT = 500
 
+# The header a runner or a gateway in front of it names the request with, in lower case.
+REQUEST_ID_HEADER = "x-request-id"
+
 
 def lower_case_headers(headers: httpx.Headers) -> dict[str, str]:
     """An answer's headers as a plain mapping, names in lower case."""
@@ -69,6 +72,27 @@ def answer_excerpt(response: httpx.Response, *, problem: Problem) -> str | None:
     if len(text) <= ANSWER_EXCERPT_LIMIT:
         return text
     return f"{text[:ANSWER_EXCERPT_LIMIT]}…"
+
+
+def answer_request_id(response: httpx.Response, *, problem: Problem) -> str | None:
+    """The id the runtime knows the request by, for support: the problem's own `request_id`, else the answer's `X-Request-ID`.
+
+    A runner may name the request in its problem, as the undeclared member `request_id`, and a runner or
+    a gateway in front of it may name it in the `X-Request-ID` header, the one place an answer that is
+    no problem document names it. The header's id stays on the error and is never added to the
+    problem, which stays what the runtime sent or what the client states.
+
+    Args:
+        response: The runner's answer.
+        problem: The problem the error carries for it.
+
+    Returns:
+        The request's id, or `None` when neither the problem nor the header names one.
+    """
+    member = (problem.model_extra or {}).get("request_id")
+    if isinstance(member, str) and member.strip():
+        return member
+    return response.headers.get(REQUEST_ID_HEADER, "").strip() or None
 
 
 def read_response_problem(response: httpx.Response, *, creates_run: bool) -> Problem:

@@ -275,6 +275,28 @@ class TestMthdsAPIClientErrors:
         assert isinstance(degraded, RunStillRunningError), topic
         assert degraded.retry_after_seconds is None, topic
 
+    @pytest.mark.parametrize(
+        ("topic", "status", "body", "header", "expected_request_id"),
+        [
+            ("a gateway's page names the request in the header alone", 502, LegacyAnswerBodies.GATEWAY_HTML, "req_gateway", "req_gateway"),
+            ("a problem's own id wins over the header", 422, ProblemBodies.MODEL_UNKNOWN_BODY, "req_header", "req_b7d2c66f-b2d5-4dc7-bd4f-6cf98abfbdc0"),
+            ("a problem that names none takes the header's", 429, ProblemBodies.RATE_LIMITED_BODY, " req_rate ", "req_rate"),
+            ("nothing names the request", 502, LegacyAnswerBodies.GATEWAY_HTML, None, None),
+        ],
+    )
+    def test_the_error_names_the_request_from_the_problem_or_the_header(
+        self, topic: str, status: int, body: str, header: str | None, expected_request_id: str | None
+    ) -> None:
+        """The request id falls back on `X-Request-ID`, on the error alone: the problem stays what the runtime sent or what the client states."""
+        headers = {"X-Request-ID": header} if header is not None else {}
+        exc = self._response_error(self._client(_answering(status, text=body, headers=headers)), lambda client: client.models())
+
+        assert exc.request_id == expected_request_id, topic
+        if exc.problem.code == "client.response_unreadable":
+            assert exc.problem.as_wire() == make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": status}).as_wire(), topic
+        else:
+            assert exc.problem.as_wire() == json.loads(body), topic
+
     def test_a_filtered_models_read_names_its_query_in_the_message(self) -> None:
         """The endpoint in the message is the one requested, query string included."""
         exc = self._response_error(
