@@ -72,7 +72,7 @@ On the producing side the protocol's own domain shapes say the same thing, and s
 
 ### Errors: every failure is a problem
 
-Every failure of every route raises a `PipelineRequestError` (`mthds.protocol.exceptions`), and every one carries the failure on `exc.problem` as the protocol's problem document under a registered code, so `except PipelineRequestError` catches every failure of a call and a program branches on one shape. The problem is the runtime's own when it answered with one, and otherwise the one the client states from the [core error registry](versioning.md#the-error-registry-follows-the-standards-releases) for what it met:
+Every failure of every route of the API runner, `MthdsAPIClient`, raises a `PipelineRequestError` (`mthds.protocol.exceptions`), and every one carries the failure on `exc.problem` as the protocol's problem document under a registered code, so `except PipelineRequestError` catches every failure of a call and a program branches on one shape. The local `PipelexRunner` does not follow this yet: it shells out to the `pipelex` CLI without reading its errors, and raises its own `PipelexRunnerError`, which carries no problem, or `NotImplementedError` for a route the CLI does not serve. The problem is the runtime's own when it answered with one, and otherwise the one the client states from the [core error registry](versioning.md#the-error-registry-follows-the-standards-releases) for what it met:
 
 | What the client met | Raised as | `problem.code` |
 | --- | --- | --- |

@@ -89,12 +89,14 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             RunResultExecute — the completed run: `pipeline_run_id` + `pipe_output`.
 
         Raises:
-            PipelineRequestError: For every failure of the call, carrying it as a
-                problem document under a registered code (`exc.problem`). The API
-                runner raises its subclasses: `RunStillRunningError` when the server
-                answers 202 (the protocol's optional async degrade) instead of a final
-                result, `ApiResponseError` when it answers non-2xx or a success the
-                client cannot read, and `ApiTransportError` when no answer came back.
+            PipelineRequestError: From the API runner, for every failure of the call,
+                carrying it as a problem document under a registered code
+                (`exc.problem`): `RunStillRunningError` when the server answers 202
+                (the protocol's optional async degrade) instead of a final result,
+                `ApiResponseError` when it answers non-2xx or a success the client
+                cannot read, and `ApiTransportError` when no answer came back. Each
+                implementation names its own errors: the local `PipelexRunner` raises
+                `PipelexRunnerError`, which carries no problem yet.
         """
         ...
 
@@ -130,11 +132,12 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             (no output yet)
 
         Raises:
-            PipelineRequestError: For every failure of the call, carrying it as a
-                problem document under a registered code (`exc.problem`). The API
-                runner raises its subclasses: `ApiResponseError` when the server
-                answers non-2xx or a success the client cannot read, and
-                `ApiTransportError` when no answer came back.
+            PipelineRequestError: From the API runner, for every failure of the call,
+                carrying it as a problem document under a registered code
+                (`exc.problem`): `ApiResponseError` when the server answers non-2xx or
+                a success the client cannot read, and `ApiTransportError` when no
+                answer came back. Each implementation names its own errors: the local
+                `PipelexRunner` does not start runs and raises `NotImplementedError`.
         """
         ...
 
