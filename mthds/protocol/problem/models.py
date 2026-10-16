@@ -16,10 +16,11 @@ The models follow the protocol's reader rules (the "Errors" section of the stand
 - **The declared members are typed.** A body whose declared member has the wrong type, such as a
   `status` written as a string, a `null` where the protocol leaves a member out, or a code outside
   the code pattern, is no problem document, and the client reads it as an unreadable answer.
-- **A reader falls back on the family.** `effective_domain`, `effective_retry` and
-  `effective_step_kind` read a value the reader does not know by the code's family, as the
-  generated registry declares it, then as `runtime`, `no` and `report`. `effective_safety` reads an
-  unknown safety as `unsafe`.
+- **A reader falls back on the family.** `effective_domain` and `effective_step_kind` read a value
+  the reader does not know by the code's family, as the generated registry declares it, then as
+  `runtime` and `report`. A retry verdict is never read by the family: `effective_retry` reads an
+  unknown one as `no`, so that nothing is repeated on a guess. `effective_safety` reads an unknown
+  safety as `unsafe`.
 
 `as_wire()` gives a problem back as the members it was read from, in JSON types.
 """
@@ -326,8 +327,9 @@ class Problem(_ProblemPart):
     `type`, `title`, `status` and `detail` are the RFC's; `code`, `domain`, `retry`, `retry_after`,
     `next_step`, `params`, `location`, `errors` and `pipeline_run_id` are the core's. A program
     branches on `code`, and on `effective_domain`, `effective_retry` and `effective_step_kind`,
-    which read every value the protocol lists and fall back on the code's family for one it does not;
-    the sentences (`detail`, `next_step.detail`) are for a person and are never parsed.
+    which read every value the protocol lists; for one it does not, the domain and the step kind fall
+    back on the code's family and the retry verdict reads as `no`. The sentences (`detail`,
+    `next_step.detail`) are for a person and are never parsed.
 
     `status` is the HTTP status of the answer the problem is the body of: a runner always writes it,
     the client fills it from the answer when a body leaves it out, and a problem the client builds for
@@ -367,7 +369,7 @@ class Problem(_ProblemPart):
 
     @property
     def effective_retry(self) -> RetryVerdict:
-        """Whether repeating the operation can succeed, a verdict the reader does not know reading as `no`."""
+        """Whether repeating the operation can succeed, a verdict the reader does not know reading as `no`, never by the family."""
         if isinstance(self.retry, RetryVerdict):
             return self.retry
         return RetryVerdict.NO
