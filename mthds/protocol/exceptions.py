@@ -13,8 +13,9 @@ class PipelineRequestError(Exception):
 
     `problem` is the protocol's problem document for the failure: the runtime's own when it answered
     with one, and otherwise the problem the client states for it under a registered code, such as
-    `client.argument_invalid` for an argument refused before any request left (the code this class
-    carries when it is raised bare), `client.unreachable` for a runtime no connection reached, or
+    `client.argument_invalid` for an argument refused before any request left, which
+    `make_argument_invalid_error` raises as this class itself rather than a subclass,
+    `client.unreachable` for a runtime no connection reached, or
     `client.response_unreadable` for an answer that is no problem document. A program branches on
     `problem.code`, and on `problem.effective_domain`, `problem.effective_retry` and
     `problem.is_retryable`, never on the wording of the message, which is for a person: `str(exc)`

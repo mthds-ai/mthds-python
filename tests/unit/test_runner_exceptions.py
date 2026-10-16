@@ -1,6 +1,7 @@
 """Tests for the protocol + runner error hierarchy (`mthds.protocol.exceptions`, `mthds.runners.api.exceptions`)."""
 
 import copy
+import inspect
 import pickle  # ruff: ignore[suspicious-pickle-import]  # the test round-trips its own errors, never untrusted bytes
 import subprocess  # ruff: ignore[suspicious-subprocess-import]  # the test imports this package's own modules in a fresh interpreter
 import sys
@@ -46,6 +47,12 @@ class TestClientExceptions:
         assert exc.problem.code == "client.follow_failed"
         assert exc.problem.outcome_is_unknown
         assert not exc.problem.is_retryable
+
+    def test_a_request_error_is_never_built_without_its_problem(self) -> None:
+        """`problem` is a required keyword, so no request error exists without one, a refused argument's included."""
+        problem_parameter = inspect.signature(PipelineRequestError.__init__).parameters["problem"]
+        assert problem_parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        assert problem_parameter.default is inspect.Parameter.empty
 
     def test_a_bare_request_error_is_an_argument_refused_before_sending(self) -> None:
         """The client's own refusal of an argument carries `client.argument_invalid`, naming the argument and the reason."""
