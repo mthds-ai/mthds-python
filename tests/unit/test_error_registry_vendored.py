@@ -27,7 +27,7 @@ _LITERAL = _generator_literal()
 
 
 class TestErrorRegistryVendored:
-    def test_vendored_bytes_match_the_sidecar(self):
+    def test_vendored_bytes_match_the_sidecar(self) -> None:
         """The vendored snapshot and schema are byte for byte the files the sidecar records, so a hand edit or a partial re-vendor fails here."""
         sidecar = VendoredRegistry.SIDECAR
         assert sidecar["source_repository"] == "mthds-ai/mthds"
@@ -37,13 +37,13 @@ class TestErrorRegistryVendored:
         assert sidecar["files"] == recorded
         assert set(sidecar["files"]) == {"mthds-error-registry.json", "mthds-error-registry.schema.json"}
 
-    def test_versions_agree(self):
+    def test_versions_agree(self) -> None:
         """The vendored snapshot, its sidecar, the generated module and the version the package declares name one registry."""
         assert VendoredRegistry.SNAPSHOT["version"] == CORE_ERROR_REGISTRY_VERSION
         assert VendoredRegistry.SIDECAR["registry_version"] == CORE_ERROR_REGISTRY_VERSION
         assert REGISTRY_VERSION == CORE_ERROR_REGISTRY_VERSION
 
-    def test_generated_module_holds_every_code(self):
+    def test_generated_module_holds_every_code(self) -> None:
         """Every code of the snapshot has its entry in the generated module, and no other code does."""
         assert set(CORE_CODE_SPECS) == {entry["code"] for entry in VendoredRegistry.SNAPSHOT["codes"]}
         assert STATUS_READINGS
@@ -67,7 +67,7 @@ class TestErrorRegistryVendored:
         """A text cut into an implicit concatenation reads back exactly, whatever spaces it holds where it is cut."""
         assert ast.literal_eval(_LITERAL(text)) == text, topic
 
-    def test_regenerating_gives_no_diff(self):
+    def test_regenerating_gives_no_diff(self) -> None:
         """Regenerating the module from the vendored snapshot writes exactly the committed module, offline."""
         completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
             [sys.executable, str(VendoredRegistry.GENERATOR_PATH), "--check"],
