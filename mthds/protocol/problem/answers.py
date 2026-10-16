@@ -9,7 +9,8 @@ as a problem under a registered code, so that a caller branches on one shape:
   deeper than `MAX_BODY_NESTING`, the constants `NaN` and `Infinity` that JSON does not define and a
   number past the range of a double, which would read as an infinity, and it is a problem document
   when it validates as `Problem`. Its members are kept as sent, undeclared
-  ones included; `status` is filled from the answer when the body leaves it out, and `retry_after`
+  ones included; `status` is filled from the answer when the body leaves it out and the answer's
+  status is one HTTP defines, `100` to `599`, and `retry_after`
   from the `Retry-After` header when the body gives none and its retry verdict is `yes`.
 - **A server error on a route that creates a run leaves the outcome unknown.** When the body is no
   problem document and the status is a `5xx`, such as a gateway's `504` after its own time limit or
@@ -256,6 +257,11 @@ def _rfc850_year(two_digits: int, *, now: datetime) -> int:
     return year
 
 
+def _is_problem_status(status: int) -> bool:
+    """Whether a status is one a problem's `status` may hold, `100` to `599`, as HTTP defines them."""
+    return 100 <= status <= 599
+
+
 def _is_server_error(status: int) -> bool:
     """Whether a status is a server error, `500` to `599`."""
     return 500 <= status <= 599
@@ -274,7 +280,8 @@ def read_problem_document(body: str, *, status: int, headers: Mapping[str, str])
 
     Args:
         body: The answer's body, as text.
-        status: The answer's HTTP status, which a body that leaves `status` out takes.
+        status: The answer's HTTP status, which a body that leaves `status` out takes when it is one HTTP
+            defines, `100` to `599`; a body answered with another status keeps no `status`.
         headers: The answer's headers, names in lower case; `retry-after` fills a missing `retry_after`
             beside a retry verdict of `yes`.
 
@@ -291,7 +298,8 @@ def read_problem_document(body: str, *, status: int, headers: Mapping[str, str])
     except ValidationError:
         return None
     filled: dict[str, Any] = {}
-    if "status" not in members:
+    # An HTTP parser may hand over a status HTTP does not define, such as `999`, which no problem's `status` holds.
+    if "status" not in members and _is_problem_status(status):
         filled["status"] = status
     if "retry_after" not in members and problem.is_retryable:
         delay = parse_retry_after(headers.get(RETRY_AFTER_HEADER))

@@ -288,6 +288,17 @@ class TestMthdsAPIClientErrors:
             assert not isinstance(value, (httpx.Request, httpx.Response))
         assert "test-token" not in repr(vars(exc))
 
+    @pytest.mark.parametrize("status", [600, 999])
+    def test_a_problem_answered_with_a_status_http_does_not_define_takes_no_status(self, status: int) -> None:
+        """A parser may hand over a status past `599`, which no problem's `status` holds, so a body that leaves it out reads as sent."""
+        members = {member: value for member, value in ProblemBodies.MODEL_UNKNOWN.items() if member != "status"}
+
+        exc = self._response_error(self._client(_answering(status, text=json.dumps(members))), lambda client: client.models())
+
+        assert exc.problem.as_wire() == members
+        assert exc.status == status
+        assert "The server answered" not in str(exc)
+
     @pytest.mark.parametrize(
         ("topic", "depth", "expected_code"),
         [
