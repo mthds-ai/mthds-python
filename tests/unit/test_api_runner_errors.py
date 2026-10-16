@@ -1,6 +1,7 @@
 """Tests for how MthdsAPIClient reads every failure of every route as a problem, httpx's transport mocked."""
 
 import asyncio
+import json
 from collections.abc import Callable, Coroutine, Mapping
 from typing import Any, NoReturn
 
@@ -11,8 +12,9 @@ from typing_extensions import override
 
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import ModelCategory
+from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.models import Problem, ProblemDomain, RemapValueOp
-from mthds.protocol.problem.registry import ModelUnknownParams
+from mthds.protocol.problem.registry import CoreCode, ModelUnknownParams
 from mthds.runners.api.client import MthdsAPIClient
 from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
 from tests.unit.test_data import LegacyAnswerBodies, ProblemBodies
@@ -173,7 +175,46 @@ class TestMthdsAPIClientErrors:
         assert exc.problem.code == expected_code, topic
         assert exc.status == status
         assert exc.response_body == body
-        assert str(exc) == f"API POST /v1/execute failed ({status}): {exc.problem.detail}\nNext step: {exc.problem.next_step.detail}"
+        lines = str(exc).split("\n")
+        assert lines[0] == f"API POST /v1/execute failed ({status}): {exc.problem.detail}", topic
+        assert lines[-1] == f"Next step: {exc.problem.next_step.detail}", topic
+        if body:
+            assert len(lines) == 3, topic
+            assert lines[1].startswith("The server answered: "), topic
+        else:
+            assert len(lines) == 2, topic
+
+    def test_the_message_quotes_what_the_server_said_and_the_problem_keeps_the_registrys_words(self) -> None:
+        """A body that is no problem document is quoted on its own line of the message, never in the problem, which stays the client's."""
+        exc = self._response_error(self._client(_answering(401, text='{"detail":"Not authenticated"}')), lambda client: client.models())
+
+        assert str(exc) == (
+            "API GET /v1/models failed (401): "
+            "The runtime answered with the HTTP status 401 and a body that is not a problem document the client can read.\n"
+            'The server answered: {"detail":"Not authenticated"}\n'
+            f"Next step: {exc.problem.next_step.detail}"
+        )
+        assert exc.problem.as_wire() == make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": 401}).as_wire()
+        assert "Not authenticated" not in json.dumps(exc.problem.as_wire())
+
+    @pytest.mark.parametrize(
+        ("topic", "status", "body", "expected_line"),
+        [
+            ("a success that is not the route's answer", 200, "OK", "The server answered: OK"),
+            (
+                "a page on several lines reads on one",
+                502,
+                "<html>\n  <body>\n    <h1>502 Bad Gateway</h1>\n  </body>\n</html>\n",
+                "The server answered: <html> <body> <h1>502 Bad Gateway</h1> </body> </html>",
+            ),
+            ("a long page is cut", 502, "<p>" + "x" * 600 + "</p>", "The server answered: <p>" + "x" * 497 + "…"),
+        ],
+    )
+    def test_the_quote_of_the_body_is_one_bounded_line(self, topic: str, status: int, body: str, expected_line: str) -> None:
+        exc = self._response_error(self._client(_answering(status, text=body)), lambda client: client.version())
+
+        assert str(exc).split("\n")[1] == expected_line, topic
+        assert exc.response_body == body, topic
 
     def test_an_empty_503_on_a_read_says_the_runtime_is_unavailable_with_the_delay_it_asks_for(self) -> None:
         """A read creates nothing, so a 503 with no problem document reads as runtime.unavailable, retry_after from the header."""

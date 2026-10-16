@@ -44,8 +44,9 @@ class ApiResponseError(PipelineRequestError):
     `problem` is what to branch on: the runtime's problem document as it sent it, undeclared members
     such as a `request_id` riding `problem.model_extra`, or the problem the client read from an
     answer that is no problem document (`client.response_unreadable`, or the one code its status
-    names). `str(exc)` names the request and the status, gives the problem's `detail` and, on its own
-    line, its next step.
+    names). `str(exc)` names the request and the status, gives the problem's `detail`, quotes on its
+    own line the start of a body that is not the problem it carries, such as a gateway's HTML page,
+    and gives on its own line the problem's next step.
 
     The transport's view rides beside it: `status` and `status_text`, `headers` (names in lower case,
     so `headers.get("retry-after")` reads the raw delay), `response_body` the raw text,

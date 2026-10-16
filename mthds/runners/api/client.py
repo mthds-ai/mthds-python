@@ -18,7 +18,7 @@ from mthds.protocol.problem.registry import CoreCode
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
 from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
-from mthds.runners.api.problem import lower_case_headers, read_response_problem, transport_failure_problem
+from mthds.runners.api.problem import answer_excerpt, lower_case_headers, read_response_problem, transport_failure_problem
 from mthds.runners.api.user_agent import AppInfo, build_user_agent, mthds_python_token
 from mthds.runners.types import RunnerType
 
@@ -520,9 +520,11 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         """Raise the `ApiResponseError` of an answer that is a failure, carrying the problem it reads as.
 
         Every route calls this for a non-2xx answer and for a success it cannot read, so it is the one
-        place an answer becomes an error. A documented protected extension seam: a client built on this
-        one overrides it to raise its own subclass of `ApiResponseError`, and every inherited route then
-        raises that subclass.
+        place an answer becomes an error. When the body is not the problem the error carries, the
+        message quotes its start on its own line (`mthds.runners.api.problem.answer_excerpt`), so that
+        a person sees what the server said while the problem keeps the registry's words. A documented
+        protected extension seam: a client built on this one overrides it to raise its own subclass of
+        `ApiResponseError`, and every inherited route then raises that subclass.
 
         Args:
             method: The HTTP method of the request, for the message (`POST`).
@@ -536,6 +538,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             ApiResponseError: Always.
         """
         msg = f"API {method} /{self._API_PREFIX}/{endpoint} failed ({response.status_code}): {problem.detail}"
+        excerpt = answer_excerpt(response, problem=problem)
+        if excerpt is not None:
+            msg = f"{msg}\nThe server answered: {excerpt}"
         raise ApiResponseError(
             msg,
             problem=problem,

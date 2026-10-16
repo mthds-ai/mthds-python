@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from mthds.protocol.problem.answers import read_answer
+from mthds.protocol.problem.answers import read_answer, read_problem_document
 from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.registry import CoreCode
 
@@ -35,9 +35,40 @@ _NOTHING_SENT: tuple[type[httpx.TransportError], ...] = (
 )
 
 
+# How much of an answer's body an error's message quotes; the error's `response_body` keeps it whole.
+ANSWER_EXCERPT_LIMIT = 500
+
+
 def lower_case_headers(headers: httpx.Headers) -> dict[str, str]:
     """An answer's headers as a plain mapping, names in lower case."""
     return {name.lower(): value for name, value in headers.items()}
+
+
+def answer_excerpt(response: httpx.Response, *, problem: Problem) -> str | None:
+    """The start of an answer's body, for a person, when the body is not the problem an error carries.
+
+    An answer that is no problem document, such as a gateway's `{"detail":"Not authenticated"}` or a
+    proxy's HTML page, or a success whose body is not the route's answer, reads as a problem the client
+    states in the registry's words; the body is what the server itself said, and an error's message
+    quotes it so that a person sees it. The excerpt stays on one line, every run of whitespace written
+    as one space, and a body longer than `ANSWER_EXCERPT_LIMIT` characters is cut there with an
+    ellipsis. The problem itself is never changed: the excerpt belongs to the message alone.
+
+    Args:
+        response: The runner's answer.
+        problem: The problem the error carries for it.
+
+    Returns:
+        The excerpt, or `None` when the body is empty or is the problem the error carries.
+    """
+    text = " ".join(response.text.split())
+    if not text:
+        return None
+    if read_problem_document(response.text, status=response.status_code, headers=lower_case_headers(response.headers)) == problem:
+        return None
+    if len(text) <= ANSWER_EXCERPT_LIMIT:
+        return text
+    return f"{text[:ANSWER_EXCERPT_LIMIT]}…"
 
 
 def read_response_problem(response: httpx.Response, *, creates_run: bool) -> Problem:
