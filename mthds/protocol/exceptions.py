@@ -4,9 +4,6 @@ from typing import TYPE_CHECKING, Any
 
 from typing_extensions import override
 
-from mthds.protocol.problem.client_problems import make_client_problem
-from mthds.protocol.problem.registry import CoreCode
-
 if TYPE_CHECKING:
     from mthds.protocol.problem.models import Problem
 
@@ -60,5 +57,11 @@ def make_argument_invalid_error(message: str, *, argument: str, reason: str) -> 
     Returns:
         A `PipelineRequestError` carrying the problem `client.argument_invalid` with `argument` and `reason`.
     """
+    # The registry loads when an argument is refused rather than when this module does: every protocol
+    # module imports this one, and a light one such as `mthds.protocol.options`, which needs only the
+    # standard library, would otherwise load the whole generated registry, and pydantic with it.
+    from mthds.protocol.problem.client_problems import make_client_problem  # ruff: ignore[import-outside-top-level]
+    from mthds.protocol.problem.registry import CoreCode  # ruff: ignore[import-outside-top-level]
+
     problem = make_client_problem(CoreCode.CLIENT_ARGUMENT_INVALID, params={"argument": argument, "reason": reason})
     return PipelineRequestError(message, problem=problem)

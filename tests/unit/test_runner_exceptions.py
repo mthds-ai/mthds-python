@@ -2,6 +2,8 @@
 
 import copy
 import pickle  # ruff: ignore[suspicious-pickle-import]  # the test round-trips its own errors, never untrusted bytes
+import subprocess  # ruff: ignore[suspicious-subprocess-import]  # the test imports this package's own modules in a fresh interpreter
+import sys
 from typing import Any
 
 import httpx
@@ -60,6 +62,14 @@ class TestClientExceptions:
             "next_step": {"kind": "change_input", "detail": "Correct the argument 'pipe_code', then try again."},
             "params": {"argument": "pipe_code", "reason": "not_a_string"},
         }
+
+    @pytest.mark.parametrize("module", ["mthds.protocol.exceptions", "mthds.protocol.options", "mthds.protocol.method_files"])
+    def test_a_light_protocol_module_loads_no_registry(self, module: str) -> None:
+        """A module that only refuses arguments loads the generated registry when it refuses one, never when it is imported."""
+        probe = f"import sys, {module}; print('mthds.protocol.problem.registry' in sys.modules)"
+        completed = subprocess.run([sys.executable, "-c", probe], capture_output=True, check=True, text=True)  # ruff: ignore[subprocess-without-shell-equals-true]
+
+        assert completed.stdout.strip() == "False", module
 
     @pytest.mark.parametrize(
         ("topic", "api_key", "base_url", "setting"),
