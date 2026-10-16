@@ -79,7 +79,7 @@ Every failure of every route raises a `PipelineRequestError` (`mthds.protocol.ex
 | An answer whose body is a problem document | `ApiResponseError` | the runtime's code, as sent |
 | A non-2xx whose body is no problem document, with a status exactly one core code carries and a caller can state | `ApiResponseError` | that code, today `request.method_not_allowed` for `405` and `runtime.unavailable` for `503` |
 | Any other answer that is no problem document, such as a proxy's HTML page or a framework's `{"detail": ...}` | `ApiResponseError` | `client.response_unreadable`, naming the status |
-| A success whose body is not the route's answer | `ApiResponseError` | `client.response_unreadable`, naming the status |
+| A success whose body is not the route's answer, decoded by the same JSON rules as an error's body | `ApiResponseError` | `client.response_unreadable`, naming the status |
 | A `202` on `/execute` | `RunStillRunningError` | `client.follow_failed`, naming the run |
 | No request left: no connection opened, a proxy refused it | `ApiTransportError` | `client.unreachable`, naming the base URL |
 | No answer in time on a route that creates nothing | `ApiTransportError` | `client.timeout`, naming the time limit |

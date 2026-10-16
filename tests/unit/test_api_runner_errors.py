@@ -17,7 +17,7 @@ from mthds.protocol.problem.models import Problem, ProblemDomain, RemapValueOp
 from mthds.protocol.problem.registry import CoreCode, ModelUnknownParams
 from mthds.runners.api.client import MthdsAPIClient
 from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
-from tests.unit.test_data import LegacyAnswerBodies, ProblemBodies
+from tests.unit.test_data import ExecuteWireResponses, LegacyAnswerBodies, ProblemBodies
 
 _BASE_URL = "http://localhost:8081"
 
@@ -320,6 +320,33 @@ class TestMthdsAPIClientErrors:
         assert exc.problem.code == "client.response_unreadable", f"{route}, {topic}, creates a run: {creates_run}"
         assert exc.problem.as_wire()["params"] == {"status": status}
         assert exc.status == status
+
+    @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
+    @pytest.mark.parametrize(
+        ("topic", "literal"),
+        [("the constant NaN", "NaN"), ("the constant Infinity", "Infinity"), ("a number past a double's range", "1e999")],
+    )
+    def test_a_success_body_is_decoded_by_the_rules_of_an_error_body(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, literal: str
+    ) -> None:
+        """A success whose body holds a number JSON cannot write is unreadable, as an error body holding it is, whatever the route parses."""
+        status = 202 if route == "POST /v1/start" else 200
+        # One body every route's answer validates from, so that only the literal can make it unreadable.
+        answer = {**ExecuteWireResponses.REDUCED, "is_valid": True, "models": [], "protocol_version": "1.0.0"}
+        body = json.dumps(answer)[:-1] + f', "load": {literal}}}'
+        exc = self._response_error(self._client(_answering(status, text=body)), call)
+
+        assert exc.problem.code == "client.response_unreadable", f"{route}, {topic}, creates a run: {creates_run}"
+        assert exc.problem.as_wire()["params"] == {"status": status}
+
+    @pytest.mark.parametrize("literal", ["NaN", "1e999"])
+    def test_a_202_on_execute_whose_body_is_no_json_names_no_run(self, literal: str) -> None:
+        """A 202 body is decoded by the same rules, so one holding a number JSON cannot write names no run the client can read."""
+        handler = _answering(202, text=f'{{"pipeline_run_id":"run_7f3a","load":{literal}}}')
+        exc = self._response_error(self._client(handler), lambda client: client.execute(pipe_code="answer"))
+
+        assert exc.problem.code == "client.response_unreadable", literal
+        assert exc.problem.as_wire()["params"] == {"status": 202}
 
     @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
     @pytest.mark.parametrize(

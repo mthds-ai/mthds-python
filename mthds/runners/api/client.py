@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, NoReturn, Self, TypeVar, cast
 from urllib.parse import quote
 
@@ -12,7 +11,7 @@ from typing_extensions import override
 from mthds.config import load_config
 from mthds.protocol.exceptions import make_argument_invalid_error
 from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationResult, VersionInfo
-from mthds.protocol.problem.answers import RETRY_AFTER_HEADER, parse_retry_after, unreadable_answer
+from mthds.protocol.problem.answers import RETRY_AFTER_HEADER, decode_json, parse_retry_after, unreadable_answer
 from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.registry import CoreCode
 from mthds.protocol.protocol import MTHDSProtocol
@@ -254,7 +253,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         A non-2xx raises through `_raise_api_response_error` with the problem the answer reads
         as, and a success whose body is not JSON, or does not validate as the route's answer,
-        raises it with `client.response_unreadable`. A documented protected extension seam: a
+        raises it with `client.response_unreadable`. A success body is decoded by the rules every
+        body is (`mthds.protocol.problem.answers.decode_json`): `NaN`, `Infinity` and a number past
+        the range of a double are not JSON, and an integral number reads as an integer. A documented protected extension seam: a
         client built on this one parses its own routes' answers through it too.
 
         Args:
@@ -275,12 +276,11 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             self._raise_api_response_error(
                 method=method, endpoint=endpoint, response=response, problem=read_response_problem(response, creates_run=creates_run)
             )
-        try:
-            decoded = json.loads(response.text)
-        except (ValueError, RecursionError):
+        decoded = decode_json(response.text)
+        if not decoded.is_json:
             self._raise_api_response_error(method=method, endpoint=endpoint, response=response, problem=unreadable_answer(response.status_code))
         try:
-            return parse(decoded)
+            return parse(decoded.value)
         except ValidationError:
             self._raise_api_response_error(method=method, endpoint=endpoint, response=response, problem=unreadable_answer(response.status_code))
 
@@ -567,10 +567,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         """
         if response.status_code != 202:
             return
-        try:
-            raw = response.json()
-        except (ValueError, RecursionError):
-            raw = None
+        raw = decode_json(response.text).value
         started_run_id = cast("dict[str, Any]", raw).get("pipeline_run_id") if isinstance(raw, dict) else None
         if not isinstance(started_run_id, str) or not started_run_id:
             self._raise_api_response_error(method="POST", endpoint="execute", response=response, problem=unreadable_answer(response.status_code))
