@@ -12,8 +12,8 @@ from pytest_mock import MockerFixture
 from typing_extensions import override
 
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.protocol.problem.answers import MAX_BODY_NESTING
 from mthds.protocol.models import ModelCategory
+from mthds.protocol.problem.answers import MAX_BODY_NESTING
 from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.models import Problem, ProblemDomain, RemapValueOp
 from mthds.protocol.problem.registry import AccountRateLimitedParams, CoreCode, ModelUnknownParams
@@ -152,9 +152,7 @@ class TestMthdsAPIClientErrors:
             ("a fractional count", {"limit": 60.5, "window": 60}, None),
         ],
     )
-    def test_a_codes_parameters_read_as_json_types_them(
-        self, topic: str, params: dict[str, Any], expected: AccountRateLimitedParams | None
-    ) -> None:
+    def test_a_codes_parameters_read_as_json_types_them(self, topic: str, params: dict[str, Any], expected: AccountRateLimitedParams | None) -> None:
         """The generated parameters model reads a number strictly, as the problem model does: a string or a boolean is never coerced."""
         body = json.dumps({**ProblemBodies.RATE_LIMITED, "params": params})
         exc = self._response_error(self._client(_answering(429, text=body)), lambda client: client.models())
@@ -347,7 +345,13 @@ class TestMthdsAPIClientErrors:
         ("topic", "status", "body", "header", "expected_request_id"),
         [
             ("a gateway's page names the request in the header alone", 502, LegacyAnswerBodies.GATEWAY_HTML, "req_gateway", "req_gateway"),
-            ("a problem's own id wins over the header", 422, ProblemBodies.MODEL_UNKNOWN_BODY, "req_header", "req_b7d2c66f-b2d5-4dc7-bd4f-6cf98abfbdc0"),
+            (
+                "a problem's own id wins over the header",
+                422,
+                ProblemBodies.MODEL_UNKNOWN_BODY,
+                "req_header",
+                "req_b7d2c66f-b2d5-4dc7-bd4f-6cf98abfbdc0",
+            ),
             ("a problem that names none takes the header's", 429, ProblemBodies.RATE_LIMITED_BODY, " req_rate ", "req_rate"),
             ("nothing names the request", 502, LegacyAnswerBodies.GATEWAY_HTML, None, None),
         ],
@@ -400,7 +404,7 @@ class TestMthdsAPIClientErrors:
         """A success whose body holds a number JSON cannot write is unreadable, as an error body holding it is, whatever the route parses."""
         status = 202 if route == "POST /v1/start" else 200
         # One body every route's answer validates from, so that only the literal can make it unreadable.
-        answer = {**ExecuteWireResponses.REDUCED, "is_valid": True, "models": [], "protocol_version": "1.0.0"}
+        answer: dict[str, Any] = {**ExecuteWireResponses.REDUCED, "is_valid": True, "models": [], "protocol_version": "1.0.0"}
         body = json.dumps(answer)[:-1] + f', "load": {literal}}}'
         exc = self._response_error(self._client(_answering(status, text=body)), call)
 
@@ -455,12 +459,13 @@ class TestMthdsAPIClientErrors:
 
     @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
     @pytest.mark.parametrize(
-        ("topic", "base_url"), [("no scheme", "api.example.com"), ("a host read as a scheme", "localhost:8081"), ("a scheme not sent to", "ftp://example.com")]
+        ("topic", "base_url"),
+        [("no scheme", "api.example.com"), ("a host read as a scheme", "localhost:8081"), ("a scheme not sent to", "ftp://example.com")],
     )
     def test_a_base_url_the_client_cannot_send_to_is_a_setting_to_fix(
         self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, base_url: str
     ) -> None:
-        """httpx's real transport refuses the scheme before connecting, and the call reads as `client.not_configured`, never as a runtime to retry."""
+        """The real httpx transport refuses the scheme before connecting, so the call reads as `client.not_configured`, never as a retry."""
         client = MthdsAPIClient(api_key="test-token", base_url=base_url, request_timeout_seconds=30.0)
         exc = self._raised(client, call)
 
