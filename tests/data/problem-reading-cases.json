@@ -823,7 +823,7 @@
       "name": "nested-past-the-body-limit"
     },
     {
-      "description": "A 200 whose body is not the route's answer reads as an unreadable answer naming its status.",
+      "description": "A 200 on a route that creates nothing whose body is not the route's answer reads as an unreadable answer naming its status.",
       "expected": {
         "code": "client.response_unreadable",
         "detail": "The runtime answered with the HTTP status 200 and a body that is not a problem document the client can read.",
@@ -845,7 +845,7 @@
           "content-type": "text/plain"
         },
         "kind": "response",
-        "route": "POST /execute",
+        "route": "GET /models",
         "status": 200
       },
       "name": "success-body-not-json"
