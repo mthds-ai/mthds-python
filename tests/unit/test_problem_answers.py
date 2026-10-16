@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import UTC, datetime
 
 import pytest
@@ -52,6 +53,11 @@ class TestProblemAnswers:
             ("objects past it", '{"a":' * (MAX_BODY_NESTING + 1) + "1" + "}" * (MAX_BODY_NESTING + 1), False),
             ("brackets inside a string are text", '["' + "[{" * MAX_BODY_NESTING + '"]', True),
             ("an escaped quote keeps the string open", '["\\"' + "[" * (MAX_BODY_NESTING + 1) + '"]', True),
+            (
+                "an escaped backslash leaves the next quote to close the string",
+                '["\\\\",' + "[" * MAX_BODY_NESTING + "]" * (MAX_BODY_NESTING + 1),
+                False,
+            ),
             ("far past any decoder's own limit", "[" * 200_000 + "]" * 200_000, False),
         ],
     )
@@ -59,6 +65,23 @@ class TestProblemAnswers:
         """Every reader refuses a body nested deeper than the one limit the twins pin, before parsing it, and a bracket in a string never counts."""
         assert decode_json(text).is_json is is_json, topic
         assert nests_deeper_than(text, limit=MAX_BODY_NESTING) is not is_json, topic
+
+    @pytest.mark.parametrize(
+        ("topic", "text"),
+        [
+            ("a string never closed, full of escaped quotes", '"' + '\\"' * 40_000 + "[" * (MAX_BODY_NESTING + 1)),
+            ("an escaped line break, which keeps the string open", '["\\\n' + "[" * (MAX_BODY_NESTING + 1) + '"]'),
+        ],
+    )
+    def test_the_nesting_scan_reads_a_string_in_one_pass(self, topic: str, text: str) -> None:
+        """Brackets in a string never count, however the string is written, and the scan is linear rather than repeated from every quote."""
+        started = time.perf_counter()
+
+        nests = nests_deeper_than(text, limit=MAX_BODY_NESTING)
+
+        assert time.perf_counter() - started < 1.0, topic
+        assert nests is False, topic
+        assert decode_json(text).is_json is False, topic
 
     def test_an_integer_too_long_for_python_is_not_json(self) -> None:
         """An integer past Python's conversion limit is far past a double's range, where a JavaScript reader reads an infinity, so it is refused."""

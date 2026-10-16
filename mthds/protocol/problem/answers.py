@@ -76,8 +76,11 @@ reader draws the line at the same depth whatever its decoder's own limit, and so
 decoder nor the validation that walks the decoded value can run out of stack.
 """
 
-# A JSON string, its escapes included, whose brackets are text rather than nesting.
-_JSON_STRING = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"')
+# A JSON string, its escapes included, whose brackets are text rather than nesting, read from its opening
+# quote in one pass: a backslash escapes whatever character follows it, a line break included, and a string
+# never closed runs to the end of the body. Matching every string once from the left keeps the scan linear,
+# where requiring the closing quote would scan again from every quote of a string never closed.
+_JSON_STRING = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"?', re.DOTALL)
 _NOT_A_BRACKET = re.compile(r"[^\[\]{}]+")
 _BRACKET_STEPS: dict[str, int] = {"[": 1, "{": 1, "]": -1, "}": -1}
 
@@ -132,6 +135,11 @@ def nests_deeper_than(text: str, *, limit: int) -> bool:
 
     The brackets are counted without parsing, so that a body too deep to read is refused before any
     decoder walks it; a body with no more opening brackets than `limit` cannot pass it and is not scanned.
+    The scan reads the body once from the left, in time linear in its length, as the TypeScript client's
+    does: a quote opens a string, a backslash inside it escapes the next character, whether or not JSON
+    defines that escape, and a string never closed runs to the end. The depth is exact for every JSON
+    body; a body that is no JSON, such as one with an escape JSON does not define, may count otherwise,
+    and the decoder refuses it whatever the count.
     """
     if text.count("[") + text.count("{") <= limit:
         return False
