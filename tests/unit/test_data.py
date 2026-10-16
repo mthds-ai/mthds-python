@@ -2,6 +2,7 @@
 
 from typing import Any, ClassVar
 
+from mthds.method_tree.file_entry import Base64FileEntry, FileEntry, HashFileEntry
 from mthds.protocol.input_form import (
     BooleanField,
     DateField,
@@ -936,3 +937,80 @@ class RefusedRunBodies:
         '"retryable":"false","user_action":{"kind":"change_input","detail":""},'
         '"validation_errors":[{"category":"pipe_validation","message":"ok"},{"message":"no category"}]}'
     )
+
+
+class MethodFileMaps:
+    """`files` maps as a caller passes them, and the exact JSON text each travels as."""
+
+    BUNDLE: ClassVar[str] = 'domain = "answer"\nmain_pipe = "answer"\n'
+    LOGO: ClassVar[bytes] = b"\x89PNG\r\n\x1a\n"
+    CARD: ClassVar[bytes] = b"<p>Hello</p>\n"
+    CARD_SHA256: ClassVar[str] = "3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0"
+
+    ONE_BUNDLE: ClassVar[dict[str, FileEntry]] = {"main.mthds": BUNDLE}
+
+    # One entry of each form: text, Base64 and hash.
+    MIXED: ClassVar[dict[str, FileEntry]] = {
+        "main.mthds": BUNDLE,
+        "templates/logo.png": Base64FileEntry(base64="iVBORw0KGgo="),
+        "templates/card.html": HashFileEntry(sha256=CARD_SHA256, size=13),
+    }
+    MIXED_WIRE: ClassVar[str] = (
+        '{"main.mthds":"domain = \\"answer\\"\\nmain_pipe = \\"answer\\"\\n",'
+        '"templates/logo.png":{"base64":"iVBORw0KGgo="},'
+        '"templates/card.html":{"sha256":"3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0","size":13}}'
+    )
+
+    # The inline forms only, for a receiver that keeps no blob store.
+    INLINE: ClassVar[dict[str, FileEntry]] = {
+        "main.mthds": BUNDLE,
+        "templates/logo.png": Base64FileEntry(base64="iVBORw0KGgo="),
+    }
+
+
+class BlobWireBodies:
+    """`POST /blobs/missing` bodies, as a sender writes them and as a runner answers."""
+
+    CARD_SHA256: ClassVar[str] = "3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0"
+    TREE_DIGEST: ClassVar[str] = "sha256:801fca61b41566e46d3fb1923e323590da7a539fd3e7af7455e7cba3934d4674"
+
+    REQUEST_WITH_DIGEST: ClassVar[str] = (
+        '{"blobs":[{"sha256":"3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0","size":13}],'
+        '"digest":"sha256:801fca61b41566e46d3fb1923e323590da7a539fd3e7af7455e7cba3934d4674"}'
+    )
+    REQUEST_WITHOUT_DIGEST: ClassVar[str] = '{"blobs":[{"sha256":"3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0","size":13}]}'
+
+    # A presigned object-store target: its query carries the signature that grants the write.
+    UPLOAD_URL: ClassVar[str] = (
+        "https://bucket.example/org_1/blobs/3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0"
+        "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=0123abcd"
+    )
+    UPLOAD_URL_WITHOUT_QUERY: ClassVar[str] = "https://bucket.example/org_1/blobs/3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0"
+    UPLOAD_HEADERS: ClassVar[dict[str, str]] = {
+        "If-None-Match": "*",
+        "Content-Type": "application/octet-stream",
+        "x-amz-checksum-sha256": "PptotxzGZxaDmfC8z7ZLLRYxTNwO14+sSBmroN2hIaA=",
+    }
+    ONE_MISSING: ClassVar[dict[str, Any]] = {
+        "missing": [
+            {
+                "sha256": "3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0",
+                "size": 13,
+                "upload": {"method": "PUT", "url": UPLOAD_URL, "headers": UPLOAD_HEADERS},
+            }
+        ],
+        "expires_in": 900,
+    }
+
+    MALFORMED_MISSING_BLOBS: ClassVar[list[tuple[str, dict[str, Any]]]] = [
+        (
+            "a size written with a fraction",
+            {"sha256": CARD_SHA256, "size": 13.0, "upload": {"method": "PUT", "url": UPLOAD_URL, "headers": {}}},
+        ),
+        (
+            "an uppercase hash",
+            {"sha256": CARD_SHA256.upper(), "size": 13, "upload": {"method": "PUT", "url": UPLOAD_URL, "headers": {}}},
+        ),
+        ("no upload target", {"sha256": CARD_SHA256, "size": 13}),
+        ("an upload target without headers", {"sha256": CARD_SHA256, "size": 13, "upload": {"method": "PUT", "url": UPLOAD_URL}}),
+    ]

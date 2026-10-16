@@ -14,15 +14,15 @@ from mthds.protocol.models import ModelCategory, ValidationDiagnostic
 from mthds.runners.api.client import MthdsAPIClient
 from mthds.runners.api.exceptions import ApiResponseError, RunStillRunningError
 from mthds.runners.api.problem import ProblemDocument
-from tests.unit.test_data import RefusedRunBodies
+from tests.unit.test_data import MethodFileMaps, RefusedRunBodies
 
 _BASE_URL = "http://localhost:8081"
 
 # Each protocol route, called with arguments that name something to run: (route label, call).
 _ROUTE_CALLS: list[tuple[str, Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]]] = [
-    ("POST /v1/execute", lambda client: client.execute(pipe_code="pitch_product", mthds_contents=['domain = "sales_copy"'])),
-    ("POST /v1/start", lambda client: client.start(pipe_code="pitch_product", mthds_contents=['domain = "sales_copy"'])),
-    ("POST /v1/validate", lambda client: client.validate(['domain = "sales_copy"'])),
+    ("POST /v1/execute", lambda client: client.execute(pipe_code="pitch_product", files=MethodFileMaps.ONE_BUNDLE)),
+    ("POST /v1/start", lambda client: client.start(pipe_code="pitch_product", files=MethodFileMaps.ONE_BUNDLE)),
+    ("POST /v1/validate", lambda client: client.validate(MethodFileMaps.ONE_BUNDLE)),
     ("GET /v1/models", lambda client: client.models()),
     ("GET /v1/version", lambda client: client.version()),
 ]
