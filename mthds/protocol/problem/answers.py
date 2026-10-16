@@ -208,6 +208,7 @@ def parse_http_date(text: str, *, now: datetime) -> datetime | None:
         The moment in UTC, or `None` when `text` is in none of the three forms, names no real moment,
         or names a leap second that carries it past the end of the year 9999.
     """
+    year: int
     match_found = _IMF_FIXDATE.fullmatch(text) or _ASCTIME_DATE.fullmatch(text)
     if match_found is not None:
         year = int(match_found["year"])
