@@ -940,6 +940,105 @@ class RefusedRunBodies:
     )
 
 
+class LegacyAnswerBodies:
+    """Error answers that are no problem document of the protocol, as a runner or a gateway in front of it may send them.
+
+    `UNKNOWN_MODEL_AT_LOAD` is the dev plane's `POST /v1/execute` refusal of a bundle naming an unknown
+    model, captured on 2026-09-27 through `MthdsAPIClient` against `https://api-dev.pipelex.com`
+    (pipelex-api v0.29.0 on pipelex 0.67.0) and kept verbatim: an RFC 9457 document written before the
+    protocol's core members existed, with no `code`, `domain`, `retry` or `next_step`, so a reader of
+    the protocol reads it as an answer it cannot read. The rest are the other shapes a runner or a
+    gateway may answer.
+    """
+
+    UNKNOWN_MODEL_AT_LOAD: ClassVar[str] = (
+        '{"type":"https://docs.pipelex.com/latest/errors/validate-bundle-error/","title":"Validate bundle","status":422,'
+        "\"detail\":\"Pipe 'draft_pitch' (PipeLLM), field 'model': Model handle 'gpt-5.1' was not found in the model deck\\n\\n"
+        'Did you mean: gpt-5.5, gpt-5.4, gpt-5.6-sol, gpt-5.4-pro, gpt-5.6-luna","instance":"/v1/execute",'
+        '"request_id":"req_a3dd6900-7909-48d3-b551-0140e73ac7fc","error_category":"configuration","error_domain":"input",'
+        '"retryable":false,"error_type":"ValidateBundleError","validation_errors":[{"category":"pipe_validation",'
+        "\"message\":\"Pipe 'draft_pitch' (PipeLLM), field 'model': Model handle 'gpt-5.1' was not found in the model deck\\n\\n"
+        'Did you mean: gpt-5.5, gpt-5.4, gpt-5.6-sol, gpt-5.4-pro, gpt-5.6-luna","error_type":"unknown_model",'
+        '"pipe_code":"draft_pitch","domain_code":"sales_copy","field_path":"pipe.draft_pitch.model","field_name":"model",'
+        '"model_reference":"gpt-5.1","model_type":"llm","suggestions":["gpt-5.5","gpt-5.4","gpt-5.6-sol","gpt-5.4-pro","gpt-5.6-luna"]}],'
+        '"user_action":{"kind":"change_input","detail":"Edit the bundle as each validation error says: apply its suggested fix '
+        'where it has one, after confirming an unsafe one"}}'
+    )
+    # An older runner answer: `HTTPException` with a dict detail, no RFC 9457 members.
+    LEGACY_DETAIL_OBJECT: ClassVar[str] = '{"detail":{"error_type":"PipeRunError","message":"Pipe \'summarize\' failed: the input is empty"}}'
+    # A framework's unmatched-route answer.
+    PLAIN_DETAIL_STRING: ClassVar[str] = '{"detail":"Not Found"}'
+    # A gateway's page in front of the runner: no JSON at all.
+    GATEWAY_HTML: ClassVar[str] = "<html><head><title>502 Bad Gateway</title></head><body><h1>502 Bad Gateway</h1></body></html>"
+
+
+class ProblemBodies:
+    """Problem documents of the protocol, as a runner writes them from the core registry."""
+
+    MODEL_UNKNOWN: ClassVar[dict[str, Any]] = {
+        "type": "https://mthds.ai/errors/model.unknown",
+        "title": "A model the method names is unknown",
+        "status": 422,
+        "detail": "The method names the llm model 'gpt-5.1', which no catalog knows.",
+        "code": "model.unknown",
+        "domain": "method",
+        "retry": "no",
+        "next_step": {"kind": "contact_owner", "detail": "Ask the method's owner to name a model that exists in place of 'gpt-5.1'."},
+        "params": {"model": "gpt-5.1", "model_type": "llm", "suggestions": ["gpt-5.5", "gpt-5.4"]},
+        "location": {"pipe": "condense_article", "path": ["digest_article", "condense_article"]},
+        "pipeline_run_id": "run_b7d2c66f",
+        "request_id": "req_b7d2c66f-b2d5-4dc7-bd4f-6cf98abfbdc0",
+    }
+    MODEL_UNKNOWN_BODY: ClassVar[str] = json.dumps(MODEL_UNKNOWN)
+
+    METHOD_INVALID: ClassVar[dict[str, Any]] = {
+        "type": "https://mthds.ai/errors/method.invalid",
+        "title": "The method does not validate",
+        "status": 422,
+        "detail": "The method does not validate.",
+        "code": "method.invalid",
+        "domain": "method",
+        "retry": "no",
+        "next_step": {"kind": "contact_owner", "detail": "Ask the method's owner to fix the faults the problem's errors list."},
+        "errors": [
+            {
+                "code": "method.concept_unresolved",
+                "detail": "The method names the concept 'legal.Clausee', which no library declares.",
+                "params": {"concept": "legal.Clausee", "suggestions": ["legal.Clause"]},
+                "location": {"pipe": "extract_clauses", "file": "contracts.mthds", "line": 30},
+                "suggestions": ["legal.Clause"],
+                "suggested_fix": {
+                    "fix_code": "rename-concept-reference",
+                    "description": "Rename the concept 'legal.Clausee' to 'legal.Clause'.",
+                    "safety": "unsafe",
+                    "ops": [
+                        {
+                            "kind": "remap_value",
+                            "table_path": ["pipe", "extract_clauses"],
+                            "key": "output",
+                            "mapping": {"legal.Clausee": "legal.Clause"},
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+    METHOD_INVALID_BODY: ClassVar[str] = json.dumps(METHOD_INVALID)
+
+    RATE_LIMITED: ClassVar[dict[str, Any]] = {
+        "type": "https://mthds.ai/errors/account.rate_limited",
+        "title": "The account is over its request rate",
+        "status": 429,
+        "detail": "The account sent more than 60 requests in 60 seconds.",
+        "code": "account.rate_limited",
+        "domain": "account",
+        "retry": "yes",
+        "next_step": {"kind": "wait", "detail": "Wait for the rate window to pass, then send the request again."},
+        "params": {"limit": 60, "window": 60},
+    }
+    RATE_LIMITED_BODY: ClassVar[str] = json.dumps(RATE_LIMITED)
+
+
 class VendoredRegistry:
     """The vendored core error registry and the generator that turns it into a module."""
 
