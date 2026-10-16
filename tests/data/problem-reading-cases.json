@@ -90,6 +90,99 @@
       "name": "unknown-code-in-an-unknown-family"
     },
     {
+      "description": "A problem whose code is unknown in the auth family and whose step kind is unknown reads as received; its step kind reads as report, since the auth codes do not all give the same step kind to the actor and to the other reader, while its known domain and retry read as sent.",
+      "expected": {
+        "code": "auth.passkey_expired",
+        "detail": "The passkey the request presents has expired.",
+        "domain": "account",
+        "next_step": {
+          "detail": "Ask the account's owner to register a new passkey.",
+          "kind": "escalate"
+        },
+        "retry": "no",
+        "status": 401,
+        "title": "The passkey has expired",
+        "type": "https://mthds.ai/errors/auth.passkey_expired"
+      },
+      "input": {
+        "body": "{\"type\":\"https://mthds.ai/errors/auth.passkey_expired\",\"title\":\"The passkey has expired\",\"status\":401,\"detail\":\"The passkey the request presents has expired.\",\"code\":\"auth.passkey_expired\",\"domain\":\"account\",\"retry\":\"no\",\"next_step\":{\"kind\":\"escalate\",\"detail\":\"Ask the account's owner to register a new passkey.\"}}",
+        "headers": {
+          "content-type": "application/problem+json"
+        },
+        "kind": "response",
+        "route": "GET /models",
+        "status": 401
+      },
+      "name": "unknown-step-kind-in-the-auth-family",
+      "reading": {
+        "domain": "account",
+        "retry": "no",
+        "step_kind": "report"
+      }
+    },
+    {
+      "description": "A problem whose code is unknown in the input family, with an unknown domain and an unknown step kind, reads as received; its domain reads as input, the domain every input code shares, and its step kind as report, since the input codes give the actor and the other reader different steps.",
+      "expected": {
+        "code": "input.smudged",
+        "detail": "The input 'contract' is too smudged to read.",
+        "domain": "steward",
+        "next_step": {
+          "detail": "Ask the steward for a cleaner copy of the input 'contract'.",
+          "kind": "escalate"
+        },
+        "retry": "no",
+        "status": 422,
+        "title": "An input is smudged",
+        "type": "https://mthds.ai/errors/input.smudged"
+      },
+      "input": {
+        "body": "{\"type\":\"https://mthds.ai/errors/input.smudged\",\"title\":\"An input is smudged\",\"status\":422,\"detail\":\"The input 'contract' is too smudged to read.\",\"code\":\"input.smudged\",\"domain\":\"steward\",\"retry\":\"no\",\"next_step\":{\"kind\":\"escalate\",\"detail\":\"Ask the steward for a cleaner copy of the input 'contract'.\"}}",
+        "headers": {
+          "content-type": "application/problem+json"
+        },
+        "kind": "response",
+        "route": "GET /models",
+        "status": 422
+      },
+      "name": "unknown-domain-in-the-input-family",
+      "reading": {
+        "domain": "input",
+        "retry": "no",
+        "step_kind": "report"
+      }
+    },
+    {
+      "description": "A problem whose code is unknown in the request family, with an unknown domain and an unknown step kind, reads as received; it reads as runtime and report, since the request codes share neither a domain nor a step kind.",
+      "expected": {
+        "code": "request.smudged",
+        "detail": "The request is too smudged to read.",
+        "domain": "steward",
+        "next_step": {
+          "detail": "Ask the steward to send the request again.",
+          "kind": "escalate"
+        },
+        "retry": "no",
+        "status": 400,
+        "title": "The request is smudged",
+        "type": "https://mthds.ai/errors/request.smudged"
+      },
+      "input": {
+        "body": "{\"type\":\"https://mthds.ai/errors/request.smudged\",\"title\":\"The request is smudged\",\"status\":400,\"detail\":\"The request is too smudged to read.\",\"code\":\"request.smudged\",\"domain\":\"steward\",\"retry\":\"no\",\"next_step\":{\"kind\":\"escalate\",\"detail\":\"Ask the steward to send the request again.\"}}",
+        "headers": {
+          "content-type": "application/problem+json"
+        },
+        "kind": "response",
+        "route": "GET /models",
+        "status": 400
+      },
+      "name": "unknown-domain-in-a-family-whose-domains-differ",
+      "reading": {
+        "domain": "runtime",
+        "retry": "no",
+        "step_kind": "report"
+      }
+    },
+    {
       "description": "A problem with a code under a registered extension prefix reads as received, its extra member kept.",
       "expected": {
         "code": "pipelex.billing.credit_exhausted",
@@ -373,6 +466,144 @@
         "status": 503
       },
       "name": "empty-503-with-retry-after"
+    },
+    {
+      "description": "A Retry-After in the IMF-fixdate form, a date in the past, gives a retry_after of 0.",
+      "expected": {
+        "code": "runtime.unavailable",
+        "detail": "The runtime, or a service it depends on, is unavailable.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Send the request again after a while.",
+          "kind": "retry"
+        },
+        "params": {},
+        "retry": "yes",
+        "retry_after": 0,
+        "status": 503,
+        "title": "The runtime or a service it depends on is unavailable",
+        "type": "https://mthds.ai/errors/runtime.unavailable"
+      },
+      "input": {
+        "body": "",
+        "headers": {
+          "retry-after": "Sun, 06 Nov 1994 08:49:37 GMT"
+        },
+        "kind": "response",
+        "route": "GET /models",
+        "status": 503
+      },
+      "name": "retry-after-imf-fixdate"
+    },
+    {
+      "description": "A Retry-After in the obsolete RFC 850 form gives a retry_after of 0: its two-digit year 94 would be more than 50 years ahead as 2094, so it reads as 1994, a date in the past.",
+      "expected": {
+        "code": "runtime.unavailable",
+        "detail": "The runtime, or a service it depends on, is unavailable.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Send the request again after a while.",
+          "kind": "retry"
+        },
+        "params": {},
+        "retry": "yes",
+        "retry_after": 0,
+        "status": 503,
+        "title": "The runtime or a service it depends on is unavailable",
+        "type": "https://mthds.ai/errors/runtime.unavailable"
+      },
+      "input": {
+        "body": "",
+        "headers": {
+          "retry-after": "Sunday, 06-Nov-94 08:49:37 GMT"
+        },
+        "kind": "response",
+        "route": "GET /models",
+        "status": 503
+      },
+      "name": "retry-after-rfc850-date"
+    },
+    {
+      "description": "A Retry-After in the asctime form, its one-digit day padded with a space, a date in the past, gives a retry_after of 0.",
+      "expected": {
+        "code": "runtime.unavailable",
+        "detail": "The runtime, or a service it depends on, is unavailable.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Send the request again after a while.",
+          "kind": "retry"
+        },
+        "params": {},
+        "retry": "yes",
+        "retry_after": 0,
+        "status": 503,
+        "title": "The runtime or a service it depends on is unavailable",
+        "type": "https://mthds.ai/errors/runtime.unavailable"
+      },
+      "input": {
+        "body": "",
+        "headers": {
+          "retry-after": "Sun Nov  6 08:49:37 1994"
+        },
+        "kind": "response",
+        "route": "GET /models",
+        "status": 503
+      },
+      "name": "retry-after-asctime-date"
+    },
+    {
+      "description": "A Retry-After date with a numeric zone is in none of the three forms an HTTP recipient accepts, so it gives no retry_after.",
+      "expected": {
+        "code": "runtime.unavailable",
+        "detail": "The runtime, or a service it depends on, is unavailable.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Send the request again after a while.",
+          "kind": "retry"
+        },
+        "params": {},
+        "retry": "yes",
+        "status": 503,
+        "title": "The runtime or a service it depends on is unavailable",
+        "type": "https://mthds.ai/errors/runtime.unavailable"
+      },
+      "input": {
+        "body": "",
+        "headers": {
+          "retry-after": "Sun, 06 Nov 1994 08:49:37 +0000"
+        },
+        "kind": "response",
+        "route": "GET /models",
+        "status": 503
+      },
+      "name": "retry-after-date-with-a-numeric-zone"
+    },
+    {
+      "description": "A Retry-After date without its day name is in none of the three forms an HTTP recipient accepts, so it gives no retry_after.",
+      "expected": {
+        "code": "runtime.unavailable",
+        "detail": "The runtime, or a service it depends on, is unavailable.",
+        "domain": "runtime",
+        "next_step": {
+          "detail": "Send the request again after a while.",
+          "kind": "retry"
+        },
+        "params": {},
+        "retry": "yes",
+        "status": 503,
+        "title": "The runtime or a service it depends on is unavailable",
+        "type": "https://mthds.ai/errors/runtime.unavailable"
+      },
+      "input": {
+        "body": "",
+        "headers": {
+          "retry-after": "06 Nov 1994 08:49:37 GMT"
+        },
+        "kind": "response",
+        "route": "GET /models",
+        "status": 503
+      },
+      "name": "retry-after-date-without-a-day-name"
     },
     {
       "description": "An empty 503 on a route that creates a run is no problem document, so it never invites a repeat, and the run may have started behind whatever answered, so it reads as client.outcome_unknown rather than runtime.unavailable.",
