@@ -34,6 +34,7 @@ class TestPipelexRunner:
             ),
             ("a key climbing out of the tree", {"../escape.mthds": MethodFileMaps.BUNDLE}, "is not a tree path"),
             ("a dotfile", {".env": "KEY=value", "main.mthds": MethodFileMaps.BUNDLE}, "membership rule"),
+            ("an entry that is no file entry", {"main.mthds": cast("FileEntry", object())}, "neither text nor a file entry"),
         ],
     )
     def test_a_files_map_this_runner_cannot_write_is_refused(
@@ -42,8 +43,9 @@ class TestPipelexRunner:
         """A map that is no method tree this runner can write is refused before anything is written or the CLI runs.
 
         An empty map would otherwise validate an empty directory and pass (greptile P1 on PR #25),
-        a hash entry names bytes this runner, which keeps no blob store, does not hold, and a key
-        that is not a tree path would write outside the run's directory.
+        a hash entry names bytes this runner, which keeps no blob store, does not hold, a key
+        that is not a tree path would write outside the run's directory, and an entry the map cannot
+        be written with is this runner's error rather than a bare serialization error.
         """
         mocker.patch("mthds.runners.pipelex.runner._ensure_pipelex", return_value="pipelex")
         mocker.patch("mthds.runners.pipelex.runner.tempfile.mkdtemp", return_value=str(tmp_path / "run"))

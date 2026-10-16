@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Sending a method by hash**: `MthdsAPIClient.missing_blobs` and `upload_blob` call the protocol's optional blob routes, typed by `BlobRef`, `MissingBlobsRequest`, `MissingBlobsResult`, `MissingBlob` and `UploadTarget`, and `prepare_files` and `prepare_files_from_contents` build a request's `files` from a listed tree or from bytes at hand: inline when the tree totals at most `DEFAULT_INLINE_TREE_MAX_BYTES` (256 KiB) or the runner keeps no blob store, otherwise uploading only the blobs the runner lacks and sending every file by hash. An upload carries exactly its target's headers and never the API key, and a refused one raises `BlobUploadError`.
+- **Sending a method by hash**: `MthdsAPIClient.missing_blobs` and `upload_blob` call the protocol's optional blob routes, typed by `BlobRef`, `MissingBlobsRequest`, `MissingBlobsResult`, `MissingBlob` and `UploadTarget`, and `prepare_files` and `prepare_files_from_contents` build a request's `files` from a listed tree or from bytes at hand: inline when the map, written as compact JSON in UTF-8 so that Base64 counts as its encoded text, is at most `DEFAULT_INLINE_TREE_MAX_BYTES` (256 KiB), or when the runner keeps no blob store, and otherwise uploading only the blobs the runner lacks and sending every file by hash. Files are read and hashed off the event loop, an upload carries exactly its target's headers and never the API key, and a refused one raises `BlobUploadError`, whose URL keeps no userinfo, query or fragment.
 - **`VersionInfo.blob_store`**: the `version()` handshake reads whether the runner keeps a blob store, false when the runner does not say.
 
 ### Changed

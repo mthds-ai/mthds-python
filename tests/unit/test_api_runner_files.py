@@ -1,10 +1,13 @@
 import asyncio
+from collections import UserDict
+from types import MappingProxyType
 from typing import Any
 
 import httpx
 import pytest
 from pytest_mock import MockerFixture
 
+from mthds.method_tree.file_entry import FileEntry, MethodFiles
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.runners.api.client import MthdsAPIClient
 from tests.unit.test_data import ExecuteWireResponses, MethodFileMaps
@@ -69,6 +72,38 @@ class TestMthdsAPIClientFiles:
 
         assert send_mock.call_args.args == ("POST", f"{_BASE_URL}/v1/validate")
         assert send_mock.call_args.kwargs["content"].decode("utf-8") == '{"files":' + MethodFileMaps.MIXED_WIRE + ',"allow_signatures":false}'
+
+    @pytest.mark.parametrize(
+        ("route", "status", "wire_response", "expected_tail"),
+        [
+            ("execute", 200, ExecuteWireResponses.REDUCED, "}"),
+            ("start", 202, {"pipeline_run_id": "run_7f3a"}, "}"),
+            ("validate", 200, {"is_valid": True, "is_runnable": True, "pending_signatures": []}, ',"allow_signatures":false}'),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "files",
+        [
+            pytest.param(MappingProxyType(MethodFileMaps.MIXED), id="a read-only mapping proxy"),
+            pytest.param(UserDict[str, FileEntry](MethodFileMaps.MIXED), id="a UserDict"),
+        ],
+    )
+    def test_any_mapping_travels_as_the_same_files_map(
+        self,
+        mocker: MockerFixture,
+        route: str,
+        status: int,
+        wire_response: dict[str, Any],
+        expected_tail: str,
+        files: MethodFiles,
+    ) -> None:
+        """`files` is typed as any `Mapping`, so a mapping that is no dict travels exactly as the dict holding the same entries."""
+        client = self._client()
+        send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(status, json=wire_response)))
+
+        asyncio.run(getattr(client, route)(files=files))
+
+        assert send_mock.call_args.kwargs["content"].decode("utf-8") == '{"files":' + MethodFileMaps.MIXED_WIRE + expected_tail
 
     @pytest.mark.parametrize("route", ["execute", "start", "validate"])
     def test_an_empty_files_map_is_refused_before_any_request(self, mocker: MockerFixture, route: str) -> None:

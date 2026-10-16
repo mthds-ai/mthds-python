@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, NoReturn, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, NamedTuple, NoReturn, Self, cast
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
@@ -45,7 +45,11 @@ if TYPE_CHECKING:
 
 
 DEFAULT_INLINE_TREE_MAX_BYTES: Final[int] = 256 * 1024
-"""The largest total, in bytes, of a tree `prepare_files` sends inline without asking the runner first.
+"""The largest size, in bytes, of a tree's inline `files` map that `prepare_files` sends without asking the runner first.
+
+The size is what the request spends on the map: the map written as JSON with no whitespace, in
+UTF-8, so a text entry counts with its escapes and a Base64 entry as its encoded text, about a
+third more than the file's bytes. That is how the hosted Pipelex API counts its inline limit.
 
 The protocol leaves the choice between an inline entry and a hash entry to the sender and names
 no threshold, so this is this client's own policy. A tree this small travels whole in the request,
@@ -64,7 +68,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     """Client for any MTHDS runner — the MTHDS Protocol surface over HTTP.
 
     One base URL (`MTHDS_BASE_URL`); every endpoint is `<base>/v1/<endpoint>`. The
-    five protocol routes (`execute` / `start` / `validate` / `models` / `version`)
+    protocol's required routes (`execute` / `start` / `validate` / `models` / `version`)
     work against any MTHDS-compliant runner, hosted or bare, each run or validation
     carrying the method as its whole method tree in `files`. The optional blob routes
     (`missing_blobs`, `upload_blob`) work against a runner whose `version()` declares
@@ -352,7 +356,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             ApiResponseError: a no-verdict response (request-shape 422, 401/403, or 5xx).
         """
         _refuse_empty_files(files)
-        body: dict[str, Any] = {"files": files, "allow_signatures": allow_signatures}
+        # A plain dict, since `to_json` serializes no other mapping, a `MappingProxyType` or a `UserDict` among them.
+        body: dict[str, Any] = {"files": dict(files), "allow_signatures": allow_signatures}
         body.update(_build_extensions(extra, protocol_args=_VALIDATE_REQUEST_ARGS))
         content = to_json(body)
         response = await self._send(
@@ -502,23 +507,28 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             PipelineRequestError: If `data` is not the blob named: another SHA-256 or another size.
             BlobUploadError: If the target answers non-2xx, other than a create-only target's `412`.
         """
+        data_sha256 = await asyncio.to_thread(sha256_hex, data)
+        if len(data) != blob.size or data_sha256 != blob.sha256:
+            msg = f"The bytes given for blob {blob.sha256} are not that blob: they hash to {data_sha256} and hold {len(data)} bytes, not {blob.size}."
+            raise PipelineRequestError(msg)
         async with self._make_upload_client() as upload_client:
             await self._upload_blob_with(upload_client=upload_client, blob=blob, data=data)
 
     async def prepare_files(self, tree: MethodTree, *, inline_max_bytes: int = DEFAULT_INLINE_TREE_MAX_BYTES) -> dict[str, FileEntry]:
         """The `files` map that sends a tree listed from a directory: inline, or by hash once the runner holds every blob.
 
-        A tree whose files total at most `inline_max_bytes` travels inline whole, with no round trip.
-        A larger one travels inline too when the runner keeps no blob store, as `version()` reports;
-        otherwise `missing_blobs` is asked which blobs the runner lacks, naming the tree's digest,
-        each missing blob is uploaded once, and every file travels by hash. Each file is read from
-        disk and checked against the hash the listing recorded, so what travels is the tree the
-        digest names.
+        A tree whose inline map is at most `inline_max_bytes` travels inline whole, with no round
+        trip; the map is measured as the request spends it, written as JSON with no whitespace, in
+        UTF-8, so a Base64 entry counts as its encoded text. A larger tree travels inline too when
+        the runner keeps no blob store, as `version()` reports; otherwise `missing_blobs` is asked
+        which blobs the runner lacks, naming the tree's digest, each missing blob is uploaded once,
+        and every file travels by hash. Each file is read from disk, off the event loop, and checked
+        against the hash the listing recorded, so what travels is the tree the digest names.
 
         Args:
             tree: A tree listed from a directory, as `list_method_tree` returns it.
-            inline_max_bytes: The largest total, in bytes, of a tree that travels inline without
-                asking the runner whether it keeps a blob store.
+            inline_max_bytes: The largest size, in bytes, of an inline map sent without asking the
+                runner whether it keeps a blob store.
 
         Returns:
             The map of file entries, keyed by tree path in tree path order, ready for `files`.
@@ -548,8 +558,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         Args:
             contents: Each file's bytes, by tree path. The keys are sent as they are, and the runner
                 refuses one that is not a tree path.
-            inline_max_bytes: The largest total, in bytes, of a tree that travels inline without
-                asking the runner whether it keeps a blob store.
+            inline_max_bytes: The largest size, in bytes, of an inline map sent without asking the
+                runner whether it keeps a blob store.
 
         Returns:
             The map of file entries, keyed by tree path in tree path order, ready for `files`.
@@ -560,7 +570,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             ApiResponseError: If the runner answers `version` or `missing_blobs` non-2xx.
             BlobUploadError: If an upload target answers non-2xx.
         """
-        tree_files = tree_files_from_contents(contents)
+        tree_files = await asyncio.to_thread(tree_files_from_contents, contents)
         return await self._prepare_files(
             tree_files=tree_files,
             digest=tree_digest(tree_files),
@@ -571,23 +581,35 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     async def _prepare_files(
         self, *, tree_files: list[TreeFile], digest: str, read: Callable[[TreeFile], bytes], inline_max_bytes: int
     ) -> dict[str, FileEntry]:
-        """Choose inline or hash entries for a tree's files, uploading what the runner lacks before naming anything by hash."""
+        """Choose inline or hash entries for a tree's files, uploading what the runner lacks before naming anything by hash.
+
+        `read` returns a file's bytes already checked against its listing, so they are not hashed again
+        here. Reading, hashing and encoding run off the event loop.
+        """
         if not tree_files:
             msg = "The tree holds no file, and a method tree holds at least one."
             raise PipelineRequestError(msg)
-        total_bytes = sum(tree_file.size for tree_file in tree_files)
-        if total_bytes <= inline_max_bytes:
-            return _inline_entries(tree_files=tree_files, read=read)
+        inline_tree: _InlineTree | None = None
+        # An inline map is never smaller than the bytes it carries, since escapes and Base64 only add,
+        # so a tree whose bytes alone pass the threshold is not read in full just to be measured.
+        if sum(tree_file.size for tree_file in tree_files) <= inline_max_bytes:
+            inline_tree = await asyncio.to_thread(_encode_inline, tree_files=tree_files, read=read)
+            if inline_tree.encoded_size <= inline_max_bytes:
+                return inline_tree.files
         version_info = await self.version()
         if not version_info.blob_store:
-            return _inline_entries(tree_files=tree_files, read=read)
+            if inline_tree is None:
+                inline_tree = await asyncio.to_thread(_encode_inline, tree_files=tree_files, read=read)
+            return inline_tree.files
         # One blob per distinct hash: two files with the same bytes are one blob, listed and uploaded once.
         file_of_blob: dict[str, TreeFile] = {}
         for tree_file in tree_files:
             file_of_blob.setdefault(tree_file.sha256, tree_file)
         blobs = [BlobRef(sha256=tree_file.sha256, size=tree_file.size) for tree_file in file_of_blob.values()]
         answer = await self.missing_blobs(blobs, digest=digest)
-        await self._upload_missing(answer.missing, file_of_blob=file_of_blob, read=read)
+        # Bytes already read to be measured are uploaded from memory rather than read a second time.
+        upload_read = read if inline_tree is None else inline_tree.held_bytes
+        await self._upload_missing(answer.missing, file_of_blob=file_of_blob, read=upload_read)
         return {tree_file.path: HashFileEntry(sha256=tree_file.sha256, size=tree_file.size) for tree_file in tree_files}
 
     async def _upload_missing(self, missing: list[MissingBlob], *, file_of_blob: dict[str, TreeFile], read: Callable[[TreeFile], bytes]) -> None:
@@ -595,11 +617,16 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         Every upload runs to its end before the first failure is raised, so no upload is left
         running against a closed connection; a blob uploaded beside a failed one is stored, which
-        is harmless since a blob is named by its bytes.
+        is harmless since a blob is named by its bytes. A blob is named by its hash and its size, so
+        one the tree holds under the same hash at another size is a blob the tree does not hold.
         """
-        unknown = sorted({blob.sha256 for blob in missing if blob.sha256 not in file_of_blob})
+        unknown: set[str] = set()
+        for blob in missing:
+            tree_file = file_of_blob.get(blob.sha256)
+            if tree_file is None or tree_file.size != blob.size:
+                unknown.add(blob.sha256)
         if unknown:
-            msg = f"The runner asked for blobs this tree does not hold: {', '.join(unknown)}."
+            msg = f"The runner asked for blobs this tree does not hold: {', '.join(sorted(unknown))}."
             raise PipelineRequestError(msg)
         if not missing:
             return
@@ -608,7 +635,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
             async def upload_one(blob: MissingBlob) -> None:
                 async with slots:
-                    await self._upload_blob_with(upload_client=upload_client, blob=blob, data=read(file_of_blob[blob.sha256]))
+                    data = await asyncio.to_thread(read, file_of_blob[blob.sha256])
+                    await self._upload_blob_with(upload_client=upload_client, blob=blob, data=data)
 
             outcomes = await asyncio.gather(*(upload_one(blob) for blob in missing), return_exceptions=True)
         for outcome in outcomes:
@@ -620,13 +648,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         return httpx.AsyncClient()
 
     async def _upload_blob_with(self, *, upload_client: httpx.AsyncClient, blob: MissingBlob, data: bytes) -> None:
-        """Upload one blob through `upload_client`, with exactly its target's headers; see `upload_blob`."""
-        if len(data) != blob.size or sha256_hex(data) != blob.sha256:
-            msg = (
-                f"The bytes given for blob {blob.sha256} are not that blob: "
-                f"they hash to {sha256_hex(data)} and hold {len(data)} bytes, not {blob.size}."
-            )
-            raise PipelineRequestError(msg)
+        """Upload one blob's bytes, already checked to be that blob, through `upload_client` with exactly its target's headers; see `upload_blob`."""
         target = blob.upload
         # A request built outside the client carries exactly the target's headers (httpx adds only
         # `Host` and `Content-Length`), where `client.request` would merge the client's defaults in.
@@ -815,7 +837,8 @@ def _build_run_body(
     extensions = _build_extensions(extra)
     body: dict[str, Any] = {
         "pipe_code": pipe_code,
-        "files": files,
+        # A plain dict, since `to_json` serializes no other mapping, a `MappingProxyType` or a `UserDict` among them.
+        "files": None if files is None else dict(files),
         "inputs": inputs,
         "output_name": output_name,
         "output_multiplicity": output_multiplicity,
@@ -857,9 +880,27 @@ def _build_extensions(extra: dict[str, Any] | None, *, protocol_args: frozenset[
 _REASON_BODY_LIMIT = 500
 
 
-def _inline_entries(*, tree_files: list[TreeFile], read: Callable[[TreeFile], bytes]) -> dict[str, FileEntry]:
-    """Every file of a tree as an inline entry: its text when its bytes are UTF-8, else its bytes in Base64."""
-    return {tree_file.path: encode_file_entry(read(tree_file)) for tree_file in tree_files}
+class _InlineTree(NamedTuple):
+    """A tree's files read into memory, their inline entries, and the size the request spends on that map."""
+
+    contents: dict[str, bytes]
+    files: dict[str, FileEntry]
+    encoded_size: int
+
+    def held_bytes(self, tree_file: TreeFile) -> bytes:
+        """A file's bytes, as read when the tree was encoded."""
+        return self.contents[tree_file.path]
+
+
+def _encode_inline(*, tree_files: list[TreeFile], read: Callable[[TreeFile], bytes]) -> _InlineTree:
+    """Read every file of a tree and encode it inline, its text when its bytes are UTF-8 and else its Base64, measuring the map.
+
+    The map is measured as the request spends it: written as JSON with no whitespace, in UTF-8. This
+    reads, hashes and encodes, so a coroutine runs it in a thread.
+    """
+    contents = {tree_file.path: read(tree_file) for tree_file in tree_files}
+    files = {tree_path: encode_file_entry(data) for tree_path, data in contents.items()}
+    return _InlineTree(contents=contents, files=files, encoded_size=len(to_json(files)))
 
 
 def _read_listed_file(tree: MethodTree, *, tree_file: TreeFile) -> bytes:
@@ -886,9 +927,13 @@ def _is_create_only(target: UploadTarget) -> bool:
 
 
 def _url_without_query(url: str) -> str:
-    """The URL without its query and fragment, which may carry a signature granting the write."""
+    """The URL without anything that may grant the write: its userinfo, its query and its fragment.
+
+    A presigned query carries a signature, and a `user:password@` in the authority is a credential.
+    """
     parts = urlsplit(url)
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+    host_and_port = parts.netloc.rpartition("@")[2]
+    return urlunsplit((parts.scheme, host_and_port, parts.path, "", ""))
 
 
 def _body_excerpt(body: str) -> str:

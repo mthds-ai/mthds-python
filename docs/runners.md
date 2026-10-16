@@ -1,6 +1,6 @@
 # MTHDS protocol & runners
 
-The `mthds` package is the Python client for the open-source `pipelex-api` runner — and, more generally, any server that speaks the [MTHDS Protocol](https://mthds.ai). One abstraction, `MTHDSProtocol`, mirrors the standard's five routes; `MthdsAPIClient` implements it over HTTP, along with the protocol's optional blob routes for sending a method's files by hash. It is **protocol-only** — the durable run lifecycle (polling a run to completion by id) is a hosted-API extension that lives in `pipelex-sdk` (`PipelexAPIClient`), built on this base.
+The `mthds` package is the Python client for the open-source `pipelex-api` runner — and, more generally, any server that speaks the [MTHDS Protocol](https://mthds.ai). One abstraction, `MTHDSProtocol`, mirrors the standard's required routes; `MthdsAPIClient` implements it over HTTP, along with the protocol's optional blob routes for sending a method's files by hash. It is **protocol-only** — the durable run lifecycle (polling a run to completion by id) is a hosted-API extension that lives in `pipelex-sdk` (`PipelexAPIClient`), built on this base.
 
 ## Package layout
 
@@ -25,7 +25,7 @@ The client composes every endpoint as `{MTHDS_BASE_URL}/v1/{endpoint}`. It defau
 
 ## The protocol surface (works on any runner)
 
-`MTHDSProtocol` has exactly five methods — `execute`, `start`, `validate`, `models`, `version`:
+`MTHDSProtocol` has one method per required route — `execute`, `start`, `validate`, `models`, `version`:
 
 ```python
 from pathlib import Path
@@ -81,16 +81,16 @@ Since MTHDS Protocol 1.0.0 a run or a validation carries its method as `files`: 
 
 `prepare_files(tree)` builds the map from a tree listed with `list_method_tree`, and `prepare_files_from_contents(contents)` from bytes already at hand, keyed by tree path. Both follow one rule:
 
-- A tree whose files total at most `inline_max_bytes` travels inline whole, with no round trip: text as text, any other bytes as Base64. The default is `DEFAULT_INLINE_TREE_MAX_BYTES`, 256 KiB.
+- A tree whose inline map is at most `inline_max_bytes` travels inline whole, with no round trip: text as text, any other bytes as Base64. The map is measured as the request spends it, written as JSON with no whitespace, in UTF-8, so a text entry counts with its escapes and a Base64 entry as its encoded text, about a third more than the file's bytes; that is how the hosted Pipelex API counts its inline limit. The default is `DEFAULT_INLINE_TREE_MAX_BYTES`, 256 KiB, so a binary file just under 256 KiB already travels by hash.
 - A larger tree asks `version()` first, and a runner whose `VersionInfo.blob_store` is false gets it inline anyway.
 - Otherwise the client asks `missing_blobs` which blobs the runner lacks, naming the tree's digest so that a runner holding the whole tree can answer at once, uploads each missing blob once, a bounded number at a time, and sends every file by hash. A second run of an unchanged method therefore uploads nothing.
 
-The protocol leaves the choice between an inline entry and a hash entry to the sender and names no threshold, so 256 KiB is this client's own policy, the one the hosted Pipelex API asks its senders to use; a caller facing a runner with stricter limits passes its own `inline_max_bytes`. `prepare_files` reads each file when it needs it and checks the bytes against the hash the listing recorded, raising `TreeSourceError` when a file changed after the tree was listed, so what travels is always the tree the digest names.
+The protocol leaves the choice between an inline entry and a hash entry to the sender and names no threshold, so 256 KiB is this client's own policy, the one the hosted Pipelex API asks its senders to use; a caller facing a runner with stricter limits passes its own `inline_max_bytes`. `prepare_files` reads each file when it needs it, at most once, and checks the bytes against the hash the listing recorded, raising `TreeSourceError` when a file changed after the tree was listed, so what travels is always the tree the digest names. Reading, hashing and encoding run in a thread, off the event loop.
 
 The two optional blob routes are methods of their own, for a sender that manages its blobs itself:
 
 - `missing_blobs(blobs, digest=None)` posts a `MissingBlobsRequest` to `/v1/blobs/missing` and answers with a `MissingBlobsResult`: every blob the runner lacks, each with an `UploadTarget` (`method`, `url`, `headers`). A runner that serves no blob routes answers non-2xx, raised as `ApiResponseError`.
-- `upload_blob(blob, data)` sends the bytes to that target. The target is the runner's choice and may be another server, such as an object store behind a presigned URL, so the request carries exactly the target's headers and nothing of this client's: neither the API key nor the `User-Agent` goes with it. A `412` from a create-only target, one whose headers carry `If-None-Match`, means the bytes are already stored and counts as uploaded. Bytes that are not the named blob, by hash or by size, are refused before anything is sent. Any other non-2xx raises `BlobUploadError` (`mthds.runners.api.exceptions`), a `PipelineRequestError` carrying `sha256`, `status`, `status_text`, `response_body` and `upload_url`, the last without its query string, since a presigned query is itself the permission to write.
+- `upload_blob(blob, data)` sends the bytes to that target. The target is the runner's choice and may be another server, such as an object store behind a presigned URL, so the request carries exactly the target's headers and nothing of this client's: neither the API key nor the `User-Agent` goes with it. A `412` from a create-only target, one whose headers carry `If-None-Match`, means the bytes are already stored and counts as uploaded. Bytes that are not the named blob, by hash or by size, are refused before anything is sent. Any other non-2xx raises `BlobUploadError` (`mthds.runners.api.exceptions`), a `PipelineRequestError` carrying `sha256`, `status`, `status_text`, `response_body` and `upload_url`, the last without its userinfo, query or fragment, since a presigned query is itself the permission to write and a `user:password@` is a credential.
 
 A run that names a hash the runner does not hold is answered with a `422` listing `missing_blobs`, raised as `ApiResponseError` with that list reachable through `exc.problem`.
 

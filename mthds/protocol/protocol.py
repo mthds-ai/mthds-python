@@ -37,7 +37,7 @@ Version") for what bumps it.
 class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
     """The MTHDS Protocol — the contract every MTHDS runner implements.
 
-    Mirrors the standard's five required routes (`mthds-protocol.openapi.yaml`):
+    Mirrors the standard's required routes (`mthds-protocol.openapi.yaml`):
     `execute`, `start`, `validate`, `models`, `version`. A runner is just a
     runner: it executes and validates methods, each sent as its whole method
     tree in `files`, and reports its model deck and version. The optional blob

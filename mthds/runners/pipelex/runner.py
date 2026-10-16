@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, cast
 
-from pydantic_core import to_json
+from pydantic_core import PydanticSerializationError, to_json
 from typing_extensions import override
 
 from mthds.method_tree.exceptions import MethodTreeError
@@ -41,10 +41,16 @@ def _write_method_tree(files: MethodFiles, *, destination: Path) -> None:
     keeps no blob store, so a hash entry is refused, naming its hash.
 
     Raises:
-        PipelexRunnerError: If the map is not a method tree this runner can write.
+        PipelexRunnerError: If the map is not a method tree this runner can write, an entry being
+            neither text nor a file entry model included.
     """
     try:
-        reading = read_file_map(to_json(dict(files)).decode("utf-8"))
+        document = to_json(dict(files)).decode("utf-8")
+    except PydanticSerializationError as exc:
+        msg = f"The pipelex CLI runner cannot write this files map: an entry is neither text nor a file entry ({exc})."
+        raise PipelexRunnerError(msg) from exc
+    try:
+        reading = read_file_map(document)
     except MethodTreeError as exc:
         msg = f"The pipelex CLI runner cannot load this files map (it keeps no blob store, so every entry is its text or its Base64): {exc}"
         raise PipelexRunnerError(msg) from exc

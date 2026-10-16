@@ -967,6 +967,12 @@ class MethodFileMaps:
         "templates/logo.png": Base64FileEntry(base64="iVBORw0KGgo="),
     }
 
+    # Bytes that are no UTF-8, so they travel as Base64, a third larger: 1 KiB under 256 KiB raw, well over it inline.
+    BINARY_UNDER_THRESHOLD: ClassVar[bytes] = bytes(range(128, 256)) * 2040
+
+    # Text a JSON writer escapes (a quote, a tab, a backslash), with a character UTF-8 writes as two bytes.
+    ESCAPED_TEXT: ClassVar[bytes] = 'title = "Café"\n\tbody \\ end\n'.encode()
+
 
 class BlobWireBodies:
     """`POST /blobs/missing` bodies, as a sender writes them and as a runner answers."""
@@ -986,6 +992,9 @@ class BlobWireBodies:
         "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=0123abcd"
     )
     UPLOAD_URL_WITHOUT_QUERY: ClassVar[str] = "https://bucket.example/org_1/blobs/3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0"
+    # A target whose authority carries a credential, with a query and a fragment: none of the three may reach an error.
+    UPLOAD_URL_WITH_USERINFO: ClassVar[str] = "https://uploader:pa55word@bucket.example:8443/org_1/blobs/card?X-Amz-Signature=0123abcd#part"
+    UPLOAD_URL_WITH_USERINFO_STRIPPED: ClassVar[str] = "https://bucket.example:8443/org_1/blobs/card"
     UPLOAD_HEADERS: ClassVar[dict[str, str]] = {
         "If-None-Match": "*",
         "Content-Type": "application/octet-stream",

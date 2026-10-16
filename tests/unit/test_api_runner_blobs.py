@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,7 @@ from mthds.method_tree.file_entry import Base64FileEntry, HashFileEntry, read_fi
 from mthds.method_tree.lister import list_method_tree
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import BlobRef, MissingBlob, MissingBlobsResult, UploadTarget
-from mthds.runners.api.client import MthdsAPIClient
+from mthds.runners.api.client import DEFAULT_INLINE_TREE_MAX_BYTES, MthdsAPIClient
 from mthds.runners.api.exceptions import ApiResponseError, BlobUploadError
 from tests.unit.test_data import BlobWireBodies, ExecuteWireResponses, MethodFileMaps
 
@@ -84,6 +85,18 @@ def _write_tree(root: Path) -> None:
     (root / "templates" / "card.html").write_bytes(MethodFileMaps.CARD)
     (root / "templates" / "copy.html").write_bytes(MethodFileMaps.CARD)
     (root / "logo.png").write_bytes(MethodFileMaps.LOGO)
+
+
+def _record_hashing(mocker: MockerFixture) -> list[int]:
+    """Patch the client module's SHA-256 so that each call records the thread it ran on, and return that record."""
+    hashing_threads: list[int] = []
+
+    def recording_sha256_hex(data: bytes) -> str:
+        hashing_threads.append(threading.get_ident())
+        return sha256_hex(data)
+
+    mocker.patch("mthds.runners.api.client.sha256_hex", side_effect=recording_sha256_hex)
+    return hashing_threads
 
 
 class TestMthdsAPIClientBlobs:
@@ -189,15 +202,53 @@ class TestMthdsAPIClientBlobs:
         )
         assert "Signature" not in str(error)
 
-    def test_upload_blob_refuses_bytes_that_are_not_the_blob(self, runner: _FakeRunner) -> None:
-        """Bytes that do not hash to the blob named are refused before anything is sent."""
+    def test_upload_blob_refuses_bytes_that_are_not_the_blob(self, mocker: MockerFixture, runner: _FakeRunner) -> None:
+        """Bytes that do not hash to the blob named are refused before anything is sent, hashed once for the check and its message."""
+        hashing_threads = _record_hashing(mocker)
+        client = self._client()
+        blob = MissingBlobsResult.model_validate(BlobWireBodies.ONE_MISSING).missing[0]
+        other_bytes = b"<p>Bye</p>\n\n\n"
+
+        with pytest.raises(PipelineRequestError) as exc_info:
+            asyncio.run(client.upload_blob(blob, other_bytes))
+
+        assert str(exc_info.value) == (
+            f"The bytes given for blob {MethodFileMaps.CARD_SHA256} are not that blob: "
+            f"they hash to {sha256_hex(other_bytes)} and hold 13 bytes, not 13."
+        )
+        assert len(hashing_threads) == 1
+        assert runner.requests == []
+
+    def test_upload_blob_hashes_the_bytes_once_off_the_event_loop(self, mocker: MockerFixture, runner: _FakeRunner) -> None:
+        """The check of the bytes runs in a thread, so a large blob does not stall the event loop while it is hashed."""
+        hashing_threads = _record_hashing(mocker)
         client = self._client()
         blob = MissingBlobsResult.model_validate(BlobWireBodies.ONE_MISSING).missing[0]
 
-        with pytest.raises(PipelineRequestError, match="are not that blob"):
-            asyncio.run(client.upload_blob(blob, b"<p>Bye</p>\n\n\n"))
+        asyncio.run(client.upload_blob(blob, MethodFileMaps.CARD))
 
-        assert runner.requests == []
+        assert len(hashing_threads) == 1
+        assert hashing_threads[0] != threading.get_ident()
+        assert len(runner.uploads) == 1
+
+    def test_an_upload_error_keeps_no_credential_of_the_target(self, runner: _FakeRunner) -> None:
+        """A `user:password@` in the target's authority is a credential, as a presigned query is: the error keeps neither, nor the fragment."""
+        client = self._client()
+        runner.upload_status = 403
+        target = UploadTarget(method="PUT", url=BlobWireBodies.UPLOAD_URL_WITH_USERINFO, headers={})
+        blob = MissingBlob(sha256=MethodFileMaps.CARD_SHA256, size=13, upload=target)
+
+        with pytest.raises(BlobUploadError) as exc_info:
+            asyncio.run(client.upload_blob(blob, MethodFileMaps.CARD))
+
+        error = exc_info.value
+        assert error.upload_url == BlobWireBodies.UPLOAD_URL_WITH_USERINFO_STRIPPED
+        assert str(error) == (
+            f"Uploading blob {MethodFileMaps.CARD_SHA256} to {BlobWireBodies.UPLOAD_URL_WITH_USERINFO_STRIPPED} failed (403): "
+            "<Error><Code>AccessDenied</Code></Error>"
+        )
+        for credential in ("uploader", "pa55word", "Signature", "#part"):
+            assert credential not in str(error)
 
     # ── prepare_files ────────────────────────────────────────────
 
@@ -263,6 +314,72 @@ class TestMthdsAPIClientBlobs:
         execute_request = next(request for request in runner.requests if request.url.path == "/v1/execute")
         assert execute_request.content == b'{"files":' + to_json(files) + b"}"
 
+    def test_prepare_files_counts_base64_as_the_request_spends_it(self, mocker: MockerFixture, runner: _FakeRunner, tmp_path: Path) -> None:
+        """A binary file just under the threshold raw is a third larger as Base64, so its tree goes by hash.
+
+        Each file is read and checked once: the bytes read to measure the map are the ones uploaded, never hashed again.
+        """
+        (tmp_path / "main.mthds").write_text(MethodFileMaps.BUNDLE, encoding="utf-8")
+        (tmp_path / "data.bin").write_bytes(MethodFileMaps.BINARY_UNDER_THRESHOLD)
+        tree = list_method_tree(tmp_path)
+        assert sum(tree_file.size for tree_file in tree.files) < DEFAULT_INLINE_TREE_MAX_BYTES
+        hashing_threads = _record_hashing(mocker)
+        client = self._client()
+
+        files = asyncio.run(client.prepare_files(tree))
+
+        assert files == {tree_file.path: HashFileEntry(sha256=tree_file.sha256, size=tree_file.size) for tree_file in tree.files}
+        assert runner.api_paths == ["/v1/version", "/v1/blobs/missing"]
+        assert sorted(upload.content for upload in runner.uploads) == sorted(
+            [MethodFileMaps.BUNDLE.encode("utf-8"), MethodFileMaps.BINARY_UNDER_THRESHOLD]
+        )
+        assert len(hashing_threads) == len(tree.files)
+
+    @pytest.mark.parametrize(
+        ("topic", "headroom", "expected_api_paths"),
+        [
+            ("a map exactly at the threshold travels inline", 0, []),
+            ("a map one byte over it travels by hash", -1, ["/v1/version", "/v1/blobs/missing"]),
+        ],
+    )
+    def test_prepare_files_from_contents_counts_the_map_with_its_escapes(
+        self, runner: _FakeRunner, topic: str, headroom: int, expected_api_paths: list[str]
+    ) -> None:
+        """The inline map is measured as JSON with no whitespace, in UTF-8: escapes, multi-byte characters, Base64 text, keys and all."""
+        contents = {"main.mthds": MethodFileMaps.ESCAPED_TEXT, "logo.png": MethodFileMaps.LOGO}
+        wire_map = {"logo.png": {"base64": "iVBORw0KGgo="}, "main.mthds": MethodFileMaps.ESCAPED_TEXT.decode("utf-8")}
+        encoded_size = len(json.dumps(wire_map, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+        assert encoded_size > sum(len(data) for data in contents.values())
+        client = self._client()
+
+        files = asyncio.run(client.prepare_files_from_contents(contents, inline_max_bytes=encoded_size + headroom))
+
+        assert runner.api_paths == expected_api_paths, topic
+        if not expected_api_paths:
+            assert files == {"logo.png": Base64FileEntry(base64="iVBORw0KGgo="), "main.mthds": MethodFileMaps.ESCAPED_TEXT.decode("utf-8")}
+
+    @pytest.mark.parametrize(
+        ("topic", "inline_max_bytes", "expected_hash_count"),
+        [
+            ("inline, every file read once", 1 << 20, 4),
+            ("by hash, each missing blob read once and never hashed again for its upload", 0, 3),
+        ],
+    )
+    @pytest.mark.usefixtures("runner")
+    def test_prepare_files_reads_and_hashes_off_the_event_loop(
+        self, mocker: MockerFixture, tmp_path: Path, topic: str, inline_max_bytes: int, expected_hash_count: int
+    ) -> None:
+        """Reading a file and checking its hash run in a thread, so a large tree does not stall the event loop."""
+        _write_tree(tmp_path)
+        tree = list_method_tree(tmp_path)
+        hashing_threads = _record_hashing(mocker)
+        client = self._client()
+
+        asyncio.run(client.prepare_files(tree, inline_max_bytes=inline_max_bytes))
+
+        assert len(hashing_threads) == expected_hash_count, topic
+        assert threading.get_ident() not in hashing_threads
+
     @pytest.mark.parametrize(
         ("topic", "blob_store", "inline_max_bytes"),
         [
@@ -296,16 +413,23 @@ class TestMthdsAPIClientBlobs:
 
         assert len(runner.uploads) == 3
 
-    def test_prepare_files_refuses_a_blob_it_did_not_ask_for(self, runner: _FakeRunner, tmp_path: Path) -> None:
-        """A runner naming a blob the tree does not hold breaks the protocol, and nothing is uploaded."""
+    @pytest.mark.parametrize(
+        ("topic", "unrequested_sha256"),
+        [
+            ("a hash the tree does not hold", "f" * 64),
+            ("a hash the tree holds, at another size", MethodFileMaps.CARD_SHA256),
+        ],
+    )
+    def test_prepare_files_refuses_a_blob_it_did_not_ask_for(self, runner: _FakeRunner, tmp_path: Path, topic: str, unrequested_sha256: str) -> None:
+        """A runner naming a blob the tree does not hold, by hash or by size, breaks the protocol, and nothing is uploaded."""
         _write_tree(tmp_path)
-        runner.unrequested_missing = ["f" * 64]
+        runner.unrequested_missing = [unrequested_sha256]
         client = self._client()
 
-        with pytest.raises(PipelineRequestError, match=f"asked for blobs this tree does not hold: {'f' * 64}"):
+        with pytest.raises(PipelineRequestError, match=f"asked for blobs this tree does not hold: {unrequested_sha256}"):
             asyncio.run(client.prepare_files(list_method_tree(tmp_path), inline_max_bytes=0))
 
-        assert runner.uploads == []
+        assert runner.uploads == [], topic
 
     def test_prepare_files_refuses_a_tree_not_listed_from_a_directory(self, runner: _FakeRunner) -> None:
         """A tree read from a map has no files on disk: its bytes go through `prepare_files_from_contents`."""

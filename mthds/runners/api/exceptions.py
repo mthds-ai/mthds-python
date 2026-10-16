@@ -37,8 +37,9 @@ class BlobUploadError(PipelineRequestError):
 
     The target is the runner's choice and may be another server than the runner, such as an
     object store behind a presigned URL, so its answer is no problem document: the error keeps the
-    status and the body as text. `upload_url` is the target without its query, since a presigned
-    query carries a signature that grants the write; the full URL is never kept.
+    status and the body as text. `upload_url` is the target without its userinfo, its query and its
+    fragment, since a presigned query carries a signature that grants the write and a `user:password@`
+    is a credential; the full URL is never kept.
     """
 
     def __init__(self, message: str, *, sha256: str, status: int, status_text: str, response_body: str, upload_url: str) -> None:
@@ -50,7 +51,7 @@ class BlobUploadError(PipelineRequestError):
             status: The HTTP status code of the answer.
             status_text: The HTTP reason phrase of the answer.
             response_body: The answer's body, as text.
-            upload_url: The upload target's URL without its query string.
+            upload_url: The upload target's URL without its userinfo, its query or its fragment.
         """
         super().__init__(message)
         self.sha256 = sha256
