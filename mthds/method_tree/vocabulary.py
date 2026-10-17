@@ -50,6 +50,7 @@ class ExclusionRule(StrEnum):
     VIRTUAL_ENVIRONMENT = "virtual_environment"
     NESTED_REPOSITORY = "nested_repository"
     NESTED_PACKAGE = "nested_package"
+    RUN_INPUTS = "run_inputs"
     GITIGNORE = "gitignore"
     PACKAGE_EXCLUDE = "package_exclude"
 
@@ -63,6 +64,7 @@ class ExclusionRule(StrEnum):
                 ExclusionRule.DOT_SEGMENT
                 | ExclusionRule.PYCACHE_OR_NODE_MODULES
                 | ExclusionRule.VIRTUAL_ENVIRONMENT
+                | ExclusionRule.RUN_INPUTS
                 | ExclusionRule.GITIGNORE
                 | ExclusionRule.PACKAGE_EXCLUDE
             ):
@@ -82,6 +84,8 @@ class ExclusionRule(StrEnum):
                 return "a nested repository, a directory below the root holding a .git entry"
             case ExclusionRule.NESTED_PACKAGE:
                 return "a nested package, a directory below the root holding its own METHODS.toml"
+            case ExclusionRule.RUN_INPUTS:
+                return "a run's inputs file, a file named inputs.json or inputs.toml"
             case ExclusionRule.GITIGNORE:
                 return "a .gitignore pattern"
             case ExclusionRule.PACKAGE_EXCLUDE:

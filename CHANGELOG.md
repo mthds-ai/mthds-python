@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **A run's inputs file is out of the method tree (Breaking)**: `list_method_tree` and `list_method_tree_at_root` keep a regular file or a symbolic link named exactly `inputs.json` or `inputs.toml`, at any depth, out of every tree under the new `ExclusionRule.RUN_INPUTS` (`run_inputs`), which a reference refused as not in the tree names in `excluded_by`, while a directory of either name excludes nothing. `read_file_map`, and `PipelexRunner` with it, refuses a key whose last segment is either name as `excluded_name`, so a tree that held such a file has a new digest, and a method ships example inputs under any other name, such as `examples/invoice-inputs.json`.
+
 ## [v0.23.0] - 2026-10-17
 
 ### Added
