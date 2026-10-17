@@ -1,9 +1,10 @@
 """Finding a method tree's root on disk, and reading a directory's entries by their exact names.
 
-Every special name the standard gives (`METHODS.toml`, `.git`, `pyvenv.cfg`, `.gitignore`) is
-matched exactly, letter case included, whatever the file system. On a case-insensitive file
-system, asking whether `METHODS.toml` exists also answers for a file named `methods.toml`, so
-this module never trusts an answer by name alone: it lists the directory and compares names.
+Every special name the standard gives (`METHODS.toml`, `.git`, `pyvenv.cfg`, `.gitignore`,
+`inputs.json`, `inputs.toml`) is matched exactly, letter case included, whatever the file system.
+On a case-insensitive file system, asking whether `METHODS.toml` exists also answers for a file
+named `methods.toml`, so this module never trusts an answer by name alone: it lists the directory
+and compares names.
 """
 
 from __future__ import annotations
@@ -23,6 +24,9 @@ GIT_ENTRY_NAME = ".git"
 VENV_MARKER_NAME = "pyvenv.cfg"
 GITIGNORE_NAME = ".gitignore"
 DEFAULT_DIRECTORY_NAMES = frozenset({"__pycache__", "node_modules"})
+# A run's inputs file, which the run-inputs default keeps out of every tree at any depth, matched
+# exactly, so `Inputs.json` is an ordinary member and a directory of either name excludes nothing.
+RUN_INPUTS_NAMES = frozenset({"inputs.json", "inputs.toml"})
 BUNDLE_SUFFIX = ".mthds"
 
 
@@ -53,6 +57,15 @@ class EntryKind(StrEnum):
     @property
     def marks_virtual_environment(self) -> bool:
         """Whether a `pyvenv.cfg` entry of this kind marks its directory: a regular file or a symbolic link."""
+        match self:
+            case EntryKind.FILE | EntryKind.SYMBOLIC_LINK:
+                return True
+            case EntryKind.DIRECTORY | EntryKind.SPECIAL:
+                return False
+
+    @property
+    def counts_as_run_inputs(self) -> bool:
+        """Whether an `inputs.json` or `inputs.toml` entry of this kind is a run's inputs file: a regular file or a symbolic link, never followed."""
         match self:
             case EntryKind.FILE | EntryKind.SYMBOLIC_LINK:
                 return True

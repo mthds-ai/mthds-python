@@ -10,12 +10,13 @@ The procedure follows `mthds/docs/spec/method-tree.md`:
 2. **Walk the root under the membership rule**, never following a symbolic link. Each entry is
    judged in this order: a name starting with a dot; for a directory, the name defaults
    (`__pycache__`, `node_modules`) and then the defaults read from its own entries (a `pyvenv.cfg`
-   regular file or symbolic link, a `.git` entry of any kind, a regular `METHODS.toml` file); and
-   last the patterns, the deepest `.gitignore` file first and the manifest's `[package] exclude`
-   patterns below them all. An excluded directory is pruned, never visited, so nothing inside it
-   is ever an error, its `.gitignore` file included. Only then is a kept entry refused when it is
-   a symbolic link or another entry that is neither a regular file nor a directory, or when its
-   path is not a tree path.
+   regular file or symbolic link, a `.git` entry of any kind, a regular `METHODS.toml` file); for
+   any other entry, the run-inputs default (a regular file or symbolic link named exactly
+   `inputs.json` or `inputs.toml`, at any depth); and last the patterns, the deepest `.gitignore`
+   file first and the manifest's `[package] exclude` patterns below them all. An excluded
+   directory is pruned, never visited, so nothing inside it is ever an error, its `.gitignore`
+   file included. Only then is a kept entry refused when it is a symbolic link or another entry
+   that is neither a regular file nor a directory, or when its path is not a tree path.
 3. **Stop at the caller's limits while walking**, counting files and summing their sizes from
    `stat`, before any file is hashed.
 4. **Refuse what the whole listing shows**: two spellings of one name equal in NFC, paths that
@@ -37,6 +38,7 @@ from mthds.method_tree.discovery import (
     DEFAULT_DIRECTORY_NAMES,
     GITIGNORE_NAME,
     MANIFEST_NAME,
+    RUN_INPUTS_NAMES,
     DirectoryEntry,
     EntryKind,
     find_manifest_directory,
@@ -289,7 +291,9 @@ class _TreeWalk:
                 if directory_entry.kind.is_directory:
                     exclusion, child_entries = self._judge_directory(name=name, tree_path=tree_path, raw_path=raw_path, pattern_lists=pattern_lists)
                 else:
-                    exclusion = self._judge_name(name) or self._judge_patterns(tree_path, is_dir=False, pattern_lists=pattern_lists)
+                    exclusion = self._judge_file(name, kind=directory_entry.kind) or self._judge_patterns(
+                        tree_path, is_dir=False, pattern_lists=pattern_lists
+                    )
                 if exclusion is not None:
                     if directory_entry.kind.is_directory:
                         self.excluded_directories[tree_path] = exclusion
@@ -321,6 +325,22 @@ class _TreeWalk:
     def _judge_name(name: str) -> TreeExclusion | None:
         if name.startswith("."):
             return TreeExclusion(rule=ExclusionRule.DOT_SEGMENT)
+        return None
+
+    @staticmethod
+    def _judge_file(name: str, *, kind: EntryKind) -> TreeExclusion | None:
+        """Judge an entry that is not a directory by its name, then by the run-inputs default; the patterns come after.
+
+        A regular file or a symbolic link, never followed, named exactly `inputs.json` or
+        `inputs.toml` is a run's inputs file and stays out wherever it lies; a named pipe or
+        another special entry of either name is no run's inputs file, so it is kept and then
+        refused as a special file.
+        """
+        by_name = _TreeWalk._judge_name(name)
+        if by_name is not None:
+            return by_name
+        if name in RUN_INPUTS_NAMES and kind.counts_as_run_inputs:
+            return TreeExclusion(rule=ExclusionRule.RUN_INPUTS)
         return None
 
     def _judge_directory(
