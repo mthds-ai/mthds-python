@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from typing_extensions import override
 
 from mthds.method_tree.digest import is_sha256_hex, sha256_hex, tree_digest, tree_files_from_contents
-from mthds.method_tree.discovery import DEFAULT_DIRECTORY_NAMES, MANIFEST_NAME, VENV_MARKER_NAME
+from mthds.method_tree.discovery import DEFAULT_DIRECTORY_NAMES, MANIFEST_NAME, RUN_INPUTS_NAMES, VENV_MARKER_NAME
 from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeRefusal, TreeSourceError
 from mthds.method_tree.models import MethodTree
 from mthds.method_tree.tree_path import path_collisions, sorted_tree_paths, tree_path_violation
@@ -221,14 +221,16 @@ def excluded_name_violation(key: str) -> bool:
     """Whether a tree path names a file the membership rule could never admit.
 
     That is one holding a segment starting with a dot, one inside a `__pycache__` or `node_modules`
-    directory, a file named `pyvenv.cfg`, or a `METHODS.toml` file anywhere but at the root.
+    directory, a file named `pyvenv.cfg`, a run's inputs file named `inputs.json` or `inputs.toml`
+    at any depth, or a `METHODS.toml` file anywhere but at the root. Only the last segment counts
+    for a run's inputs file, since a directory of either name excludes nothing.
     """
     segments = key.split("/")
     if any(segment.startswith(".") for segment in segments):
         return True
     if any(segment in DEFAULT_DIRECTORY_NAMES for segment in segments[:-1]):
         return True
-    if segments[-1] == VENV_MARKER_NAME:
+    if segments[-1] == VENV_MARKER_NAME or segments[-1] in RUN_INPUTS_NAMES:
         return True
     return segments[-1] == MANIFEST_NAME and len(segments) > 1
 
