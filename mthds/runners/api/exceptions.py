@@ -163,7 +163,9 @@ class BlobUploadError(PipelineRequestError):
     it as any failed answer is read: the target's own problem document when it sent one, such as a
     runner's `PUT /blobs/{sha256}` refusal, else the problem its status names
     (`client.response_unreadable` naming the status, or the one code a status such as `503` names).
-    The error keeps the status and the body as text beside it. An upload that got no usable answer
+    The error keeps the status and the body as text beside it, and its message never quotes the body,
+    since an object store's refusal, such as S3's `SignatureDoesNotMatch`, may echo the presigned
+    signature and query that grant the write. An upload that got no usable answer
     reads as a request that creates nothing, since a blob is named by its bytes and its upload is
     safe to repeat: `client.unreachable` naming the target, or `client.timeout`, with no status, as
     the TypeScript client's `BlobUploadError` has none then. A malformed target, one that is no URL

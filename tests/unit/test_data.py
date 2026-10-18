@@ -1108,6 +1108,20 @@ class BlobWireBodies:
     # A presigned target whose signature neither an error's message nor its problem may show.
     SECRET_SIGNATURE: ClassVar[str] = "secret-5f1c9e0a"
     SIGNED_UPLOAD_URL: ClassVar[str] = f"https://bucket.example/org_1/blobs/{CARD_SHA256}?X-Amz-Signature={SECRET_SIGNATURE}"
+    # An object store's refusal of a presigned write, shaped as S3's `SignatureDoesNotMatch`: it echoes the key id, the string
+    # it signed and the signature it was given early in the body, and the presigned query later, all synthetic.
+    FAKE_ACCESS_KEY_ID: ClassVar[str] = "FAKE-ACCESS-KEY-ID-0001"
+    SIGNATURE_MISMATCH_BODY: ClassVar[str] = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<Error><Code>SignatureDoesNotMatch</Code>"
+        "<Message>The request signature we calculated does not match the signature you provided.</Message>"
+        f"<AWSAccessKeyId>{FAKE_ACCESS_KEY_ID}</AWSAccessKeyId>"
+        "<StringToSign>AWS4-HMAC-SHA256\n20261018T000000Z\n20261018/us-east-1/s3/aws4_request\n0f1e2d3c4b5a6978</StringToSign>"
+        f"<SignatureProvided>{SECRET_SIGNATURE}</SignatureProvided>"
+        f"<CanonicalRequest>PUT\n/org_1/blobs/{CARD_SHA256}\n"
+        f"X-Amz-Algorithm=AWS4-HMAC-SHA256&amp;X-Amz-Credential={FAKE_ACCESS_KEY_ID}&amp;X-Amz-Signature={SECRET_SIGNATURE}</CanonicalRequest>"
+        "<RequestId>FAKEREQUEST0001</RequestId></Error>"
+    )
     # `/blobs/missing` successes the client cannot read, each naming the signed target, for a request listing the card's blob alone.
     UNREADABLE_SIGNED_ANSWERS: ClassVar[list[tuple[str, dict[str, Any]]]] = [
         (

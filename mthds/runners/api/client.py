@@ -708,7 +708,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             PipelineRequestError: If `data` is not the blob named: another SHA-256 or another size
                 (`client.argument_invalid`).
             BlobUploadError: If the target answers non-2xx, other than a create-only target's `412`,
-                carrying the problem its answer reads as; if the upload got no usable answer, carrying
+                carrying the problem its answer reads as, its body never quoted in the message, since an
+                object store's refusal may echo the presigned signature; if the upload got no usable answer, carrying
                 the problem a request that creates nothing reads as, since a blob is named by its bytes
                 and its upload is safe to repeat (`client.unreachable` naming the target without its
                 userinfo, query and fragment, or `client.timeout`), with no status; or if the target is
@@ -889,12 +890,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         if response.is_success or (response.status_code == 412 and _is_create_only(target)):
             return
         # The target's answer reads as any failed answer does: its own problem document when it is one,
-        # such as a runner's `PUT /blobs/{sha256}` refusal, else the problem its status names.
+        # such as a runner's `PUT /blobs/{sha256}` refusal, else the problem its status names. Its body is
+        # never quoted in the message, as the TypeScript client never quotes it: the target is typically an
+        # object store behind a presigned URL, whose refusal, such as S3's `SignatureDoesNotMatch`, echoes the
+        # signature and the presigned query that are the permission to write. `response_body` keeps it whole.
         reading = read_error_answer(response, creates_run=False)
         msg = f"Uploading blob {blob.sha256} to {upload_url} failed ({response.status_code}): {reading.problem.detail}"
-        excerpt = answer_excerpt(response, problem_from_body=reading.from_body)
-        if excerpt is not None:
-            msg = f"{msg}\nThe server answered: {excerpt}"
         raise BlobUploadError(
             msg,
             problem=reading.problem,

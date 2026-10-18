@@ -33,7 +33,8 @@ class _FakeRunner:
     """A runner keeping a blob store whose upload targets are presigned object-store URLs, served through httpx's MockTransport.
 
     It answers `version`, `blobs/missing` and `execute`, and stores an upload as a create-only object
-    store does: bytes it already holds draw a `412`. An upload can be made to fail in transport, by the
+    store does: bytes it already holds draw a `412`. An upload can be refused with `upload_status`,
+    answering `upload_body`, or made to fail in transport, by the
     httpx failure `upload_failure` names, or to get an answer whose body cannot be decoded, and the targets
     it names can be moved to another origin, with other headers.
     """
@@ -42,6 +43,7 @@ class _FakeRunner:
         self.blob_store = True
         self.held: dict[str, bytes] = {}
         self.upload_status: int | None = None
+        self.upload_body = "<Error><Code>AccessDenied</Code></Error>"
         self.upload_failure: type[httpx.TransportError] | None = None
         self.upload_body_broken = False
         self.unrequested_missing: list[str] = []
@@ -85,7 +87,7 @@ class _FakeRunner:
         if self.upload_body_broken:
             return httpx.Response(200, stream=httpx.ByteStream(b"this was never gzip"), headers={"Content-Encoding": "gzip"})
         if self.upload_status is not None:
-            return httpx.Response(self.upload_status, text="<Error><Code>AccessDenied</Code></Error>")
+            return httpx.Response(self.upload_status, text=self.upload_body)
         sha256 = request.url.path.rsplit("/", 1)[-1]
         if sha256 in self.held:
             return httpx.Response(412, text="<Error><Code>PreconditionFailed</Code></Error>")
@@ -277,7 +279,6 @@ class TestMthdsAPIClientBlobs:
         assert str(error) == (
             f"Uploading blob {MethodFileMaps.CARD_SHA256} to {BlobWireBodies.UPLOAD_URL_WITHOUT_QUERY} failed ({status}): "
             f"The runtime answered with the HTTP status {status} and a body that is not a problem document the client can read.\n"
-            "The server answered: <Error><Code>AccessDenied</Code></Error>\n"
             "Next step: Report this to whoever runs the runtime, with the status and the body."
         )
         assert "Signature" not in str(error)
@@ -331,6 +332,36 @@ class TestMthdsAPIClientBlobs:
         )
         for credential in ("uploader", "pa55word", "Signature", "#part"):
             assert credential not in str(error)
+
+    def test_an_upload_error_never_quotes_the_target_answer(self, runner: _FakeRunner) -> None:
+        """An object store's refusal may echo the signature and the presigned query, so the message never quotes it: only `response_body` keeps it."""
+        client = self._client()
+        runner.upload_status = 403
+        runner.upload_body = BlobWireBodies.SIGNATURE_MISMATCH_BODY
+        target = UploadTarget(method="PUT", url=BlobWireBodies.SIGNED_UPLOAD_URL, headers={})
+        blob = MissingBlob(sha256=MethodFileMaps.CARD_SHA256, size=13, upload=target)
+
+        with pytest.raises(BlobUploadError) as exc_info:
+            asyncio.run(client.upload_blob(blob, MethodFileMaps.CARD))
+
+        error = exc_info.value
+        assert error.problem.as_wire() == make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": 403}).as_wire()
+        assert str(error) == (
+            f"Uploading blob {MethodFileMaps.CARD_SHA256} to {BlobWireBodies.UPLOAD_URL_WITHOUT_QUERY} failed (403): "
+            "The runtime answered with the HTTP status 403 and a body that is not a problem document the client can read.\n"
+            "Next step: Report this to whoever runs the runtime, with the status and the body."
+        )
+        serialized_problem = json.dumps(error.problem.as_wire())
+        for secret in (
+            BlobWireBodies.SECRET_SIGNATURE,
+            BlobWireBodies.FAKE_ACCESS_KEY_ID,
+            "SignatureDoesNotMatch",
+            "StringToSign",
+            "X-Amz-Signature",
+        ):
+            assert secret not in str(error), secret
+            assert secret not in serialized_problem, secret
+        assert (error.status, error.response_body) == (403, BlobWireBodies.SIGNATURE_MISMATCH_BODY)
 
     @pytest.mark.parametrize(
         ("topic", "failure", "expected_code", "expected_params"),
