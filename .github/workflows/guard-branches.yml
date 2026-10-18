@@ -5,19 +5,22 @@ on:
 
 jobs:
   # ───────────────────────────────────────────────────────────────
-  # 1) Only release/vX.Y.Z → main
+  # 1) Only release/vX.Y.Z → main, or → a maint/vX.Y maintenance line
   # ───────────────────────────────────────────────────────────────
+  # pull_request_target reads this file from the base branch, so a maintenance line enforces this
+  # gate once its own branch carries this version of the file.
   gate-main:
-    if: github.event.pull_request.base.ref == 'main'
+    if: github.event.pull_request.base.ref == 'main' || startsWith(github.event.pull_request.base.ref, 'maint/v')
     runs-on: ubuntu-latest
     steps:
       - name: Verify source branch is a Release
         env:
           HEAD: ${{ github.event.pull_request.head.ref }}
+          BASE: ${{ github.event.pull_request.base.ref }}
         run: |
-          echo "PR → main from $HEAD"
+          echo "PR → $BASE from $HEAD"
           if [[ ! "$HEAD" =~ ^release\/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Only release/vX.Y.Z branches may merge into main."
+            echo "::error::Only release/vX.Y.Z branches may merge into $BASE."
             exit 1
           fi
 

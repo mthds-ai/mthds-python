@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - main
+      # A maintenance line, released from its own branch: the same check as a release into main.
+      - 'maint/v*'
     types: [opened, synchronize, reopened]
 
 jobs:
