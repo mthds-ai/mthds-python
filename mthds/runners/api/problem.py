@@ -15,10 +15,14 @@ module hands it an httpx response, and states the problem of a request that got 
   broken gzip stream): no usable answer, read as a connection lost after the request left, so
   `client.outcome_unknown` on a route that creates a run and `client.unreachable` on any other, as the
   TypeScript client reads it, whatever the answer's status.
+
+The client's base URL, written into a problem or a message, goes without its userinfo, its query and its
+fragment (`url_without_credentials`).
 """
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 import httpx
@@ -44,6 +48,33 @@ ANSWER_EXCERPT_LIMIT = 500
 
 # The header a runner or a gateway in front of it names the request with, in lower case.
 REQUEST_ID_HEADER = "x-request-id"
+
+# A URL cut into what may be shown of it: an optional `scheme:` with its `//`, the authority, which ends at
+# the first `/`, `?` or `#` as RFC 3986 reads it, and the path; what follows the path is its query and its
+# fragment. Every part may be empty, so every string matches. A URL with no `//` is read as starting at its
+# authority, as a base URL written without its scheme, such as `user:token@runner.example`, is meant.
+_URL_SHOWN_PARTS = re.compile(r"(?P<prefix>(?:[^:/?#]*:)?//)?(?P<authority>[^/?#]*)(?P<path>[^?#]*)")
+
+
+def url_without_credentials(url: str) -> str:
+    """The URL without anything in it that may grant access: its userinfo, its query and its fragment.
+
+    A `user:password@` in the authority is a credential and a presigned query carries the signature that
+    grants a write, so neither is written into a problem, a message or an error's member; the scheme, the
+    host, the port and the path are kept. The URL is cut by hand rather than by `urllib.parse.urlsplit`,
+    so that a URL it refuses, such as one whose host opens a bracket it never closes, cannot fail the
+    error that reports it, and a URL written without a scheme loses its userinfo too.
+
+    Args:
+        url: The URL, as configured or as the runner named it, valid or not.
+
+    Returns:
+        The URL's scheme, host, port and path, as written.
+    """
+    parts = _URL_SHOWN_PARTS.match(url)
+    assert parts is not None  # every part of the pattern may be empty, so it matches every string
+    host_and_port = parts["authority"].rpartition("@")[2]
+    return f"{parts['prefix'] or ''}{host_and_port}{parts['path']}"
 
 
 def lower_case_headers(headers: httpx.Headers) -> dict[str, str]:
@@ -127,7 +158,8 @@ def transport_failure_problem(
     """The problem of a request that got no usable answer.
 
     A body httpx cannot decode (`httpx.DecodingError`) arrives only once the request has left, so it
-    reads as a connection lost after the request left.
+    reads as a connection lost after the request left. `client.unreachable` names the base URL without
+    its userinfo, its query and its fragment (`url_without_credentials`).
 
     Args:
         failure: What httpx raised: a transport failure, or a body it cannot decode.
@@ -139,11 +171,11 @@ def transport_failure_problem(
         `client.unreachable`, `client.timeout` or `client.outcome_unknown`.
     """
     if isinstance(failure, _NOTHING_SENT):
-        return make_client_problem(CoreCode.CLIENT_UNREACHABLE, params={"base_url": base_url})
+        return make_client_problem(CoreCode.CLIENT_UNREACHABLE, params={"base_url": url_without_credentials(base_url)})
     if isinstance(failure, httpx.PoolTimeout):
         return make_client_problem(CoreCode.CLIENT_TIMEOUT, params={"seconds": timeout_seconds})
     if creates_run:
         return make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN)
     if isinstance(failure, httpx.TimeoutException):
         return make_client_problem(CoreCode.CLIENT_TIMEOUT, params={"seconds": timeout_seconds})
-    return make_client_problem(CoreCode.CLIENT_UNREACHABLE, params={"base_url": base_url})
+    return make_client_problem(CoreCode.CLIENT_UNREACHABLE, params={"base_url": url_without_credentials(base_url)})

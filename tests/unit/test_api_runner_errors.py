@@ -557,6 +557,41 @@ class TestMthdsAPIClientErrors:
         assert not exc.problem.is_retryable
         assert not exc.problem.outcome_is_unknown
 
+    @pytest.mark.parametrize(
+        ("topic", "base_url", "failure", "shown_url"),
+        [
+            ("a runtime no connection reached", "https://user:token@runner.example", httpx.ConnectError, "https://runner.example"),
+            ("a connection lost on a read", "https://user:token@runner.example/api?key=token#token", httpx.ReadError, "https://runner.example/api"),
+            ("a scheme not sent to", "ftp://user:token@runner.example", None, "ftp://runner.example"),
+            ("a base URL written without its scheme", "user:token@runner.example", None, "runner.example"),
+            ("a port that is no number", "https://user:token@runner.example:abc", None, "https://runner.example:abc"),
+            ("a host opening a bracket it never closes", "http://user:token@[::1", None, "http://[::1"),
+        ],
+    )
+    def test_a_base_url_writes_no_credential_into_a_problem_or_a_message(
+        self, topic: str, base_url: str, failure: type[httpx.TransportError] | None, shown_url: str
+    ) -> None:
+        """A `user:password@` in the base URL is a credential: the problem and the message name the URL without it, its host and path kept."""
+        client = MthdsAPIClient(api_key="test-token", base_url=base_url, request_timeout_seconds=30.0)
+        if failure is not None:
+            client.client = httpx.AsyncClient(transport=httpx.MockTransport(_failing(failure)))
+        exc = self._raised(client, lambda client: client.version())
+
+        serialized_problem = json.dumps(exc.problem.as_wire())
+        for credential in ("user", "token"):
+            assert credential not in str(exc), f"{topic}: {exc}"
+            assert credential not in serialized_problem, f"{topic}: {serialized_problem}"
+        if failure is None:
+            assert isinstance(exc, ClientNotConfiguredError), topic
+            assert str(exc).startswith(f"API base URL '{shown_url}' does not "), topic
+        else:
+            assert isinstance(exc, ApiTransportError), topic
+            assert exc.problem.as_wire()["params"] == {"base_url": shown_url}, topic
+            assert str(exc) == (
+                f"API GET /v1/version failed: The client could not connect to the runtime at {shown_url}.\n"
+                f"Next step: Check that the runtime at {shown_url} is up and reachable, then try again."
+            ), topic
+
     def test_a_202_on_execute_raises_run_still_running(self) -> None:
         """The protocol's async degrade reads as `client.follow_failed` naming the run, with the 202's hints on the error."""
         handler = _answering(202, text='{"pipeline_run_id":"run_7f3a"}', headers={"Location": "/v1/runs/run_7f3a", "Retry-After": "5"})
