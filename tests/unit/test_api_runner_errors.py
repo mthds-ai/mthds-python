@@ -1,6 +1,7 @@
 """Tests for how MthdsAPIClient reads every failure of every route as a problem, httpx's transport mocked."""
 
 import asyncio
+import copy
 import itertools
 import json
 from collections.abc import Callable, Coroutine, Mapping
@@ -23,6 +24,7 @@ from mthds.protocol.problem.models import Problem, ProblemDomain, RemapValueOp
 from mthds.protocol.problem.registry import AccountRateLimitedParams, CoreCode, ModelUnknownParams
 from mthds.runners.api.client import MthdsAPIClient
 from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
+from mthds.runners.api.models import DictRunResultExecute
 from tests.unit.test_data import ExecuteWireResponses, LegacyAnswerBodies, ProblemBodies
 
 _BASE_URL = "http://localhost:8081"
@@ -473,24 +475,60 @@ class TestMthdsAPIClientErrors:
 
     @pytest.mark.parametrize(("route", "creates_run", "call"), _ROUTE_CALLS)
     @pytest.mark.parametrize(
-        ("topic", "literal"),
-        [("the constant NaN", "NaN"), ("the constant Infinity", "Infinity"), ("a number past a double's range", "1e999")],
+        ("topic", "member"),
+        [
+            ("the constant NaN", b'"load": NaN'),
+            ("the constant Infinity", b'"load": Infinity'),
+            ("a string whose bytes are not UTF-8", b'"name": "bad\xffname"'),
+        ],
     )
-    def test_a_success_body_is_decoded_by_the_rules_of_an_error_body(
-        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, literal: str
+    def test_a_success_body_that_is_not_json_is_unreadable(
+        self, route: str, creates_run: bool, call: Callable[[MthdsAPIClient], Coroutine[Any, Any, object]], topic: str, member: bytes
     ) -> None:
-        """A success whose body holds a number JSON cannot write is unreadable, as an error body holding it is, whatever the route parses."""
+        """A success whose bytes are not UTF-8, or holding a constant JSON does not define, is unreadable, never read with its bytes replaced."""
         status = 202 if route == "POST /v1/start" else 200
-        # One body every route's answer validates from, so that only the literal can make it unreadable.
+        # One body every route's answer validates from, so that only the member can make it unreadable.
         answer: dict[str, Any] = {**ExecuteWireResponses.REDUCED, "is_valid": True, "models": [], "protocol_version": "1.0.0"}
-        body = json.dumps(answer)[:-1] + f', "load": {literal}}}'
-        exc = self._response_error(self._client(_answering(status, text=body)), call)
+        body = json.dumps(answer).encode("utf-8")[:-1] + b", " + member + b"}"
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(status, content=body, headers={"Content-Type": "application/json"}, request=request)
+
+        exc = self._response_error(self._client(handle), call)
 
         if creates_run:
             assert exc.problem.as_wire() == make_client_problem(CoreCode.CLIENT_OUTCOME_UNKNOWN).as_wire(), f"{route}, {topic}"
         else:
             assert exc.problem.code == "client.response_unreadable", f"{route}, {topic}"
             assert exc.problem.as_wire()["params"] == {"status": status}
+
+    @pytest.mark.parametrize(
+        ("topic", "literal"),
+        [
+            ("an output nested deeper than a problem may be", "[" * (MAX_BODY_NESTING + 88) + "]" * (MAX_BODY_NESTING + 88)),
+            ("an integer past the range of a double", "1" + "0" * 400),
+            ("a float past the range of a double, read as an infinity", "1e999"),
+        ],
+    )
+    def test_a_success_body_reads_within_pythons_limits_rather_than_a_problems(self, topic: str, literal: str) -> None:
+        """A finished run's output is the caller's payload, not a problem: it reads whole, run id and all, as `Response.json()` reads it."""
+        answer = copy.deepcopy(ExecuteWireResponses.REDUCED)
+        answer["pipe_output"]["working_memory"]["root"]["extracted_entities"]["content"] = {"value": "__VALUE__"}
+        body = json.dumps(answer).replace('"__VALUE__"', literal)
+        client = self._client(_answering(200, text=body, headers={"Content-Type": "application/json"}))
+
+        async def scenario() -> DictRunResultExecute:
+            try:
+                return await client.execute(pipe_code="pitch_product", mthds_contents=['domain = "sales_copy"'])
+            finally:
+                await client.close()
+
+        result = asyncio.run(scenario())
+
+        assert result.pipeline_run_id == "run_7f3a", topic
+        content = result.pipe_output.working_memory.root["extracted_entities"].content
+        assert isinstance(content, dict), topic
+        assert content["value"] == json.loads(literal), topic
 
     @pytest.mark.parametrize("literal", ["NaN", "1e999"])
     def test_a_202_on_execute_whose_body_is_no_json_names_no_run(self, literal: str) -> None:
