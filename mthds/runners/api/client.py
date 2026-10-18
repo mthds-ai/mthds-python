@@ -4,7 +4,7 @@ import asyncio
 import math
 import re
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, NamedTuple, NoReturn, Self, TypeVar, cast
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote
 
 import httpx
 from pydantic import TypeAdapter, ValidationError
@@ -34,7 +34,14 @@ from mthds.protocol.problem.registry import CoreCode
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, BlobUploadError, ClientNotConfiguredError, RunStillRunningError
 from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
-from mthds.runners.api.problem import answer_excerpt, answer_request_id, lower_case_headers, read_error_answer, transport_failure_problem
+from mthds.runners.api.problem import (
+    answer_excerpt,
+    answer_request_id,
+    lower_case_headers,
+    read_error_answer,
+    transport_failure_problem,
+    url_without_credentials,
+)
 from mthds.runners.api.user_agent import AppInfo, build_user_agent, mthds_python_token
 from mthds.runners.types import RunnerType
 
@@ -275,8 +282,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         back. An answer whose body cannot be read, such as one whose content encoding cannot be
         decoded, is no usable answer either, and the request had left: it reads as a connection
         lost, `client.unreachable`, or `client.outcome_unknown` on a route that creates a run, as
-        the TypeScript client reads it. A documented protected extension seam: a client built on
-        this one sends its own routes through it too.
+        the TypeScript client reads it. The base URL is written into a problem or a message without
+        its userinfo, its query and its fragment, so a `user:password@` in it is never quoted. A
+        documented protected extension seam: a client built on this one sends its own routes
+        through it too.
 
         Args:
             method: HTTP method ("GET" or "POST").
@@ -297,8 +306,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             return await self._send(method, url, content=content, request_timeout=self.request_timeout_seconds)
         except httpx.UnsupportedProtocol as exc:
             # A transport error by its class, but a setting by its cause: the base URL names no scheme the
-            # client sends to, so no repeat can succeed, and it must not read as an unreachable runtime.
-            msg = f"API base URL '{self.base_url}' does not start with http:// or https://: {exc}"
+            # client sends to, so no repeat can succeed, and it must not read as an unreachable runtime. httpx's
+            # own words are left out: they quote the scheme it read, which in `user:token@host` is the user name.
+            msg = f"API base URL '{url_without_credentials(self.base_url)}' does not start with http:// or https://."
             raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "base_url"})) from exc
         except (httpx.TransportError, httpx.DecodingError) as exc:
             # `httpx.DecodingError` is no `httpx.TransportError`, so it is named beside it.
@@ -306,7 +316,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             msg = f"API {method} /{self._API_PREFIX}/{endpoint} failed: {problem.detail}"
             raise ApiTransportError(msg, problem=problem, api_url=self.base_url, request_url=url) from exc
         except httpx.InvalidURL as exc:
-            msg = f"API base URL '{self.base_url}' does not make a valid URL: {exc}"
+            msg = f"API base URL '{url_without_credentials(self.base_url)}' does not make a valid URL: {exc}"
             raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "base_url"})) from exc
 
     def _parse_answer(
@@ -848,7 +858,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         response = await upload_client.send(request)
         if response.is_success or (response.status_code == 412 and _is_create_only(target)):
             return
-        upload_url = _url_without_query(target.url)
+        upload_url = url_without_credentials(target.url)
         # The target's answer reads as any failed answer does: its own problem document when it is one,
         # such as a runner's `PUT /blobs/{sha256}` refusal, else the problem its status names.
         reading = read_error_answer(response, creates_run=False)
@@ -1166,13 +1176,3 @@ def _read_listed_file(tree: MethodTree, *, tree_file: TreeFile) -> bytes:
 def _is_create_only(target: UploadTarget) -> bool:
     """Whether an upload target asks for a create-only write, whose `412` means the bytes are already stored."""
     return any(name.lower() == "if-none-match" for name in target.headers)
-
-
-def _url_without_query(url: str) -> str:
-    """The URL without anything that may grant the write: its userinfo, its query and its fragment.
-
-    A presigned query carries a signature, and a `user:password@` in the authority is a credential.
-    """
-    parts = urlsplit(url)
-    host_and_port = parts.netloc.rpartition("@")[2]
-    return urlunsplit((parts.scheme, host_and_port, parts.path, "", ""))
