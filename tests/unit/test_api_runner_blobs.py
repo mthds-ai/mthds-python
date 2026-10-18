@@ -145,14 +145,28 @@ class TestMthdsAPIClientBlobs:
     def test_missing_blobs_refusal_raises_api_response_error(self, mocker: MockerFixture) -> None:
         """A runner's refusal, such as one hash listed with two sizes, raises the typed error every route raises."""
         client = self._client()
-        problem = {"type": "about:blank", "title": "Blob mismatch", "status": 422, "detail": "The blob is listed twice with different sizes."}
+        problem = {
+            "type": "https://mthds.ai/errors/request.invalid",
+            "title": "The request does not match the route's schema",
+            "status": 422,
+            "detail": "The blob is listed twice with different sizes.",
+            "code": "request.invalid",
+            "domain": "input",
+            "retry": "no",
+            "next_step": {"kind": "change_input", "detail": "Pass this to the caller, who must correct the field 'blobs' of the request."},
+            "params": {"field": "blobs"},
+        }
         response = httpx.Response(422, json=problem, request=httpx.Request("POST", f"{_BASE_URL}/v1/blobs/missing"))
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=response))
 
         with pytest.raises(ApiResponseError) as exc_info:
             asyncio.run(client.missing_blobs([BlobRef(sha256=MethodFileMaps.CARD_SHA256, size=13)]))
 
-        assert str(exc_info.value) == "API POST /v1/blobs/missing failed (422): The blob is listed twice with different sizes."
+        assert exc_info.value.problem.as_wire() == problem
+        assert str(exc_info.value) == (
+            "API POST /v1/blobs/missing failed (422): The blob is listed twice with different sizes.\n"
+            "Next step: Pass this to the caller, who must correct the field 'blobs' of the request."
+        )
         assert exc_info.value.request_url == f"{_BASE_URL}/v1/blobs/missing"
 
     # ── upload_blob ──────────────────────────────────────────────
@@ -196,9 +210,14 @@ class TestMthdsAPIClientBlobs:
         error = exc_info.value
         assert (error.sha256, error.status, error.upload_url) == (MethodFileMaps.CARD_SHA256, status, BlobWireBodies.UPLOAD_URL_WITHOUT_QUERY), topic
         assert error.response_body == "<Error><Code>AccessDenied</Code></Error>"
+        # An object store's error page is no problem document, so it reads as any such answer does, by its status.
+        assert error.problem.code == "client.response_unreadable", topic
+        assert error.problem.as_wire()["params"] == {"status": status}
         assert str(error) == (
             f"Uploading blob {MethodFileMaps.CARD_SHA256} to {BlobWireBodies.UPLOAD_URL_WITHOUT_QUERY} failed ({status}): "
-            "<Error><Code>AccessDenied</Code></Error>"
+            f"The runtime answered with the HTTP status {status} and a body that is not a problem document the client can read.\n"
+            "The server answered: <Error><Code>AccessDenied</Code></Error>\n"
+            "Next step: Report this to whoever runs the runtime, with the status and the body."
         )
         assert "Signature" not in str(error)
 
@@ -214,8 +233,10 @@ class TestMthdsAPIClientBlobs:
 
         assert str(exc_info.value) == (
             f"The bytes given for blob {MethodFileMaps.CARD_SHA256} are not that blob: "
-            f"they hash to {sha256_hex(other_bytes)} and hold 13 bytes, not 13."
+            f"they hash to {sha256_hex(other_bytes)} and hold 13 bytes, not 13.\n"
+            "Next step: Correct the argument 'data', then try again."
         )
+        assert exc_info.value.problem.as_wire()["params"] == {"argument": "data", "reason": "not_the_blob"}
         assert len(hashing_threads) == 1
         assert runner.requests == []
 
@@ -243,9 +264,9 @@ class TestMthdsAPIClientBlobs:
 
         error = exc_info.value
         assert error.upload_url == BlobWireBodies.UPLOAD_URL_WITH_USERINFO_STRIPPED
-        assert str(error) == (
+        assert str(error).split("\n")[0] == (
             f"Uploading blob {MethodFileMaps.CARD_SHA256} to {BlobWireBodies.UPLOAD_URL_WITH_USERINFO_STRIPPED} failed (403): "
-            "<Error><Code>AccessDenied</Code></Error>"
+            "The runtime answered with the HTTP status 403 and a body that is not a problem document the client can read."
         )
         for credential in ("uploader", "pa55word", "Signature", "#part"):
             assert credential not in str(error)
@@ -426,20 +447,23 @@ class TestMthdsAPIClientBlobs:
         runner.unrequested_missing = [unrequested_sha256]
         client = self._client()
 
-        with pytest.raises(PipelineRequestError, match=f"asked for blobs this tree does not hold: {unrequested_sha256}"):
+        with pytest.raises(PipelineRequestError, match=f"asked for blobs this tree does not hold: {unrequested_sha256}") as exc_info:
             asyncio.run(client.prepare_files(list_method_tree(tmp_path), inline_max_bytes=0))
 
         assert runner.uploads == [], topic
+        assert exc_info.value.problem.code == "client.response_unreadable", topic
+        assert exc_info.value.problem.as_wire()["params"] == {"status": 200}, topic
 
     def test_prepare_files_refuses_a_tree_not_listed_from_a_directory(self, runner: _FakeRunner) -> None:
         """A tree read from a map has no files on disk: its bytes go through `prepare_files_from_contents`."""
         tree = read_file_map(to_json(MethodFileMaps.ONE_BUNDLE).decode("utf-8")).tree
         client = self._client()
 
-        with pytest.raises(PipelineRequestError, match="prepare_files_from_contents"):
+        with pytest.raises(PipelineRequestError, match="prepare_files_from_contents") as exc_info:
             asyncio.run(client.prepare_files(tree))
 
         assert runner.requests == []
+        assert exc_info.value.problem.as_wire()["params"] == {"argument": "tree", "reason": "not_listed_from_a_directory"}
 
     def test_prepare_files_from_contents_sends_bytes_at_hand_by_hash(self, runner: _FakeRunner) -> None:
         """Bytes at hand follow the same rule: over the threshold, against a blob store, uploaded once and named by hash."""
@@ -454,7 +478,8 @@ class TestMthdsAPIClientBlobs:
     def test_prepare_files_from_contents_refuses_an_empty_tree(self, runner: _FakeRunner) -> None:
         client = self._client()
 
-        with pytest.raises(PipelineRequestError, match="holds no file"):
+        with pytest.raises(PipelineRequestError, match="holds no file") as exc_info:
             asyncio.run(client.prepare_files_from_contents({}))
 
         assert runner.requests == []
+        assert exc_info.value.problem.as_wire()["params"] == {"argument": "contents", "reason": "empty"}

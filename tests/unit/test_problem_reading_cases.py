@@ -18,9 +18,9 @@ _DEFAULT_BASE_URL = "http://localhost:8081"
 _DEFAULT_ROUTE = "GET /models"
 
 _ROUTE_CALLS: dict[str, Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]] = {
-    "POST /execute": lambda client: client.execute(pipe_code="summarize", mthds_contents=['domain = "legal"']),
-    "POST /start": lambda client: client.start(pipe_code="summarize", mthds_contents=['domain = "legal"']),
-    "POST /validate": lambda client: client.validate(['domain = "legal"']),
+    "POST /execute": lambda client: client.execute(pipe_code="summarize", files={"main.mthds": 'domain = "legal"'}),
+    "POST /start": lambda client: client.start(pipe_code="summarize", files={"main.mthds": 'domain = "legal"'}),
+    "POST /validate": lambda client: client.validate({"main.mthds": 'domain = "legal"'}),
     "GET /models": lambda client: client.models(),
     "GET /version": lambda client: client.version(),
 }

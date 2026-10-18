@@ -111,10 +111,12 @@ class TestMthdsAPIClientFiles:
         client = self._client()
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock())
 
-        with pytest.raises(PipelineRequestError, match="files holds no file"):
+        with pytest.raises(PipelineRequestError, match="files holds no file") as exc_info:
             asyncio.run(getattr(client, route)(files={}))
 
         send_mock.assert_not_called()
+        assert exc_info.value.problem.code == "client.argument_invalid"
+        assert exc_info.value.problem.as_wire()["params"] == {"argument": "files", "reason": "empty"}
 
     @pytest.mark.parametrize(("route", "status", "wire_response"), _RUN_ROUTES)
     def test_files_smuggled_through_extra_is_refused(self, mocker: MockerFixture, route: str, status: int, wire_response: dict[str, Any]) -> None:
