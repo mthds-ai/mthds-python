@@ -8,6 +8,7 @@ from typing_extensions import runtime_checkable
 from mthds.protocol.models import PipeOutputT
 
 if TYPE_CHECKING:
+    from mthds.method_tree.file_entry import MethodFiles
     from mthds.protocol.models import ModelCategory, ModelDeck, RunResultExecute, RunResultStart, ValidationResult, VersionInfo
     from mthds.protocol.pipe_output import VariableMultiplicity
     from mthds.protocol.pipeline_inputs import PipelineInputs
@@ -48,11 +49,13 @@ agree.
 class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
     """The MTHDS Protocol — the contract every MTHDS runner implements.
 
-    Mirrors the standard's five routes (`mthds-protocol.openapi.yaml`):
+    Mirrors the standard's required routes (`mthds-protocol.openapi.yaml`):
     `execute`, `start`, `validate`, `models`, `version`. A runner is just a
-    runner: it executes and validates methods, and reports its model deck and
-    version. Run polling is NOT part of the protocol — it is a hosted-API
-    extension carried by `MthdsAPIClient` only.
+    runner: it executes and validates methods, each sent as its whole method
+    tree in `files`, and reports its model deck and version. The optional blob
+    routes are served only by a runner that keeps a blob store, so they are not
+    part of this interface: `MthdsAPIClient` carries them. Run polling is NOT
+    part of the protocol — it is a hosted-API extension that `pipelex-sdk` carries.
 
     This interface carries the protocol's **basic** arguments only. An
     implementation may accept additional request properties; those are
@@ -65,7 +68,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
     async def execute(
         self,
         pipe_code: str | None = None,
-        mthds_contents: list[str] | None = None,
+        files: MethodFiles | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -75,8 +78,11 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         """Execute a method synchronously and wait for its completion.
 
         Args:
-            pipe_code: The code identifying the pipe to execute
-            mthds_contents: List of MTHDS bundle contents to load
+            pipe_code: The code identifying the pipe to execute: a pipe the runner
+                already holds, or one declared in a bundle of `files`. Without it, the
+                run starts at the method's `main_pipe`.
+            files: The method to load, as its whole method tree: a map from tree
+                path to file entry (its text, `{base64}` or `{sha256, size}`)
             inputs: Inputs passed to the method
             output_name: Target output slot name
             output_multiplicity: Output multiplicity setting
@@ -104,7 +110,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
     async def start(
         self,
         pipe_code: str | None = None,
-        mthds_contents: list[str] | None = None,
+        files: MethodFiles | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -117,8 +123,11 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         implementation-defined and outside the protocol.
 
         Args:
-            pipe_code: The code identifying the pipe to execute
-            mthds_contents: List of MTHDS bundle contents to load
+            pipe_code: The code identifying the pipe to execute: a pipe the runner
+                already holds, or one declared in a bundle of `files`. Without it, the
+                run starts at the method's `main_pipe`.
+            files: The method to load, as its whole method tree: a map from tree
+                path to file entry (its text, `{base64}` or `{sha256, size}`)
             inputs: Inputs passed to the method
             output_name: Target output slot name
             output_multiplicity: Output multiplicity setting
@@ -144,14 +153,15 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
     @abstractmethod
     async def validate(
         self,
-        mthds_contents: list[str],
+        files: MethodFiles,
         allow_signatures: bool = False,
         extra: dict[str, Any] | None = None,
     ) -> ValidationResult:
-        """Parse, validate, and dry-run an MTHDS bundle.
+        """Parse, validate, and dry-run a method: every bundle of its tree, and every file a bundle names.
 
         Args:
-            mthds_contents: MTHDS contents to load (always a list, even for one file)
+            files: The method to validate, as its whole method tree: a map from tree
+                path to file entry, holding at least one file
             allow_signatures: When True, the validation sweep tolerates
                 unimplemented pipe signatures. Strict by default.
             extra: Implementation-defined extension args, merged into the

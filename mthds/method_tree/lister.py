@@ -10,12 +10,13 @@ The procedure follows `mthds/docs/spec/method-tree.md`:
 2. **Walk the root under the membership rule**, never following a symbolic link. Each entry is
    judged in this order: a name starting with a dot; for a directory, the name defaults
    (`__pycache__`, `node_modules`) and then the defaults read from its own entries (a `pyvenv.cfg`
-   regular file or symbolic link, a `.git` entry of any kind, a regular `METHODS.toml` file); and
-   last the patterns, the deepest `.gitignore` file first and the manifest's `[package] exclude`
-   patterns below them all. An excluded directory is pruned, never visited, so nothing inside it
-   is ever an error, its `.gitignore` file included. Only then is a kept entry refused when it is
-   a symbolic link or another entry that is neither a regular file nor a directory, or when its
-   path is not a tree path.
+   regular file or symbolic link, a `.git` entry of any kind, a regular `METHODS.toml` file); for
+   any other entry, the run-inputs default (a regular file or symbolic link named exactly
+   `inputs.json` or `inputs.toml`, at any depth); and last the patterns, the deepest `.gitignore`
+   file first and the manifest's `[package] exclude` patterns below them all. An excluded
+   directory is pruned, never visited, so nothing inside it is ever an error, its `.gitignore`
+   file included. Only then is a kept entry refused when it is a symbolic link or another entry
+   that is neither a regular file nor a directory, or when its path is not a tree path.
 3. **Stop at the caller's limits while walking**, counting files and summing their sizes from
    `stat`, before any file is hashed.
 4. **Refuse what the whole listing shows**: two spellings of one name equal in NFC, paths that
@@ -37,6 +38,7 @@ from mthds.method_tree.discovery import (
     DEFAULT_DIRECTORY_NAMES,
     GITIGNORE_NAME,
     MANIFEST_NAME,
+    RUN_INPUTS_NAMES,
     DirectoryEntry,
     EntryKind,
     find_manifest_directory,
@@ -47,7 +49,7 @@ from mthds.method_tree.discovery import (
     on_disk_name,
     read_directory,
 )
-from mthds.method_tree.exceptions import MethodTreeRefusedError, TreeLimitError, TreeRefusal, TreeSourceError
+from mthds.method_tree.exceptions import EmptyMethodTreeError, MethodTreeRefusedError, TreeLimitError, TreeRefusal, TreeSourceError
 from mthds.method_tree.gitignore import PatternList
 from mthds.method_tree.models import MethodTree, TreeExclusion, TreeFile, TreeLimits
 from mthds.method_tree.tree_path import directories_of, nfc, refuse_path_collisions, sorted_tree_paths, tree_path_sort_key, tree_path_violation
@@ -96,6 +98,8 @@ def list_method_tree(handed_over: Path, *, limits: TreeLimits | None = None) -> 
         The tree, its files in tree path order with their hashes and sizes, and its digest.
 
     Raises:
+        EmptyMethodTreeError: When the membership rule keeps every file out of the tree; it carries what the listing
+            kept out, so a caller learns the packages and repositories nested in a directory whose own tree is empty.
         MethodTreeRefusedError: When the standard refuses the tree; its `refusal.code` says why.
         TreeLimitError: When the walk passed one of `limits`.
         TreeSourceError: When `handed_over` does not exist, is a file not named `.mthds`, or when
@@ -129,6 +133,7 @@ def list_method_tree_at_root(root: Path, *, limits: TreeLimits | None = None) ->
     """List the tree rooted at `root` itself, with no Manifest Discovery, as a fetched package's tree is rooted at its directory.
 
     Raises:
+        EmptyMethodTreeError: When the membership rule keeps every file out of the tree; it carries what the listing kept out.
         MethodTreeRefusedError: When the standard refuses the tree; its `refusal.code` says why.
         TreeLimitError: When the walk passed one of `limits`.
         TreeSourceError: When `root` is not a directory, or a directory, a file or the manifest cannot be read.
@@ -247,11 +252,17 @@ class _TreeWalk:
             if entry not in member_paths:
                 self._refuse_lone_file(lone_file, tree_path=entry, root_exclusion=root_exclusion)
         if not self.candidates:
-            msg = (
-                f"The method tree at '{self.root}' is empty: the membership rule keeps every file out of it, "
-                "and a method tree holds at least one file."
+            reason = (
+                f"its root is {root_exclusion.rule.description}" if root_exclusion is not None else "the membership rule keeps every file out of it"
             )
-            raise MethodTreeRefusedError(msg, refusal=TreeRefusal(code=TreeRefusalCode.EMPTY_TREE))
+            msg = f"The method tree at '{self.root}' is empty: {reason}, and a method tree holds at least one file."
+            raise EmptyMethodTreeError(
+                msg,
+                root=self.root,
+                excluded_files=self.excluded_files,
+                excluded_directories=self.excluded_directories,
+                raw_paths=self.raw_paths,
+            )
         files = [self._hash(candidate) for candidate in sorted(self.candidates, key=lambda candidate: tree_path_sort_key(candidate.tree_path))]
         return MethodTree(
             files=files,
@@ -280,7 +291,9 @@ class _TreeWalk:
                 if directory_entry.kind.is_directory:
                     exclusion, child_entries = self._judge_directory(name=name, tree_path=tree_path, raw_path=raw_path, pattern_lists=pattern_lists)
                 else:
-                    exclusion = self._judge_name(name) or self._judge_patterns(tree_path, is_dir=False, pattern_lists=pattern_lists)
+                    exclusion = self._judge_file(name, kind=directory_entry.kind) or self._judge_patterns(
+                        tree_path, is_dir=False, pattern_lists=pattern_lists
+                    )
                 if exclusion is not None:
                     if directory_entry.kind.is_directory:
                         self.excluded_directories[tree_path] = exclusion
@@ -312,6 +325,22 @@ class _TreeWalk:
     def _judge_name(name: str) -> TreeExclusion | None:
         if name.startswith("."):
             return TreeExclusion(rule=ExclusionRule.DOT_SEGMENT)
+        return None
+
+    @staticmethod
+    def _judge_file(name: str, *, kind: EntryKind) -> TreeExclusion | None:
+        """Judge an entry that is not a directory by its name, then by the run-inputs default; the patterns come after.
+
+        A regular file or a symbolic link, never followed, named exactly `inputs.json` or
+        `inputs.toml` is a run's inputs file and stays out wherever it lies; a named pipe or
+        another special entry of either name is no run's inputs file, so it is kept and then
+        refused as a special file.
+        """
+        by_name = _TreeWalk._judge_name(name)
+        if by_name is not None:
+            return by_name
+        if name in RUN_INPUTS_NAMES and kind.counts_as_run_inputs:
+            return TreeExclusion(rule=ExclusionRule.RUN_INPUTS)
         return None
 
     def _judge_directory(

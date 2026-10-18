@@ -31,9 +31,11 @@ each. The JS twin is the binding parity; the servers are the inspiration.
 
 Three layers of argument meet here, and each predicate's docstring says which layer it is about:
 
-- **the protocol's own run source** — `pipe_code`, `mthds_contents`;
-- **the pipelex-api extensions** that carry a whole method bundle (`files`, `bundle_b64`) or its
-  published address (`method_ref`);
+- **the protocol's own run source** — `pipe_code`, and `files`, the method's whole tree as a map
+  of file entries, which replaced inline `mthds_contents` in MTHDS Protocol 1.0.0;
+- **the pipelex-api extensions** that carry the same tree as a zip (`bundle_b64`), name a
+  published method by its address (`method_ref`), or still carry inline `mthds_contents`, which
+  that runner keeps taking until it retires the field;
 - **the hosted platform's** catalog id (`method_id`).
 
 Only the first layer is a named parameter of `MTHDSProtocol.execute` / `start`; the other two
@@ -46,16 +48,20 @@ The `pipe-selector` campaign will change this surface (a `pipe_ref` beside `pipe
 which of the two may be combined with what). When it does, it changes it here.
 """
 
-from collections.abc import Mapping
-from typing import Final
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Final
 
 from mthds.protocol.exceptions import make_argument_invalid_error
 
+if TYPE_CHECKING:
+    from mthds.method_tree.file_entry import MethodFiles
+
 RUN_ARG_FILES: Final[str] = "files"
-"""Wire key of the pipelex-api `files` extension — a whole method bundle as a path-to-text map."""
+"""Wire key of the protocol's `files` run source — a method's whole tree as a map from tree path to file entry."""
 
 RUN_ARG_BUNDLE_B64: Final[str] = "bundle_b64"
-"""Wire key of the pipelex-api `bundle_b64` extension — the same bundle as a base64 zip."""
+"""Wire key of the pipelex-api `bundle_b64` extension — the same tree as a base64 zip."""
 
 RUN_ARG_METHOD_REF: Final[str] = "method_ref"
 """Wire key of the pipelex-api `method_ref` extension — a published method's address."""
@@ -134,8 +140,8 @@ def run_selector_extensions(*, method_ref: object = None, method_id: object = No
     return extensions
 
 
-def has_bundle_payload(*, files: Mapping[str, str] | None = None, bundle_b64: str | None = None) -> bool:
-    """Does the request carry a method bundle (the pipelex-api `files` / `bundle_b64` extension)?
+def has_bundle_payload(*, files: MethodFiles | None = None, bundle_b64: str | None = None) -> bool:
+    """Does the request carry a method bundle (the protocol's `files`, or the pipelex-api `bundle_b64` extension)?
 
     A bundle satisfies a client's "something to run" precondition on its own — it carries its
     own `.mthds`, so neither `pipe_code` nor `mthds_contents` is required alongside it. Unlike
@@ -144,7 +150,7 @@ def has_bundle_payload(*, files: Mapping[str, str] | None = None, bundle_b64: st
     zero-file bundle).
 
     Args:
-        files: The bundle as a path-to-text map, or None.
+        files: The method's tree as a map of file entries, or None.
         bundle_b64: The bundle as a base64-encoded zip, or None.
 
     Returns:
@@ -156,7 +162,7 @@ def has_bundle_payload(*, files: Mapping[str, str] | None = None, bundle_b64: st
 def assert_exclusive_run_sources(
     *,
     mthds_contents: list[str] | None = None,
-    files: Mapping[str, str] | None = None,
+    files: MethodFiles | None = None,
     bundle_b64: str | None = None,
 ) -> None:
     """Enforce the run-source exclusivity contract shared by every client: a method bundle is
@@ -170,7 +176,7 @@ def assert_exclusive_run_sources(
 
     Args:
         mthds_contents: Inline MTHDS bundle contents, or None.
-        files: The bundle as a path-to-text map, or None.
+        files: The method's tree as a map of file entries, or None.
         bundle_b64: The bundle as a base64-encoded zip, or None.
 
     Raises:
@@ -191,7 +197,7 @@ def assert_method_ref_pairs_with_nothing(
     *,
     method_ref: object = None,
     mthds_contents: list[str] | None = None,
-    files: Mapping[str, str] | None = None,
+    files: MethodFiles | None = None,
     bundle_b64: str | None = None,
     method_id: object = None,
 ) -> None:
@@ -216,7 +222,7 @@ def assert_method_ref_pairs_with_nothing(
         method_ref: The published method's address, or None — when absent or empty, no pairing
             is checked, though both selectors are still refused if present and not a string.
         mthds_contents: Inline MTHDS bundle contents, or None.
-        files: The bundle as a path-to-text map, or None.
+        files: The method's tree as a map of file entries, or None.
         bundle_b64: The bundle as a base64-encoded zip, or None.
         method_id: The hosted catalog id, or None.
 

@@ -17,6 +17,8 @@ Every route raises only these, so `except PipelineRequestError` catches every fa
 - `RunStillRunningError`: `/execute` answered `202`, the protocol's optional degrade, so the run
   goes on on the runtime and the client does not follow it: `client.follow_failed`, naming the run.
 - `ClientNotConfiguredError`: the client has no API key, no base URL, or a base URL it cannot send to: `client.not_configured`.
+- `BlobUploadError`: an upload target named by `POST /blobs/missing` answered non-2xx. Its problem is
+  the target's own problem document when it sent one, else the problem the answer's status names.
 """
 
 from __future__ import annotations
@@ -146,3 +148,46 @@ class RunStillRunningError(PipelineRequestError):
         self.run_id = run_id
         self.retry_after_seconds = retry_after_seconds
         self.location = location
+
+
+class BlobUploadError(PipelineRequestError):
+    """An upload of one blob's bytes, to the target `POST /blobs/missing` named, answered non-2xx.
+
+    The target is the runner's choice and may be another server than the runner, such as an
+    object store behind a presigned URL, so its answer may be no problem document. `problem` reads
+    it as any failed answer is read: the target's own problem document when it sent one, such as a
+    runner's `PUT /blobs/{sha256}` refusal, else the problem its status names
+    (`client.response_unreadable` naming the status, or the one code a status such as `503` names).
+    The error keeps the status and the body as text beside it. `upload_url` is the target without
+    its userinfo, its query and its fragment, since a presigned query carries a signature that
+    grants the write and a `user:password@` is a credential; the full URL is never kept.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        problem: Problem,
+        sha256: str,
+        status: int,
+        status_text: str,
+        response_body: str,
+        upload_url: str,
+    ) -> None:
+        """Build the error; its message is `message` followed by the problem's next step.
+
+        Args:
+            message: What failed and why, naming the blob and the status.
+            problem: The failure as a problem document, as the target's answer reads.
+            sha256: The SHA-256 of the blob whose upload failed, in lowercase hexadecimal.
+            status: The HTTP status code of the answer.
+            status_text: The HTTP reason phrase of the answer.
+            response_body: The answer's body, as text.
+            upload_url: The upload target's URL without its userinfo, its query or its fragment.
+        """
+        super().__init__(message, problem=problem)
+        self.sha256 = sha256
+        self.status = status
+        self.status_text = status_text
+        self.response_body = response_body
+        self.upload_url = upload_url

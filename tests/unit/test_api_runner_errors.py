@@ -15,7 +15,7 @@ from pytest_mock import MockerFixture
 from typing_extensions import override
 
 from mthds.protocol.exceptions import PipelineRequestError
-from mthds.protocol.models import ModelCategory
+from mthds.protocol.models import BlobRef, ModelCategory
 from mthds.protocol.problem import answers as problem_answers
 from mthds.protocol.problem.answers import MAX_BODY_NESTING
 from mthds.protocol.problem.client_problems import make_client_problem
@@ -23,7 +23,7 @@ from mthds.protocol.problem.models import Problem, ProblemDomain, RemapValueOp
 from mthds.protocol.problem.registry import AccountRateLimitedParams, CoreCode, ModelUnknownParams
 from mthds.runners.api.client import MthdsAPIClient
 from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
-from tests.unit.test_data import ExecuteWireResponses, LegacyAnswerBodies, ProblemBodies
+from tests.unit.test_data import ExecuteWireResponses, LegacyAnswerBodies, MethodFileMaps, ProblemBodies
 
 _BASE_URL = "http://localhost:8081"
 _CLOCK_START = datetime(2026, 10, 16, 12, 0, 0, tzinfo=UTC)
@@ -31,16 +31,17 @@ _CLOCK_START = datetime(2026, 10, 16, 12, 0, 0, tzinfo=UTC)
 
 def _execute(client: MthdsAPIClient) -> Coroutine[Any, Any, object]:
     """Call `execute()` with arguments that name something to run."""
-    return client.execute(pipe_code="pitch_product", mthds_contents=['domain = "sales_copy"'])
+    return client.execute(pipe_code="pitch_product", files=MethodFileMaps.ONE_BUNDLE)
 
 
 # Each protocol route, called with arguments that name something to run: (route label, whether it creates a run, call).
 _ROUTE_CALLS: list[tuple[str, bool, Callable[[MthdsAPIClient], Coroutine[Any, Any, object]]]] = [
     ("POST /v1/execute", True, _execute),
-    ("POST /v1/start", True, lambda client: client.start(pipe_code="pitch_product", mthds_contents=['domain = "sales_copy"'])),
-    ("POST /v1/validate", False, lambda client: client.validate(['domain = "sales_copy"'])),
+    ("POST /v1/start", True, lambda client: client.start(pipe_code="pitch_product", files=MethodFileMaps.ONE_BUNDLE)),
+    ("POST /v1/validate", False, lambda client: client.validate(MethodFileMaps.ONE_BUNDLE)),
     ("GET /v1/models", False, lambda client: client.models()),
     ("GET /v1/version", False, lambda client: client.version()),
+    ("POST /v1/blobs/missing", False, lambda client: client.missing_blobs([BlobRef(sha256=MethodFileMaps.CARD_SHA256, size=13)])),
 ]
 
 Handler = Callable[[httpx.Request], httpx.Response]
@@ -481,7 +482,7 @@ class TestMthdsAPIClientErrors:
         """A success whose body holds a number JSON cannot write is unreadable, as an error body holding it is, whatever the route parses."""
         status = 202 if route == "POST /v1/start" else 200
         # One body every route's answer validates from, so that only the literal can make it unreadable.
-        answer: dict[str, Any] = {**ExecuteWireResponses.REDUCED, "is_valid": True, "models": [], "protocol_version": "1.0.0"}
+        answer: dict[str, Any] = {**ExecuteWireResponses.REDUCED, "is_valid": True, "models": [], "protocol_version": "1.0.0", "missing": []}
         body = json.dumps(answer)[:-1] + f', "load": {literal}}}'
         exc = self._response_error(self._client(_answering(status, text=body)), call)
 

@@ -1,14 +1,14 @@
 # MTHDS protocol & runners
 
-The `mthds` package is the Python client for the open-source `pipelex-api` runner — and, more generally, any server that speaks the [MTHDS Protocol](https://mthds.ai). One abstraction, `MTHDSProtocol`, mirrors the standard's five routes; `MthdsAPIClient` implements it over HTTP. It is **protocol-only** — the durable run lifecycle (polling a run to completion by id) is a hosted-API extension that lives in `pipelex-sdk` (`PipelexAPIClient`), built on this base.
+The `mthds` package is the Python client for the open-source `pipelex-api` runner — and, more generally, any server that speaks the [MTHDS Protocol](https://mthds.ai). One abstraction, `MTHDSProtocol`, mirrors the standard's required routes; `MthdsAPIClient` implements it over HTTP, along with the protocol's optional blob routes for sending a method's files by hash. It is **protocol-only** — the durable run lifecycle (polling a run to completion by id) is a hosted-API extension that lives in `pipelex-sdk` (`PipelexAPIClient`), built on this base.
 
 ## Package layout
 
 The protocol contract and its implementations live in separate packages:
 
-- `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResultExecute`, `RunResultStart`, `ModelDeck`, `ValidationReport`, `VersionInfo`), `pipe_io_contracts.py` and `input_form.py` (the two validate artifacts the standard owns — see [The validate artifacts](#the-validate-artifacts-pipe_io_contracts-and-input_form) below), `method_files.py` (the catalog serialization of a stored method's source — see [The catalog serialization](#the-catalog-serialization-method_files) below), `options.py` (the run-source argument surface — see [Run sources: what may be combined](#run-sources-what-may-be-combined) below), `exceptions.py` (`PipelineRequestError`, the root of every request error, which carries its failure as a problem), `problem/` (the problem document and the core error registry — see [Errors: every failure is a problem](#errors-every-failure-is-a-problem) below), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
+- `mthds/protocol/` — the MTHDS Protocol itself: `protocol.py` (the `MTHDSProtocol` interface), `models.py` (the run/discovery wire models — `RunResultExecute`, `RunResultStart`, `ModelDeck`, `ValidationReport`, `VersionInfo` — and those of the optional blob routes, `BlobRef`, `MissingBlobsRequest`, `MissingBlob`, `UploadTarget` and `MissingBlobsResult`), `pipe_io_contracts.py` and `input_form.py` (the two validate artifacts the standard owns — see [The validate artifacts](#the-validate-artifacts-pipe_io_contracts-and-input_form) below), `method_files.py` (the catalog serialization of a stored method's source — see [The catalog serialization](#the-catalog-serialization-method_files) below), `options.py` (the run-source argument surface — see [Run sources: what may be combined](#run-sources-what-may-be-combined) below), `exceptions.py` (`PipelineRequestError`, the root of every request error, which carries its failure as a problem), `problem/` (the problem document and the core error registry — see [Errors: every failure is a problem](#errors-every-failure-is-a-problem) below), and the protocol's domain shapes — `concept.py`, `stuff.py`, `working_memory.py`, `pipe_output.py`, `pipeline_inputs.py` (the abstract, non-Dict base models the protocol is defined in terms of).
 - `mthds/runners/` — every runner implementation, one subpackage per runner:
-    - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute` — the runners' concrete JSON materialization of the protocol's domain shapes), `exceptions.py` (`ApiResponseError` for an answer that is a failure, `ApiTransportError` for a request that got no answer, `ClientNotConfiguredError`, and the protocol's 202-degrade error, `RunStillRunningError`), `problem.py` (how an httpx answer, or the lack of one, reads as a problem — see [Errors: every failure is a problem](#errors-every-failure-is-a-problem) below), `user_agent.py` (the `User-Agent` builder and `AppInfo` — see [Client identification](#client-identification-user-agent) below).
+    - `api/` — the API runner: `client.py` (`MthdsAPIClient`, one file with its helpers), `models.py` (the Dict-serialized wire models — `DictStuffAbstract`, `DictWorkingMemoryAbstract`, `DictPipeOutputAbstract`, `DictRunResultExecute` — the runners' concrete JSON materialization of the protocol's domain shapes), `exceptions.py` (`ApiResponseError` for an answer that is a failure, `ApiTransportError` for a request that got no answer, `ClientNotConfiguredError`, `BlobUploadError` for a blob upload a target refused, and the protocol's 202-degrade error, `RunStillRunningError`), `problem.py` (how an httpx answer, or the lack of one, reads as a problem — see [Errors: every failure is a problem](#errors-every-failure-is-a-problem) below), `user_agent.py` (the `User-Agent` builder and `AppInfo` — see [Client identification](#client-identification-user-agent) below).
     - `pipelex/runner.py` — `PipelexRunner`, the local runner that shells out to the `pipelex` CLI.
     - `types.py` — `RunnerType`.
 
@@ -25,21 +25,28 @@ The client composes every endpoint as `{MTHDS_BASE_URL}/v1/{endpoint}`. It defau
 
 ## The protocol surface (works on any runner)
 
-`MTHDSProtocol` has exactly five methods — `execute`, `start`, `validate`, `models`, `version`:
+`MTHDSProtocol` has one method per required route — `execute`, `start`, `validate`, `models`, `version`:
 
 ```python
+from pathlib import Path
+
+from mthds.method_tree.lister import list_method_tree
 from mthds.runners.api.client import MthdsAPIClient
 
 async with MthdsAPIClient() as client:
+    # The method travels as `files`, its whole tree: list it from disk, and the client picks
+    # each entry's form, inline or by hash (see "Sending a method" below)
+    files = await client.prepare_files(list_method_tree(Path("my_method")))
+
     # Synchronous execution — the full output comes back in the response
-    result = await client.execute(mthds_contents=[bundle_text], inputs={"topic": {"concept": "Text", "content": "owls"}})
+    result = await client.execute(files=files, inputs={"topic": {"concept": "Text", "content": "owls"}})
     print(result.pipeline_run_id)  # the protocol's two base fields...
     print(result.pipe_output)
     # anything else the server returned (run state, timestamps, output naming)
     # is an implementation extension — preserved in result.model_extra
 
     # Validation (dry-run included) — 200-diagnostic: read the verdict from the body
-    report = await client.validate([bundle_text])
+    report = await client.validate(files)
     if report.is_valid is True:
         ...  # ValidationReport — structural artifacts ride model_extra
     else:
@@ -53,13 +60,13 @@ async with MthdsAPIClient() as client:
     # An invalid bundle is a 200 InvalidReport, NOT a 422; non-2xx (request-shape 422,
     # auth, 5xx) means no verdict could be produced and raises ApiResponseError.
     # Server-specific extension args ride `extra` — e.g. a server may accept
-    # validate(contents, extra={"mthds_sources": [...]}) to thread per-content source
-    # names onto each item. The local PipelexRunner instead raises
-    # PipelexRunnerError on an invalid bundle (the CLI's exit code).
+    # validate(files, extra={"render": ["markdown"]}) to add a Markdown rendering of the
+    # verdict to the body. The local PipelexRunner instead raises PipelexRunnerError on an
+    # invalid bundle (the CLI's exit code).
 
     # Discovery
     deck = await client.models()  # optionally client.models(ModelCategory.LLM)
-    info = await client.version()  # {protocol_version, runner_version} + server-specific extensions (info.model_extra)
+    info = await client.version()  # {protocol_version, runner_version, blob_store} + server-specific extensions (info.model_extra)
 ```
 
 `execute` may raise `RunStillRunningError` if a server answers 202 (the protocol's optional async degrade) — the run keeps executing server-side, this client does not follow it, and the error carries `client.follow_failed` with `run_id`, `retry_after_seconds`, and `location`. Every failure, on any route, raises a `PipelineRequestError` carrying a problem (see [Errors](#errors-every-failure-is-a-problem) below). `execute` answers with `RunResultExecute` (`pipeline_run_id` + `pipe_output`, both present — a completed run has output); `start` answers with `RunResultStart` (`pipeline_run_id` only). Both are extension-open on the response side.
@@ -69,6 +76,25 @@ async with MthdsAPIClient() as client:
 The Dict wire models are extension-open at every level, matching the protocol's OpenAPI spec (which declares `pipe_output` as an open object). Base fields are typed; anything more a runner returns rides `model_extra`. The hosted `pipelex-api` runner dumps its full `PipeOutput` — per-stuff `stuff_code` / `stuff_name`, pipe-output `graph_spec` / `tokens_usages` / `working_memory_raw` and assembly errors — and all of it is preserved. The openness stops at a stuff's `concept`, which is the concept's ref string and nothing else: `DictStuffAbstract.concept` is a `str`, and a body whose stuff carries the concept object in its place fails validation at that stuff's `concept`. The local `PipelexRunner` holds the working memory the CLI writes to the same rule, passing each stuff's `concept` through rather than reducing whatever it finds, so a stuff with no concept or with the concept object is refused there too. That is the standard's wire form, and the hosted runner emits it — `tests/fixtures/hosted_run/` holds a working memory the hosted plane really delivered, and the suite parses it. `DictStuffAbstract.concept_ref` returns the same string.
 
 On the producing side the protocol's own domain shapes say the same thing, and say it once: `ConceptAbstract` carries the reference alone (`code` + `domain_code`, with `concept_ref` joining them), and `StuffAbstract` serializes its `concept` field through that property, so every dump of a stuff emits `{"concept": "<domain>.<Code>", "content": …}` without a runner having to remember to reduce it. That is the standard's rule — a concept's definition (its description, its structure, what it refines, any runtime class name) belongs to the library the method loads and never travels beside a stuff, per the "Stuffs on the Wire" section of the [CLI I/O contract](https://mthds.ai/latest/spec/cli-io-contract/). A runtime that needs more of the definition in memory declares it on its own `ConceptAbstract` subclass, where it stays out of the wire form. Two consequences are worth naming. The crate key for a concept a dependency contributes is `<package_address>::<domain>.<Code>`, and the protocol model holds no declaring package address, so producing that form is a subclass's business — it overrides `StuffAbstract.serialize_concept` under that name, since a second `field_serializer` for the field under any other name is a class-definition error and a serializer re-annotated onto the field is ignored silently. Which override point a runtime picks decides what this SDK's own output path emits, since `DictRunResultExecute.from_pipe_output` reduces a stuff by `concept_ref` rather than through the serializer: a `concept_ref` override reaches it, a `serialize_concept` override does not. And the dump is one-way: these shapes are strict, so a stuff, a working memory or a pipe output cannot be validated back from what it dumped, the definition such a parse would need being precisely what no longer travels. A consumer that re-validated a dump resolves the concept by ref through the library the method loads instead, as the input side already does; the `Dict` wire models above are the other way to read one back, since they take the concept as its ref string and never ask for its definition.
+
+### Sending a method: `files`, inline or by hash
+
+Since MTHDS Protocol 1.0.0 a run or a validation carries its method as `files`: the method's whole tree, as a map from each tree path to a file entry (see [A tree in transit](./method-tree.md#a-tree-in-transit-the-file-entry)). `execute`, `start` and `validate` take it by name, typed `MethodFiles` (`mthds.method_tree.file_entry`), and inline `mthds_contents` is gone from the protocol and from this client. An entry is the file's text, its bytes as a `Base64FileEntry`, or a `HashFileEntry` naming bytes the runner already holds. An empty map is refused before any request is sent, since a method tree holds at least one file. A run names `pipe_code`, `files` or an extension arg; given `files` and no `pipe_code`, the runner runs the method's main pipe.
+
+`prepare_files(tree)` builds the map from a tree listed with `list_method_tree`, and `prepare_files_from_contents(contents)` from bytes already at hand, keyed by tree path. Both follow one rule:
+
+- A tree whose inline map is at most `inline_max_bytes` travels inline whole, with no round trip: text as text, any other bytes as Base64. The map is measured as the request spends it, written as JSON with no whitespace, in UTF-8, so a text entry counts with its escapes and a Base64 entry as its encoded text, about a third more than the file's bytes; that is how the hosted Pipelex API counts its inline limit. The default is `DEFAULT_INLINE_TREE_MAX_BYTES`, 256 KiB, so a binary file just under 256 KiB already travels by hash.
+- A larger tree asks `version()` first, and a runner whose `VersionInfo.blob_store` is false gets it inline anyway.
+- Otherwise the client asks `missing_blobs` which blobs the runner lacks, naming the tree's digest so that a runner holding the whole tree can answer at once, uploads each missing blob once, a bounded number at a time, and sends every file by hash. A second run of an unchanged method therefore uploads nothing.
+
+The protocol leaves the choice between an inline entry and a hash entry to the sender and names no threshold, so 256 KiB is this client's own policy, the one the hosted Pipelex API asks its senders to use; a caller facing a runner with stricter limits passes its own `inline_max_bytes`. `prepare_files` reads each file when it needs it, at most once, and checks the bytes against the hash the listing recorded, raising `TreeSourceError` when a file changed after the tree was listed, so what travels is always the tree the digest names. Reading, hashing and encoding run in a thread, off the event loop.
+
+The two optional blob routes are methods of their own, for a sender that manages its blobs itself:
+
+- `missing_blobs(blobs, digest=None)` posts a `MissingBlobsRequest` to `/v1/blobs/missing` and answers with a `MissingBlobsResult`: every blob the runner lacks, each with an `UploadTarget` (`method`, `url`, `headers`). A runner that serves no blob routes answers non-2xx, raised as `ApiResponseError`.
+- `upload_blob(blob, data)` sends the bytes to that target. The target is the runner's choice and may be another server, such as an object store behind a presigned URL, so the request carries exactly the target's headers and nothing of this client's: neither the API key nor the `User-Agent` goes with it. A `412` from a create-only target, one whose headers carry `If-None-Match`, means the bytes are already stored and counts as uploaded. Bytes that are not the named blob, by hash or by size, are refused before anything is sent. Any other non-2xx raises `BlobUploadError` (`mthds.runners.api.exceptions`), a `PipelineRequestError` carrying the problem the target's answer reads as (see [Errors](#errors-every-failure-is-a-problem) below) beside `sha256`, `status`, `status_text`, `response_body` and `upload_url`, the last without its userinfo, query or fragment, since a presigned query is itself the permission to write and a `user:password@` is a credential.
+
+A run that names a hash the runner does not hold is answered with a `422` carrying `request.blobs_missing`, raised as `ApiResponseError` with each hash the runner lacks on `exc.problem.params.missing_blobs`.
 
 ### Errors: every failure is a problem
 
@@ -89,6 +115,8 @@ Every failure of every route of the API runner, `MthdsAPIClient`, raises a `Pipe
 | A request to `/execute` or `/start` left and no answer came back | `ApiTransportError` | `client.outcome_unknown`, since the run may exist |
 | An answer whose body cannot be read, such as one whose content encoding cannot be decoded (a broken gzip stream), whatever its status | `ApiTransportError` | `client.outcome_unknown` on `/execute` or `/start`, since the request left and the run may exist, and `client.unreachable`, naming the base URL, on any other route, as for a connection lost after the request left |
 | An argument refused before any request left | `PipelineRequestError` | `client.argument_invalid`, naming the argument and the reason |
+| An upload target that answers non-2xx, other than a create-only target's `412` | `BlobUploadError` | the target's own code when its body is a problem document, such as a runner's `PUT /blobs/{sha256}` refusal, else the one its status names, as for any answer that is no problem document |
+| A `missing_blobs` answer naming a blob the tree being prepared does not hold | `PipelineRequestError` | `client.response_unreadable`, naming the route's `200` |
 | No API key or no base URL at construction, an API key holding a character an HTTP header cannot carry, such as a line break or a space at its end, a base URL that makes no valid URL or does not start with `http://` or `https://`, or a `request_timeout_seconds` that is no `int` or `float` (a `bool` or a string such as `"30"` included), or no finite number of seconds a float can hold, never negative, whenever it is set | `ClientNotConfiguredError` | `client.not_configured`, naming the setting, never quoting the key |
 
 On a route that creates a run, a `5xx` that is no problem document, such as a gateway's `504` after its own time limit (`{"message":"Endpoint request timed out"}`) or a proxy's `502` page, reads as `client.outcome_unknown` rather than as `runtime.unavailable` or `client.response_unreadable`: the runtime did not word it, so it never invites a repeat, and the run may have started behind whatever answered, so the caller reads the run rather than starting it again. Any other status that is no problem document reads there as it reads on a route that creates nothing, except that a status whose code invites a retry reads as `client.response_unreadable`.
@@ -107,7 +135,7 @@ from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.problem.registry import CoreCode, ProblemDomain
 
 try:
-    result = await client.execute(pipe_code="pitch_product", mthds_contents=[bundle_text], inputs=inputs)
+    result = await client.execute(pipe_code="pitch_product", files=files, inputs=inputs)
 except PipelineRequestError as exc:
     print(exc)
     # API POST /v1/execute failed (422): The method names the llm model 'gpt-5.1', which no catalog knows.
@@ -141,7 +169,7 @@ class ValidReportWithArtifacts(ValidationReport):
     input_form: InputForm | None = None  # served only when the runner was asked for the view
 
 
-report = await client.validate([bundle_text])
+report = await client.validate(files)
 if report.is_valid is True:
     narrowed = ValidReportWithArtifacts.model_validate(report.model_dump())
     if narrowed.pipe_io_contracts is not None:
@@ -186,7 +214,7 @@ stored = serialize_method_files([MethodFile(name="bundle.mthds", content=bundle_
 
 What to know about it:
 
-- **It is the at-rest representation, not the run surface.** The catalog is an ordered, named array; a run request's `files` is an unordered path-to-text map. They are different shapes for different moments, and this module owns only the first.
+- **It is the at-rest representation, not the run surface.** The catalog is an ordered, named array; a run request's `files` is an unordered map from tree path to file entry. They are different shapes for different moments, and this module owns only the first.
 - **No files is `""`, never `"[]"`.** The empty string is the platform's "no source" / "clear the field" sentinel, so the empty list serializes to it; the literal `"[]"` would be stored as a source. On the way back, a blank string, `None` and the empty array all parse to `[]`.
 - **A blank file is not a file.** An entry whose content is empty or whitespace-only is dropped on both directions, so the round-trip is stable and the canonical form never carries an empty file. "Whitespace" here is what ECMAScript's `trim` strips — the byte-order mark included, U+001C–U+001F and U+0085 excluded — because the twin's verdict on a file must be this side's, and Python's `str.isspace` disagrees at both ends. One test derives that set from the Unicode categories rather than sampling it, so a code point cannot quietly go missing. Note that a zero-byte file is therefore not representable: an empty `__init__.py` does not survive a round trip.
 - **The bytes are the twin's.** Serialization writes what `JSON.stringify` writes: compact separators, UTF-8 left as is, and only the JSON-mandated escapes. Surrogates take two rules, because Python addresses code points where JavaScript addresses UTF-16 code units: an unpaired surrogate is escaped rather than written raw — `ensure_ascii=False` alone would produce a string that cannot be encoded as UTF-8 at all — while two adjacent halves of a pair, which Python can hold as two code points and the twin cannot, are combined into the astral character the twin writes. The suite pins both against strings the twin printed.
@@ -206,7 +234,7 @@ The abstract `MTHDSProtocol` interface carries the protocol's **basic** argument
 
 A run request has to name something to run, and several of the ways to name it exclude each other. That rule is an invariant of the request itself rather than of any one runner, so it lives in `mthds.protocol.options` for any Python client to enforce from one place instead of re-deriving it. **The definitions are there; no client enforces from them yet** — see "What is actually wired" below. The module is the twin of `mthds-js/src/protocol/options.ts`, whose two exported predicates it matches message for message; it is **not** a twin of either server, so a rejection here can read differently from the 422 it pre-empts (`pipelex-api` and the hosted platform each word these refusals their own way, and the platform checks the two exclusivity arms in the opposite order — `pipelex-api` has no two-encodings check at all).
 
-Three layers of argument meet in it: the protocol's own source (`pipe_code`, `mthds_contents`), the pipelex-api extensions that carry a whole method bundle (`files`, `bundle_b64`) or its published address (`method_ref`), and the hosted platform's catalog id (`method_id`). Only the first layer is a named parameter of `execute` / `start`; the others ride `extra` here, and are named parameters on a client that types its own stack's arguments.
+Three layers of argument meet in it: the protocol's own source (`pipe_code`, and `files`, the method's whole tree, which replaced inline `mthds_contents` in MTHDS Protocol 1.0.0), the pipelex-api extensions that carry the same tree as a zip (`bundle_b64`), name a published method by its address (`method_ref`) or still carry inline `mthds_contents` until that runner retires it, and the hosted platform's catalog id (`method_id`). Only the first layer is a named parameter of `execute` / `start`; the others ride `extra` here, and are named parameters on a client that types its own stack's arguments.
 
 | Function | What it decides |
 | --- | --- |
@@ -217,7 +245,7 @@ Three layers of argument meet in it: the protocol's own source (`pipe_code`, `mt
 
 #### What is actually wired
 
-The table above describes the predicates, not a guarantee any client makes: **nothing in this package calls them.** `MthdsAPIClient.execute` / `start` check only that something to run was named — a pipe, inline contents, or any extension arg — and forward the keys inside `extra` without interpreting them. That is the client's documented contract: it serves any MTHDS-compliant runner, and which extension arg names a run source is that runner's to define. So an illegal combination sent through `extra` still reaches the server and comes back as its own 422, exactly as it did before this module existed.
+The table above describes the predicates, not a guarantee any client makes: **nothing in this package calls them.** `MthdsAPIClient.execute` / `start` check only that something to run was named — a pipe, a `files` map, or any extension arg — and forward the keys inside `extra` without interpreting them. That is the client's documented contract: it serves any MTHDS-compliant runner, and which extension arg names a run source is that runner's to define. So an illegal combination sent through `extra` still reaches the server and comes back as its own 422, exactly as it did before this module existed.
 
 The predicates are there for a client that takes these arguments by name, which is where the combination is knowable before the request leaves. `PipelexAPIClient` in `pipelex-sdk` is the first such client; it still carries its own private copies and pins an older `mthds`, so replacing them waits on a release that ships this module. Which layer should enforce the extension rules — the generic client here, the client that names the arguments, or a Pipelex-scoped module beside this one — is still an open question, and the `pipe-selector` campaign will change this same surface after it is settled.
 
@@ -270,7 +298,7 @@ The helpers live in `mthds.runners.api.user_agent`: `AppInfo`, `product_token(na
 - `_url(endpoint)` — compose `{base}/v1/{endpoint}`.
 - `_build_run_body(...)` and `_build_extensions(extra, *, protocol_args=...)` (module-level) — assemble the `execute` / `start` request body and validate the generic `extra` passthrough (rejecting protocol args smuggled through it).
 - `user_agent_sdk_tokens()` (a classmethod) and `init_user_agent(app_info)` — the client-identification seam. A subclass on the same transport overrides `user_agent_sdk_tokens` to prepend its own token and keep the base's, `return (product_token("pipelex-sdk-python", __version__), *super().user_agent_sdk_tokens())`, and a subclass whose `__init__` does not call `super().__init__()` calls `self.init_user_agent(app_info)` from it, which sets `self.app_info` and `self.user_agent`. A subclass that overrides `start_client` should put `self.user_agent` in its default headers; `_send` sets it per request regardless.
-- `_post_validate(mthds_contents, allow_signatures, extra)` — build + send the `/validate` request and return the raw 200-diagnostic `httpx.Response`, leaving the verdict-union parse to the caller. The base's own `validate()` parses it through `_parse_answer` into the neutral `ValidationResult`; `pipelex-sdk` reuses this seam to parse the same body into its Pipelex-branded narrowing. Both arms carry `warnings`, and the invalid arm its faults in `errors`, each a `ProblemItem`, generic so a client can narrow the item type.
+- `_post_validate(files, allow_signatures, extra)` — build + send the `/validate` request and return the raw 200-diagnostic `httpx.Response`, leaving the verdict-union parse to the caller. The base's own `validate()` parses it through `_parse_answer` into the neutral `ValidationResult`; `pipelex-sdk` reuses this seam to parse the same body into its Pipelex-branded narrowing. Both arms carry `warnings`, and the invalid arm its faults in `errors`, each a `ProblemItem`, generic so a client can narrow the item type.
 - `_raise_api_response_error(*, method, endpoint, response, problem, problem_from_body)` — turn an answer that is a failure, and the problem it reads as, into the error every route raises (`NoReturn`); `problem_from_body` says whether the problem is the body's own problem document, and when it is not the message quotes the body. The base raises `ApiResponseError`; a subclass overrides it to raise its own subclass of `ApiResponseError` (see [Errors](#errors-every-failure-is-a-problem) above), and every inherited route then raises that. `mthds.runners.api.problem.read_error_answer(response, creates_run=...)` reads a non-2xx answer as an `AnswerReading`, its problem and whether that problem is the body's own, decoding the body once.
 
 Everything else (private methods not listed here, internal constants) is implementation detail and may change freely.
@@ -280,4 +308,4 @@ Everything else (private methods not listed here, internal constants) is impleme
 Construct a runner directly — both implement `MTHDSProtocol`:
 
 - `MthdsAPIClient` (`mthds.runners.api.client`) — the API runner; the MTHDS Protocol surface over HTTP (the durable run lifecycle lives in `pipelex-sdk`).
-- `PipelexRunner` (`mthds.runners.pipelex.runner`) — shells out to a locally installed `pipelex` CLI (`execute` via `pipelex run`, `validate` via `pipelex validate`, `version` via `pipelex --version`; `start`/`models` raise `NotImplementedError`).
+- `PipelexRunner` (`mthds.runners.pipelex.runner`) — shells out to a locally installed `pipelex` CLI (`execute` via `pipelex run bundle`, `validate` via `pipelex validate bundle`, `version` via `pipelex --version`; `start`/`models` raise `NotImplementedError`). It writes the `files` map out as a directory and hands that directory to the CLI, reading the map first as a receiver does: it keeps no blob store, so a hash entry is refused with `PipelexRunnerError`, and so is a key that is not a tree path, before anything is written. The run's inputs and working memory are written beside that directory, never inside it.

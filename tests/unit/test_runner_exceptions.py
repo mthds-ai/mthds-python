@@ -16,12 +16,13 @@ from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.models import Problem
 from mthds.protocol.problem.registry import CoreCode
 from mthds.runners.api.client import MthdsAPIClient
-from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
+from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, BlobUploadError, ClientNotConfiguredError, RunStillRunningError
 from tests.unit.test_data import ProblemBodies
 
 _FOLLOW_FAILED = make_client_problem(CoreCode.CLIENT_FOLLOW_FAILED, params={"pipeline_run_id": "run_1"})
 _UNREACHABLE = make_client_problem(CoreCode.CLIENT_UNREACHABLE, params={"base_url": "http://localhost:8081"})
 _MODEL_UNKNOWN = Problem.model_validate(ProblemBodies.MODEL_UNKNOWN)
+_UPLOAD_REFUSED = make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": 403})
 
 
 class TestClientExceptions:
@@ -29,7 +30,7 @@ class TestClientExceptions:
 
     @pytest.mark.parametrize(
         "error_class",
-        [ApiResponseError, ApiTransportError, RunStillRunningError, ClientNotConfiguredError],
+        [ApiResponseError, ApiTransportError, RunStillRunningError, ClientNotConfiguredError, BlobUploadError],
     )
     def test_every_client_error_is_a_pipeline_request_error_and_not_httpx(self, error_class: type[Exception]) -> None:
         """`except PipelineRequestError` catches every error the client raises, and httpx's own errors never escape it."""
@@ -166,6 +167,18 @@ class TestClientExceptions:
             (
                 "client not configured",
                 ClientNotConfiguredError("no key", problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "api_key"})),
+            ),
+            (
+                "blob upload error",
+                BlobUploadError(
+                    "Uploading blob 3e9b failed (403): AccessDenied",
+                    problem=_UPLOAD_REFUSED,
+                    sha256="3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0",
+                    status=403,
+                    status_text="Forbidden",
+                    response_body="<Error><Code>AccessDenied</Code></Error>",
+                    upload_url="https://bucket.example/blobs/3e9b",
+                ),
             ),
             ("plain request error", make_argument_invalid_error("nothing to run", argument="pipe_code", reason="nothing_to_run")),
         ],

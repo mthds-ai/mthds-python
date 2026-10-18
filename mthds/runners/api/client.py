@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import math
 import re
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, NoReturn, Self, TypeVar, cast
-from urllib.parse import quote
+from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, NamedTuple, NoReturn, Self, TypeVar, cast
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
 from pydantic import TypeAdapter, ValidationError
@@ -11,21 +12,37 @@ from pydantic_core import to_json
 from typing_extensions import override
 
 from mthds.config import load_config
-from mthds.protocol.exceptions import make_argument_invalid_error
-from mthds.protocol.models import ModelCategory, ModelDeck, RunResultStart, ValidationResult, VersionInfo
+from mthds.method_tree.digest import sha256_hex, tree_digest, tree_files_from_contents
+from mthds.method_tree.exceptions import TreeSourceError
+from mthds.method_tree.file_entry import FileEntry, HashFileEntry, encode_file_entry
+from mthds.protocol.exceptions import PipelineRequestError, make_argument_invalid_error
+from mthds.protocol.models import (
+    BlobRef,
+    MissingBlob,
+    MissingBlobsRequest,
+    MissingBlobsResult,
+    ModelCategory,
+    ModelDeck,
+    RunResultStart,
+    UploadTarget,
+    ValidationResult,
+    VersionInfo,
+)
 from mthds.protocol.problem.answers import RETRY_AFTER_HEADER, decode_json, parse_retry_after, unreadable_answer
 from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.registry import CoreCode
 from mthds.protocol.protocol import MTHDSProtocol
-from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, ClientNotConfiguredError, RunStillRunningError
+from mthds.runners.api.exceptions import ApiResponseError, ApiTransportError, BlobUploadError, ClientNotConfiguredError, RunStillRunningError
 from mthds.runners.api.models import DictPipeOutputAbstract, DictRunResultExecute
 from mthds.runners.api.problem import answer_excerpt, answer_request_id, lower_case_headers, read_error_answer, transport_failure_problem
 from mthds.runners.api.user_agent import AppInfo, build_user_agent, mthds_python_token
 from mthds.runners.types import RunnerType
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping, Sequence
 
+    from mthds.method_tree.file_entry import MethodFiles
+    from mthds.method_tree.models import MethodTree, TreeFile
     from mthds.protocol.pipe_output import VariableMultiplicity
     from mthds.protocol.pipeline_inputs import PipelineInputs
     from mthds.protocol.problem.models import Problem
@@ -33,14 +50,38 @@ if TYPE_CHECKING:
     from mthds.protocol.working_memory import WorkingMemoryAbstract
 
 
+DEFAULT_INLINE_TREE_MAX_BYTES: Final[int] = 256 * 1024
+"""The largest size, in bytes, of a tree's inline `files` map that `prepare_files` sends without asking the runner first.
+
+The size is what the request spends on the map: the map written as JSON with no whitespace, in
+UTF-8, so a text entry counts with its escapes and a Base64 entry as its encoded text, about a
+third more than the file's bytes. That is how the hosted Pipelex API counts its inline limit.
+
+The protocol leaves the choice between an inline entry and a hash entry to the sender and names
+no threshold, so this is this client's own policy. A tree this small travels whole in the request,
+which spares the `version` handshake and the `missing_blobs` round trip; a larger one travels by
+hash wherever the runner keeps a blob store, so a second run of an unchanged method uploads nothing.
+It is the threshold the hosted Pipelex API asks its senders to use. A runner bounds the inline
+entries of a request by its own limits, which a caller with a stricter runner passes as
+`inline_max_bytes`.
+"""
+
+# How many uploads `prepare_files` runs at once.
+_MAX_CONCURRENT_UPLOADS: Final[int] = 8
+
+
 class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     """Client for any MTHDS runner — the MTHDS Protocol surface over HTTP.
 
     One base URL (`MTHDS_BASE_URL`); every endpoint is `<base>/v1/<endpoint>`. The
-    five protocol routes (`execute` / `start` / `validate` / `models` / `version`)
-    work against any MTHDS-compliant runner, hosted or bare. The durable run
-    lifecycle (polling a run to completion by id) is a hosted-API extension that
-    lives in `pipelex-sdk` (`PipelexAPIClient`), not in this protocol base.
+    protocol's required routes (`execute` / `start` / `validate` / `models` / `version`)
+    work against any MTHDS-compliant runner, hosted or bare, each run or validation
+    carrying the method as its whole method tree in `files`. The optional blob routes
+    (`missing_blobs`, `upload_blob`) work against a runner whose `version()` declares
+    `blob_store`, and `prepare_files` builds the `files` map from a listed tree, inline
+    or by hash. The durable run lifecycle (polling a run to completion by id) is a
+    hosted-API extension that lives in `pipelex-sdk` (`PipelexAPIClient`), not in this
+    protocol base.
 
     Every failure of every route raises a `PipelineRequestError` carrying it as a problem
     document under a registered code (`exc.problem`): the runtime's own problem, or the one
@@ -340,7 +381,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     async def execute(
         self,
         pipe_code: str | None = None,
-        mthds_contents: list[str] | None = None,
+        files: MethodFiles | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -350,8 +391,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         """Execute a method synchronously and wait for its completion — `POST /v1/execute`.
 
         Args:
-            pipe_code: The code identifying the pipe to execute
-            mthds_contents: List of MTHDS bundle contents to load
+            pipe_code: The code identifying the pipe to execute: a pipe the runner
+                already holds, or one declared in a bundle of `files`. Without it, the
+                run starts at the method's `main_pipe`.
+            files: The method to load, as its whole method tree: a map from tree path
+                to file entry, holding at least one file. `prepare_files` builds it
+                from a listed tree.
             inputs: Inputs passed to the method
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
@@ -366,24 +411,26 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             Complete execution results including run state and output
 
         Raises:
-            PipelineRequestError: If nothing to run was named, or if `extra` carries a
-                protocol arg (`client.argument_invalid`).
+            PipelineRequestError: If nothing to run was named, if `files` holds no file,
+                or if `extra` carries a protocol arg (`client.argument_invalid`).
             RunStillRunningError: If the server answers 202 (the protocol's optional
                 async degrade) — the run continues server-side; resume by `run_id`
                 (`client.follow_failed`). A 202 naming no run raises `ApiResponseError`
                 carrying `client.outcome_unknown`, since the run may exist.
             ApiResponseError: If the server answers non-2xx — a refusal to run an invalid
-                method (`method.invalid`, its faults on `problem.errors`), a failed run, auth,
-                or a server fault — or a success the client cannot read, which leaves the
-                outcome unknown (`client.outcome_unknown`, naming the run when the body does).
+                method (`method.invalid`, its faults on `problem.errors`), a hash entry the
+                runner does not hold (`request.blobs_missing`, naming each in
+                `problem.params.missing_blobs`), a failed run, auth, or a server fault — or a
+                success the client cannot read, which leaves the outcome unknown
+                (`client.outcome_unknown`, naming the run when the body does).
             ApiTransportError: If no answer came back; a request that left reads as
                 `client.outcome_unknown`, since the run may exist.
         """
-        _assert_run_sources(pipe_code=pipe_code, mthds_contents=mthds_contents, extra=extra, route="execute")
+        _assert_run_sources(pipe_code=pipe_code, files=files, extra=extra, route="execute")
 
         body = _build_run_body(
             pipe_code=pipe_code,
-            mthds_contents=mthds_contents,
+            files=files,
             inputs=inputs,
             output_name=output_name,
             output_multiplicity=output_multiplicity,
@@ -400,7 +447,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     async def start(
         self,
         pipe_code: str | None = None,
-        mthds_contents: list[str] | None = None,
+        files: MethodFiles | None = None,
         inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None = None,
         output_name: str | None = None,
         output_multiplicity: VariableMultiplicity | None = None,
@@ -410,8 +457,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         """Start a method asynchronously — `POST /v1/start` (202: `pipeline_run_id` only).
 
         Args:
-            pipe_code: The code identifying the pipe to execute
-            mthds_contents: List of MTHDS bundle contents to load
+            pipe_code: The code identifying the pipe to execute: a pipe the runner
+                already holds, or one declared in a bundle of `files`. Without it, the
+                run starts at the method's `main_pipe`.
+            files: The method to load, as its whole method tree: a map from tree path
+                to file entry, holding at least one file. `prepare_files` builds it
+                from a listed tree.
             inputs: Inputs passed to the method
             output_name: Name of the output slot to write to
             output_multiplicity: Output multiplicity setting
@@ -428,21 +479,23 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             durable run lifecycle (a hosted extension, exposed by `pipelex-sdk`).
 
         Raises:
-            PipelineRequestError: If nothing to run was named, or if `extra` carries a
-                protocol arg (`client.argument_invalid`).
+            PipelineRequestError: If nothing to run was named, if `files` holds no file,
+                or if `extra` carries a protocol arg (`client.argument_invalid`).
             ApiResponseError: If the server answers non-2xx — a refusal to run an invalid
-                method (`method.invalid`, its faults on `problem.errors`), auth, or a server
-                fault — or a success the client cannot read, an empty `pipeline_run_id`
-                included, which leaves the outcome unknown (`client.outcome_unknown`, naming the
-                run when the body names one the client can read).
+                method (`method.invalid`, its faults on `problem.errors`), a hash entry the
+                runner does not hold (`request.blobs_missing`, naming each in
+                `problem.params.missing_blobs`), auth, or a server fault — or a success the
+                client cannot read, an empty `pipeline_run_id` included, which leaves the
+                outcome unknown (`client.outcome_unknown`, naming the run when the body
+                names one the client can read).
             ApiTransportError: If no answer came back; a request that left reads as
                 `client.outcome_unknown`, since the run may exist.
         """
-        _assert_run_sources(pipe_code=pipe_code, mthds_contents=mthds_contents, extra=extra, route="start")
+        _assert_run_sources(pipe_code=pipe_code, files=files, extra=extra, route="start")
 
         body = _build_run_body(
             pipe_code=pipe_code,
-            mthds_contents=mthds_contents,
+            files=files,
             inputs=inputs,
             output_name=output_name,
             output_multiplicity=output_multiplicity,
@@ -459,7 +512,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             self._raise_unreadable_success(method="POST", endpoint="start", response=response, creates_run=True, body=None)
         return started
 
-    async def _post_validate(self, mthds_contents: list[str], allow_signatures: bool, extra: dict[str, Any] | None) -> httpx.Response:
+    async def _post_validate(self, files: MethodFiles, allow_signatures: bool, extra: dict[str, Any] | None) -> httpx.Response:
         """POST a `/validate` request and return the raw 200-diagnostic response.
 
         The shared transport + body-building seam for `validate`: builds the request body
@@ -472,12 +525,15 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         `_send` / `_request` / `_parse_answer` / `_url` / `_build_run_body`.
 
         Raises:
-            PipelineRequestError: if `extra` carries a protocol arg (`mthds_contents` or
-                `allow_signatures`) — pass it as a named parameter instead (`client.argument_invalid`).
+            PipelineRequestError: if `files` holds no file, or if `extra` carries a protocol
+                arg (`files` or `allow_signatures`) — pass it as a named parameter instead
+                (`client.argument_invalid`).
             ApiResponseError: a no-verdict response (request-shape 422, 401/403, or 5xx).
             ApiTransportError: if no answer came back.
         """
-        body: dict[str, Any] = {"mthds_contents": mthds_contents, "allow_signatures": allow_signatures}
+        _refuse_empty_files(files)
+        # A plain dict, since `to_json` serializes no other mapping, a `MappingProxyType` or a `UserDict` among them.
+        body: dict[str, Any] = {"files": dict(files), "allow_signatures": allow_signatures}
         body.update(_build_extensions(extra, protocol_args=_VALIDATE_REQUEST_ARGS))
         content = to_json(body)
         response = await self._request("POST", "validate", content=content, creates_run=False)
@@ -491,11 +547,14 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     @override
     async def validate(
         self,
-        mthds_contents: list[str],
+        files: MethodFiles,
         allow_signatures: bool = False,
         extra: dict[str, Any] | None = None,
     ) -> ValidationResult:
-        """Parse, validate, and dry-run an MTHDS bundle — `POST /v1/validate`.
+        """Parse, validate, and dry-run a method — `POST /v1/validate`.
+
+        The runner judges the whole tree: every bundle, and every file a bundle names by
+        file reference or by a `PipeFunc`'s import path.
 
         `/validate` is 200-diagnostic: a produced verdict — valid or invalid — rides a
         200 body discriminated on `is_valid`. A non-2xx response means no verdict could
@@ -503,16 +562,17 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         `ApiResponseError`; an invalid bundle does NOT raise.
 
         Args:
-            mthds_contents: MTHDS contents to load (always a list, even for one file)
+            files: The method to validate, as its whole method tree: a map from tree
+                path to file entry, holding at least one file. `prepare_files` builds
+                it from a listed tree.
             allow_signatures: Tolerate unimplemented pipe signatures (strict by default)
             extra: Server-specific extension args, merged into the request body
                 as top-level properties — the server you call defines and handles
                 them; this SDK only passes them through. For example, a server may
-                accept `extra={"mthds_sources": [...]}` (per-content source names,
-                parallel to `mthds_contents`) to thread each onto the corresponding
-                diagnostic's `source`. Protocol args (`mthds_contents`,
-                `allow_signatures`) must be passed as named parameters, not through
-                `extra` (raises `PipelineRequestError`).
+                accept `extra={"render": ["markdown"]}` to render the verdict as a
+                view beside it. Protocol args (`files`, `allow_signatures`) must be
+                passed as named parameters, not through `extra` (raises
+                `PipelineRequestError`).
 
         Returns:
             The protocol-neutral 200-diagnostic union (`ValidationResult`): a
@@ -524,9 +584,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             this to its typed `PipelexValidationReport` / `PipelexInvalidReport`.
 
         Raises:
-            PipelineRequestError: if `extra` carries a protocol arg (`mthds_contents`
-                or `allow_signatures`) — pass it as a named parameter instead
-                (`client.argument_invalid`).
+            PipelineRequestError: if `files` holds no file, or if `extra` carries a
+                protocol arg (`files` or `allow_signatures`) — pass it as a named
+                parameter instead (`client.argument_invalid`).
             ApiResponseError: a no-verdict response (request-shape 422, 401/403,
                 or 5xx) — never an invalid bundle, which is a 200 `InvalidValidationReport` —
                 or a malformed 200 body, missing or non-boolean `is_valid` or a tagged arm
@@ -534,7 +594,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 rather than being mistaken for a verdict.
             ApiTransportError: if no answer came back.
         """
-        response = await self._post_validate(mthds_contents, allow_signatures, extra)
+        response = await self._post_validate(files, allow_signatures, extra)
         return self._parse_answer(
             method="POST", endpoint="validate", response=response, creates_run=False, parse=_VALIDATION_RESULT_ADAPTER.validate_python
         )
@@ -575,6 +635,236 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         """
         response = await self._request("GET", "version", content=None, creates_run=False)
         return self._parse_answer(method="GET", endpoint="version", response=response, creates_run=False, parse=VersionInfo.model_validate)
+
+    # ── Sending files by hash (the optional blob routes) ─────────────────
+
+    async def missing_blobs(self, blobs: Sequence[BlobRef], digest: str | None = None) -> MissingBlobsResult:
+        """Which of these blobs the runner lacks, and where to upload each — `POST /v1/blobs/missing`.
+
+        An optional route, served by a runner whose `version()` declares `blob_store`. The request is
+        sent as given: list each hash once, as the protocol asks.
+
+        Args:
+            blobs: The blobs about to be sent by hash, each named by its SHA-256 and its size.
+            digest: The tree digest of the method tree the blobs make up, so a runner that holds
+                that tree in full may answer with an empty list at once; None to leave it out.
+
+        Returns:
+            MissingBlobsResult — every blob of the request the runner does not hold, each with its
+            upload target; an empty `missing` means there is nothing to upload.
+
+        Raises:
+            ApiResponseError: If the runner answers non-2xx — a hash listed twice with different
+                sizes, a blob past the runner's limits, a runner that serves no blob routes, auth,
+                or a server fault — or a success the client cannot read (`client.response_unreadable`).
+            ApiTransportError: If no answer came back.
+        """
+        request = MissingBlobsRequest(blobs=list(blobs), digest=digest)
+        content = request.model_dump_json(exclude_none=True).encode("utf-8")
+        response = await self._request("POST", "blobs/missing", content=content, creates_run=False)
+        return self._parse_answer(
+            method="POST", endpoint="blobs/missing", response=response, creates_run=False, parse=MissingBlobsResult.model_validate
+        )
+
+    async def upload_blob(self, blob: MissingBlob, data: bytes) -> None:
+        """Upload one blob's bytes to the target `missing_blobs` named for it.
+
+        The bytes are the whole body of a request with the target's method to its URL, carrying
+        exactly the target's headers and nothing of this client's: the target may be another server
+        than the runner, such as an object store behind a presigned URL, so neither the API key nor
+        the `User-Agent` goes with it. A `412` from a target whose headers ask for a create-only
+        write (`If-None-Match`) means the bytes are already stored, and counts as uploaded.
+
+        Args:
+            blob: A blob of a `missing_blobs` answer, with its upload target.
+            data: The blob's bytes.
+
+        Raises:
+            PipelineRequestError: If `data` is not the blob named: another SHA-256 or another size
+                (`client.argument_invalid`).
+            BlobUploadError: If the target answers non-2xx, other than a create-only target's `412`,
+                carrying the problem its answer reads as.
+        """
+        data_sha256 = await asyncio.to_thread(sha256_hex, data)
+        if len(data) != blob.size or data_sha256 != blob.sha256:
+            msg = f"The bytes given for blob {blob.sha256} are not that blob: they hash to {data_sha256} and hold {len(data)} bytes, not {blob.size}."
+            raise make_argument_invalid_error(msg, argument="data", reason="not_the_blob")
+        async with self._make_upload_client() as upload_client:
+            await self._upload_blob_with(upload_client=upload_client, blob=blob, data=data)
+
+    async def prepare_files(self, tree: MethodTree, *, inline_max_bytes: int = DEFAULT_INLINE_TREE_MAX_BYTES) -> dict[str, FileEntry]:
+        """The `files` map that sends a tree listed from a directory: inline, or by hash once the runner holds every blob.
+
+        A tree whose inline map is at most `inline_max_bytes` travels inline whole, with no round
+        trip; the map is measured as the request spends it, written as JSON with no whitespace, in
+        UTF-8, so a Base64 entry counts as its encoded text. A larger tree travels inline too when
+        the runner keeps no blob store, as `version()` reports; otherwise `missing_blobs` is asked
+        which blobs the runner lacks, naming the tree's digest, each missing blob is uploaded once,
+        and every file travels by hash. Each file is read from disk, off the event loop, and checked
+        against the hash the listing recorded, so what travels is the tree the digest names.
+
+        Args:
+            tree: A tree listed from a directory, as `list_method_tree` returns it.
+            inline_max_bytes: The largest size, in bytes, of an inline map sent without asking the
+                runner whether it keeps a blob store.
+
+        Returns:
+            The map of file entries, keyed by tree path in tree path order, ready for `files`.
+
+        Raises:
+            PipelineRequestError: If the tree was not listed from a directory or holds no file
+                (`client.argument_invalid`), or the runner asks for a blob the tree does not hold
+                (`client.response_unreadable`).
+            TreeSourceError: If a file cannot be read, or changed after the tree was listed.
+            ApiResponseError: If the runner answers `version` or `missing_blobs` with a failure.
+            ApiTransportError: If `version` or `missing_blobs` got no answer.
+            BlobUploadError: If an upload target answers non-2xx.
+        """
+        if tree.directory is None:
+            msg = "This tree was not listed from a directory, so its files cannot be read from disk: send its bytes with prepare_files_from_contents."
+            raise make_argument_invalid_error(msg, argument="tree", reason="not_listed_from_a_directory")
+        return await self._prepare_files(
+            tree_files=tree.files,
+            digest=tree.digest,
+            read=lambda tree_file: _read_listed_file(tree, tree_file=tree_file),
+            inline_max_bytes=inline_max_bytes,
+            argument="tree",
+        )
+
+    async def prepare_files_from_contents(
+        self, contents: Mapping[str, bytes], *, inline_max_bytes: int = DEFAULT_INLINE_TREE_MAX_BYTES
+    ) -> dict[str, FileEntry]:
+        """The `files` map that sends a tree whose bytes are at hand, keyed by tree path, by the rule of `prepare_files`.
+
+        Args:
+            contents: Each file's bytes, by tree path. The keys are sent as they are, and the runner
+                refuses one that is not a tree path.
+            inline_max_bytes: The largest size, in bytes, of an inline map sent without asking the
+                runner whether it keeps a blob store.
+
+        Returns:
+            The map of file entries, keyed by tree path in tree path order, ready for `files`.
+
+        Raises:
+            PipelineRequestError: If `contents` holds no file (`client.argument_invalid`), or the
+                runner asks for a blob the tree does not hold (`client.response_unreadable`).
+            ApiResponseError: If the runner answers `version` or `missing_blobs` with a failure.
+            ApiTransportError: If `version` or `missing_blobs` got no answer.
+            BlobUploadError: If an upload target answers non-2xx.
+        """
+        tree_files = await asyncio.to_thread(tree_files_from_contents, contents)
+        return await self._prepare_files(
+            tree_files=tree_files,
+            digest=tree_digest(tree_files),
+            read=lambda tree_file: contents[tree_file.path],
+            inline_max_bytes=inline_max_bytes,
+            argument="contents",
+        )
+
+    async def _prepare_files(
+        self, *, tree_files: list[TreeFile], digest: str, read: Callable[[TreeFile], bytes], inline_max_bytes: int, argument: str
+    ) -> dict[str, FileEntry]:
+        """Choose inline or hash entries for a tree's files, uploading what the runner lacks before naming anything by hash.
+
+        `read` returns a file's bytes already checked against its listing, so they are not hashed again
+        here. Reading, hashing and encoding run off the event loop. `argument` names the caller's
+        argument the tree came from, for the refusal of a tree that holds no file.
+        """
+        if not tree_files:
+            msg = "The tree holds no file, and a method tree holds at least one."
+            raise make_argument_invalid_error(msg, argument=argument, reason="empty")
+        inline_tree: _InlineTree | None = None
+        # An inline map is never smaller than the bytes it carries, since escapes and Base64 only add,
+        # so a tree whose bytes alone pass the threshold is not read in full just to be measured.
+        if sum(tree_file.size for tree_file in tree_files) <= inline_max_bytes:
+            inline_tree = await asyncio.to_thread(_encode_inline, tree_files=tree_files, read=read)
+            if inline_tree.encoded_size <= inline_max_bytes:
+                return inline_tree.files
+        version_info = await self.version()
+        if not version_info.blob_store:
+            if inline_tree is None:
+                inline_tree = await asyncio.to_thread(_encode_inline, tree_files=tree_files, read=read)
+            return inline_tree.files
+        # One blob per distinct hash: two files with the same bytes are one blob, listed and uploaded once.
+        file_of_blob: dict[str, TreeFile] = {}
+        for tree_file in tree_files:
+            file_of_blob.setdefault(tree_file.sha256, tree_file)
+        blobs = [BlobRef(sha256=tree_file.sha256, size=tree_file.size) for tree_file in file_of_blob.values()]
+        answer = await self.missing_blobs(blobs, digest=digest)
+        # Bytes already read to be measured are uploaded from memory rather than read a second time.
+        upload_read = read if inline_tree is None else inline_tree.held_bytes
+        await self._upload_missing(answer.missing, file_of_blob=file_of_blob, read=upload_read)
+        return {tree_file.path: HashFileEntry(sha256=tree_file.sha256, size=tree_file.size) for tree_file in tree_files}
+
+    async def _upload_missing(self, missing: list[MissingBlob], *, file_of_blob: dict[str, TreeFile], read: Callable[[TreeFile], bytes]) -> None:
+        """Upload every missing blob, a bounded number at a time, reading each one's bytes only when its turn comes.
+
+        Every upload runs to its end before the first failure is raised, so no upload is left
+        running against a closed connection; a blob uploaded beside a failed one is stored, which
+        is harmless since a blob is named by its bytes. A blob is named by its hash and its size, so
+        one the tree holds under the same hash at another size is a blob the tree does not hold.
+        An answer naming such a blob is not the route's answer, which lists only blobs of the
+        request, so it reads as `client.response_unreadable`, naming the route's `200`.
+        """
+        unknown: set[str] = set()
+        for blob in missing:
+            tree_file = file_of_blob.get(blob.sha256)
+            if tree_file is None or tree_file.size != blob.size:
+                unknown.add(blob.sha256)
+        if unknown:
+            msg = f"The runner asked for blobs this tree does not hold: {', '.join(sorted(unknown))}."
+            raise PipelineRequestError(msg, problem=unreadable_answer(_MISSING_BLOBS_SUCCESS_STATUS))
+        if not missing:
+            return
+        slots = asyncio.Semaphore(_MAX_CONCURRENT_UPLOADS)
+        async with self._make_upload_client() as upload_client:
+
+            async def upload_one(blob: MissingBlob) -> None:
+                async with slots:
+                    data = await asyncio.to_thread(read, file_of_blob[blob.sha256])
+                    await self._upload_blob_with(upload_client=upload_client, blob=blob, data=data)
+
+            outcomes = await asyncio.gather(*(upload_one(blob) for blob in missing), return_exceptions=True)
+        for outcome in outcomes:
+            if isinstance(outcome, BaseException):
+                raise outcome
+
+    def _make_upload_client(self) -> httpx.AsyncClient:
+        """The HTTP client blob uploads go through, apart from the API client: no default header, no auth, no event hook."""
+        return httpx.AsyncClient()
+
+    async def _upload_blob_with(self, *, upload_client: httpx.AsyncClient, blob: MissingBlob, data: bytes) -> None:
+        """Upload one blob's bytes, already checked to be that blob, through `upload_client` with exactly its target's headers; see `upload_blob`."""
+        target = blob.upload
+        # A request built outside the client carries exactly the target's headers (httpx adds only
+        # `Host` and `Content-Length`), where `client.request` would merge the client's defaults in.
+        request = httpx.Request(
+            target.method,
+            target.url,
+            content=data,
+            headers=target.headers,
+            extensions={"timeout": httpx.Timeout(self.request_timeout_seconds).as_dict()},
+        )
+        response = await upload_client.send(request)
+        if response.is_success or (response.status_code == 412 and _is_create_only(target)):
+            return
+        upload_url = _url_without_query(target.url)
+        # The target's answer reads as any failed answer does: its own problem document when it is one,
+        # such as a runner's `PUT /blobs/{sha256}` refusal, else the problem its status names.
+        reading = read_error_answer(response, creates_run=False)
+        msg = f"Uploading blob {blob.sha256} to {upload_url} failed ({response.status_code}): {reading.problem.detail}"
+        excerpt = answer_excerpt(response, problem_from_body=reading.from_body)
+        if excerpt is not None:
+            msg = f"{msg}\nThe server answered: {excerpt}"
+        raise BlobUploadError(
+            msg,
+            problem=reading.problem,
+            sha256=blob.sha256,
+            status=response.status_code,
+            status_text=response.reason_phrase,
+            response_body=response.text,
+            upload_url=upload_url,
+        )
 
     def _raise_api_response_error(
         self, *, method: str, endpoint: str, response: httpx.Response, problem: Problem, problem_from_body: bool
@@ -673,13 +963,13 @@ _SENDABLE_API_KEY = re.compile(r"[!-~]+")
 # into the body as a top-level property. A protocol arg smuggled through `extra`
 # is rejected (it must be passed as a named parameter).
 _PROTOCOL_REQUEST_ARGS: frozenset[str] = frozenset(
-    {"pipe_code", "mthds_contents", "inputs", "output_name", "output_multiplicity", "dynamic_output_concept_ref"}
+    {"pipe_code", "files", "inputs", "output_name", "output_multiplicity", "dynamic_output_concept_ref"}
 )
 
 # The protocol's `/validate` request args — the named parameters of validate().
 # Same guard as execute()/start(): a validate protocol arg smuggled through
 # `extra` is rejected; it must be passed as a named parameter.
-_VALIDATE_REQUEST_ARGS: frozenset[str] = frozenset({"mthds_contents", "allow_signatures"})
+_VALIDATE_REQUEST_ARGS: frozenset[str] = frozenset({"files", "allow_signatures"})
 
 # Built once at import (TypeAdapter construction is expensive): the single parse path for a
 # 200 `/validate` body into the protocol-neutral verdict union, discriminated on `is_valid`.
@@ -719,12 +1009,13 @@ def _outcome_unknown(*, started_run_id: str | None) -> Problem:
 
 
 def _assert_run_sources(
-    *, pipe_code: str | None, mthds_contents: list[str] | None, extra: dict[str, Any] | None, route: Literal["execute", "start"]
+    *, pipe_code: str | None, files: MethodFiles | None, extra: dict[str, Any] | None, route: Literal["execute", "start"]
 ) -> None:
     """Guard the run-source arguments of one `/execute` | `/start` call, before any body is built.
 
-    One check: something to run must have been named — a pipe, inline contents, or a
-    server-specific extension arg. Which extension arg names a run source, and which of them
+    Two checks: a `files` map, when given, holds at least one file, as a method tree does; and
+    something to run must have been named — a pipe, a method tree, or a server-specific
+    extension arg. Which extension arg names a run source, and which of them
     exclude each other, is the server's own contract: this client serves any MTHDS-compliant
     runner, so it counts the keys inside `extra` without interpreting them, and the runner
     answers for the combination it was sent. A client that takes those arguments by name can
@@ -735,24 +1026,36 @@ def _assert_run_sources(
 
     Args:
         pipe_code: The pipe selector, or None.
-        mthds_contents: Inline MTHDS bundle contents, or None.
+        files: The method's tree as a map of file entries, or None.
         extra: Server-specific extension args from the caller, or None.
         route: The protocol route being called, for the error message (`execute` / `start`).
 
     Raises:
-        PipelineRequestError: If nothing to run was named, or if `extra` carries a protocol arg
-            (`client.argument_invalid`).
+        PipelineRequestError: If `files` holds no file, if nothing to run was named, or if `extra`
+            carries a protocol arg (`client.argument_invalid`).
     """
     extensions = _build_extensions(extra)
-    if not pipe_code and not mthds_contents and not extensions:
-        msg = f"Either pipe_code, mthds_contents or a server-specific extension arg (extra) must be provided to the API {route}."
+    _refuse_empty_files(files)
+    if not pipe_code and files is None and not extensions:
+        msg = f"Either pipe_code, files or a server-specific extension arg (extra) must be provided to the API {route}."
         raise make_argument_invalid_error(msg, argument="pipe_code", reason="nothing_to_run")
+
+
+def _refuse_empty_files(files: MethodFiles | None) -> None:
+    """Refuse a `files` map holding no file: a method tree holds at least one, and a runner answers an empty map with a 422.
+
+    Raises:
+        PipelineRequestError: If `files` is an empty map (`client.argument_invalid`).
+    """
+    if files is not None and not files:
+        msg = "files holds no file, and a method tree holds at least one: send every file of the method's tree."
+        raise make_argument_invalid_error(msg, argument="files", reason="empty")
 
 
 def _build_run_body(
     *,
     pipe_code: str | None,
-    mthds_contents: list[str] | None,
+    files: MethodFiles | None,
     inputs: PipelineInputs | WorkingMemoryAbstract[StuffType] | None,
     output_name: str | None,
     output_multiplicity: VariableMultiplicity | None,
@@ -764,9 +1067,10 @@ def _build_run_body(
 
     The body is a plain mapping of the protocol's basic args plus any
     server-specific extension args (merged as top-level properties). `inputs`
-    may carry pydantic objects (StuffContent, working memory), so the caller
-    serializes the returned mapping with `pydantic_core.to_json`, which handles
-    them. With `exclude_none`, absent fields are pruned from the wire body.
+    may carry pydantic objects (StuffContent, working memory) and `files` the
+    typed file entries, so the caller serializes the returned mapping with
+    `pydantic_core.to_json`, which handles both. With `exclude_none`, absent
+    fields are pruned from the wire body.
 
     Raises:
         PipelineRequestError: If `extra` carries a protocol arg.
@@ -774,7 +1078,8 @@ def _build_run_body(
     extensions = _build_extensions(extra)
     body: dict[str, Any] = {
         "pipe_code": pipe_code,
-        "mthds_contents": mthds_contents,
+        # A plain dict, since `to_json` serializes no other mapping, a `MappingProxyType` or a `UserDict` among them.
+        "files": None if files is None else dict(files),
         "inputs": inputs,
         "output_name": output_name,
         "output_multiplicity": output_multiplicity,
@@ -810,3 +1115,64 @@ def _build_extensions(extra: dict[str, Any] | None, *, protocol_args: frozenset[
         msg = f"extra carries protocol args {sorted(protocol_overlap)} — pass them as named parameters instead."
         raise make_argument_invalid_error(msg, argument="extra", reason="protocol_argument")
     return extensions
+
+
+# The status of the `POST /blobs/missing` success, which a `missing_blobs` answer naming a blob the tree
+# does not hold is read under, as `client.response_unreadable`.
+_MISSING_BLOBS_SUCCESS_STATUS = 200
+
+
+class _InlineTree(NamedTuple):
+    """A tree's files read into memory, their inline entries, and the size the request spends on that map."""
+
+    contents: dict[str, bytes]
+    files: dict[str, FileEntry]
+    encoded_size: int
+
+    def held_bytes(self, tree_file: TreeFile) -> bytes:
+        """A file's bytes, as read when the tree was encoded."""
+        return self.contents[tree_file.path]
+
+
+def _encode_inline(*, tree_files: list[TreeFile], read: Callable[[TreeFile], bytes]) -> _InlineTree:
+    """Read every file of a tree and encode it inline, its text when its bytes are UTF-8 and else its Base64, measuring the map.
+
+    The map is measured as the request spends it: written as JSON with no whitespace, in UTF-8. This
+    reads, hashes and encodes, so a coroutine runs it in a thread.
+    """
+    contents = {tree_file.path: read(tree_file) for tree_file in tree_files}
+    files = {tree_path: encode_file_entry(data) for tree_path, data in contents.items()}
+    return _InlineTree(contents=contents, files=files, encoded_size=len(to_json(files)))
+
+
+def _read_listed_file(tree: MethodTree, *, tree_file: TreeFile) -> bytes:
+    """A listed file's bytes, read from disk and checked against the hash and size its listing recorded.
+
+    Raises:
+        TreeSourceError: If the file cannot be read, or its bytes are no longer those listed.
+    """
+    location = tree.file_location(tree_file.path)
+    try:
+        data = location.read_bytes()
+    except OSError as exc:
+        msg = f"The file {tree_file.path!r} of the tree rooted at {tree.directory} cannot be read: {exc}"
+        raise TreeSourceError(msg) from exc
+    if len(data) != tree_file.size or sha256_hex(data) != tree_file.sha256:
+        msg = f"The file {tree_file.path!r} of the tree rooted at {tree.directory} changed after the tree was listed: list the tree again."
+        raise TreeSourceError(msg)
+    return data
+
+
+def _is_create_only(target: UploadTarget) -> bool:
+    """Whether an upload target asks for a create-only write, whose `412` means the bytes are already stored."""
+    return any(name.lower() == "if-none-match" for name in target.headers)
+
+
+def _url_without_query(url: str) -> str:
+    """The URL without anything that may grant the write: its userinfo, its query and its fragment.
+
+    A presigned query carries a signature, and a `user:password@` in the authority is a credential.
+    """
+    parts = urlsplit(url)
+    host_and_port = parts.netloc.rpartition("@")[2]
+    return urlunsplit((parts.scheme, host_and_port, parts.path, "", ""))

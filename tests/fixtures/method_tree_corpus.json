@@ -5632,6 +5632,508 @@
       "function_names": []
     },
     {
+      "id": "run-inputs-at-root",
+      "description": "A run's inputs file at the root, inputs.json or inputs.toml, is kept out by default, and a reference to it is refused naming the run-inputs rule.",
+      "requires": [],
+      "handed_over": ".",
+      "entries": [
+        {
+          "path": "METHODS.toml",
+          "type": "file",
+          "text": "[package]\nname = \"root_inputs\"\naddress = \"github.com/acme/root-inputs\"\nversion = \"1.0.0\"\ndescription = \"The root inputs method\"\n"
+        },
+        {
+          "path": "main.mthds",
+          "type": "file",
+          "text": "domain = \"root_inputs\"\n"
+        },
+        {
+          "path": "inputs.json",
+          "type": "file",
+          "text": "{\"invoice\": \"invoice-1.pdf\"}\n"
+        },
+        {
+          "path": "inputs.toml",
+          "type": "file",
+          "text": "invoice = \"invoice-2.pdf\"\n"
+        }
+      ],
+      "expected": {
+        "root": ".",
+        "files": [
+          {
+            "path": "METHODS.toml",
+            "sha256": "43da77e84fa3bb591902cd8b65ca6ab3f81ca350e21c5f0f962e9016ce231210",
+            "size": 128
+          },
+          {
+            "path": "main.mthds",
+            "sha256": "ccc7c37370576bd4205564fdbb6062dc65e2bf7bb1485eb6bebcf7e0affbd912",
+            "size": 23
+          }
+        ],
+        "digest": "sha256:af3969694e9b784302e04769502eb4d8df691a4c11b37a222ef1dc927771581a"
+      },
+      "references": [
+        {
+          "holder": "main.mthds",
+          "reference": "inputs.json",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "inputs.json"
+              ],
+              "resolved": "inputs.json",
+              "excluded_by": "run_inputs"
+            }
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "./inputs.toml",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "./inputs.toml"
+              ],
+              "resolved": "inputs.toml",
+              "excluded_by": "run_inputs"
+            }
+          }
+        }
+      ],
+      "function_names": []
+    },
+    {
+      "id": "run-inputs-below-root",
+      "description": "A file named inputs.json or inputs.toml below the root is kept out too, at any depth, while the other files beside it stay in.",
+      "requires": [],
+      "handed_over": ".",
+      "entries": [
+        {
+          "path": "METHODS.toml",
+          "type": "file",
+          "text": "[package]\nname = \"nested_inputs\"\naddress = \"github.com/acme/nested-inputs\"\nversion = \"1.0.0\"\ndescription = \"The nested inputs method\"\n"
+        },
+        {
+          "path": "main.mthds",
+          "type": "file",
+          "text": "domain = \"nested_inputs\"\n"
+        },
+        {
+          "path": "examples/README.md",
+          "type": "file",
+          "text": "# Examples\n"
+        },
+        {
+          "path": "examples/inputs.json",
+          "type": "file",
+          "text": "{\"invoice\": \"sample.pdf\"}\n"
+        },
+        {
+          "path": "examples/inputs.toml",
+          "type": "file",
+          "text": "invoice = \"sample.pdf\"\n"
+        },
+        {
+          "path": "runs/2026/inputs.json",
+          "type": "file",
+          "text": "{}\n"
+        }
+      ],
+      "expected": {
+        "root": ".",
+        "files": [
+          {
+            "path": "METHODS.toml",
+            "sha256": "6f007b33efd4649c7d77f64875e60d3709e3539f95cfb82f23c6554b2a65e856",
+            "size": 134
+          },
+          {
+            "path": "examples/README.md",
+            "sha256": "8e6323a2c8affc0e7bb2ce66b3aff359790c9a190f1f03e0b738f72bd58bf518",
+            "size": 11
+          },
+          {
+            "path": "main.mthds",
+            "sha256": "6bc37d1f74b307f3415469e35937c6dfad987b6c3c8b2467248c58aeebf265eb",
+            "size": 25
+          }
+        ],
+        "digest": "sha256:0a734643b2beae7c92d2f934d1800dee3ac5cf595a26675619e2d58e2b9ec860"
+      },
+      "references": [
+        {
+          "holder": "main.mthds",
+          "reference": "examples/inputs.json",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "examples/inputs.json"
+              ],
+              "resolved": "examples/inputs.json",
+              "excluded_by": "run_inputs"
+            }
+          }
+        },
+        {
+          "holder": "examples/README.md",
+          "reference": "inputs.toml",
+          "context": "url",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "inputs.toml"
+              ],
+              "resolved": "examples/inputs.toml",
+              "excluded_by": "run_inputs"
+            }
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "examples/README.md",
+          "context": "path",
+          "expected": {
+            "tree_path": "examples/README.md"
+          }
+        }
+      ],
+      "function_names": []
+    },
+    {
+      "id": "run-inputs-directory-names",
+      "description": "A directory named inputs.json or inputs.toml, at the root or below it, excludes nothing: its files are members, except a file inside it named inputs.json, which the run-inputs default keeps out like any other.",
+      "requires": [],
+      "handed_over": ".",
+      "entries": [
+        {
+          "path": "METHODS.toml",
+          "type": "file",
+          "text": "[package]\nname = \"inputs_directories\"\naddress = \"github.com/acme/inputs-directories\"\nversion = \"1.0.0\"\ndescription = \"The inputs directories method\"\n"
+        },
+        {
+          "path": "main.mthds",
+          "type": "file",
+          "text": "domain = \"inputs_directories\"\n"
+        },
+        {
+          "path": "inputs.json/sample.json",
+          "type": "file",
+          "text": "{\"invoice\": \"sample.pdf\"}\n"
+        },
+        {
+          "path": "inputs.json/inputs.json",
+          "type": "file",
+          "text": "{}\n"
+        },
+        {
+          "path": "docs/inputs.toml/notes.md",
+          "type": "file",
+          "text": "# Notes\n"
+        }
+      ],
+      "expected": {
+        "root": ".",
+        "files": [
+          {
+            "path": "METHODS.toml",
+            "sha256": "225e2532bfb3213b41c35e2cdc266df3311c4cb0028d55cbc2166fadfca26b01",
+            "size": 149
+          },
+          {
+            "path": "docs/inputs.toml/notes.md",
+            "sha256": "365d0b84ae63c2afc293dedd2b00bdf0dc8d6ef70c9297d90f9e5682ab0d72ee",
+            "size": 8
+          },
+          {
+            "path": "inputs.json/sample.json",
+            "sha256": "eae6b10a8ae1bc784cce9f49bd8be761fda731664271e648a91d9fba47a3d42c",
+            "size": 26
+          },
+          {
+            "path": "main.mthds",
+            "sha256": "19b46e21c261b625efdb4172f3a68fce857817ee5c5f4aabbbccd8945990c125",
+            "size": 30
+          }
+        ],
+        "digest": "sha256:45b7d3e0cb5c342c08ff06f02467fb65549bc9d1bfce422b4b717f503e605206"
+      },
+      "references": [
+        {
+          "holder": "main.mthds",
+          "reference": "inputs.json/sample.json",
+          "context": "path",
+          "expected": {
+            "tree_path": "inputs.json/sample.json"
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "inputs.json",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "inputs.json"
+              ],
+              "resolved": "inputs.json"
+            }
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "inputs.json/inputs.json",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "inputs.json/inputs.json"
+              ],
+              "resolved": "inputs.json/inputs.json",
+              "excluded_by": "run_inputs"
+            }
+          }
+        }
+      ],
+      "function_names": []
+    },
+    {
+      "id": "run-inputs-named-pipe",
+      "description": "A named pipe called inputs.json is neither a regular file nor a symbolic link, so the run-inputs default does not keep it out: it stays in the tree and is refused as a special file.",
+      "requires": [
+        "named_pipes"
+      ],
+      "handed_over": ".",
+      "entries": [
+        {
+          "path": "METHODS.toml",
+          "type": "file",
+          "text": "[package]\nname = \"inputs_pipe\"\naddress = \"github.com/acme/inputs-pipe\"\nversion = \"1.0.0\"\ndescription = \"The inputs pipe method\"\n"
+        },
+        {
+          "path": "main.mthds",
+          "type": "file",
+          "text": "domain = \"inputs_pipe\"\n"
+        },
+        {
+          "path": "inputs.json",
+          "type": "fifo"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "special_file",
+          "names": [
+            "inputs.json"
+          ]
+        }
+      },
+      "references": [],
+      "function_names": []
+    },
+    {
+      "id": "run-inputs-names-match-exactly",
+      "description": "The run-inputs names match byte for byte, letter case included: Inputs.json, INPUTS.TOML, inputs.jsonc, inputs.json.bak and my-inputs.json are ordinary members.",
+      "requires": [],
+      "handed_over": ".",
+      "entries": [
+        {
+          "path": "METHODS.toml",
+          "type": "file",
+          "text": "[package]\nname = \"inputs_variants\"\naddress = \"github.com/acme/inputs-variants\"\nversion = \"1.0.0\"\ndescription = \"The inputs variants method\"\n"
+        },
+        {
+          "path": "main.mthds",
+          "type": "file",
+          "text": "domain = \"inputs_variants\"\n"
+        },
+        {
+          "path": "Inputs.json",
+          "type": "file",
+          "text": "{\"a\": 1}\n"
+        },
+        {
+          "path": "INPUTS.TOML",
+          "type": "file",
+          "text": "a = 1\n"
+        },
+        {
+          "path": "inputs.jsonc",
+          "type": "file",
+          "text": "{}\n"
+        },
+        {
+          "path": "inputs.json.bak",
+          "type": "file",
+          "text": "{}\n"
+        },
+        {
+          "path": "examples/my-inputs.json",
+          "type": "file",
+          "text": "{}\n"
+        }
+      ],
+      "expected": {
+        "root": ".",
+        "files": [
+          {
+            "path": "INPUTS.TOML",
+            "sha256": "cb78bd8a17f7b751fe0d4663366dcbc257204033ef7ddd64b1f2969573b5b2e2",
+            "size": 6
+          },
+          {
+            "path": "Inputs.json",
+            "sha256": "e8c628edc9968ef0c668f54e0ba2636b35503357eb1aca0ddc828aeace432f67",
+            "size": 9
+          },
+          {
+            "path": "METHODS.toml",
+            "sha256": "9fb47df76e09a137e6be1db66a191a5bd48ea0f8683da98268892e1717cc62ec",
+            "size": 140
+          },
+          {
+            "path": "examples/my-inputs.json",
+            "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+            "size": 3
+          },
+          {
+            "path": "inputs.json.bak",
+            "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+            "size": 3
+          },
+          {
+            "path": "inputs.jsonc",
+            "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+            "size": 3
+          },
+          {
+            "path": "main.mthds",
+            "sha256": "41fe35abd99ae8cb7efb5ec5df552b29ecb4bfa014e9d5424571cf0bfc942939",
+            "size": 27
+          }
+        ],
+        "digest": "sha256:9b0b94c7ffd54ca245a2a61324baf101b41a2f2119b1f9ca793abeda8b51d791"
+      },
+      "references": [
+        {
+          "holder": "main.mthds",
+          "reference": "Inputs.json",
+          "context": "path",
+          "expected": {
+            "tree_path": "Inputs.json"
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "examples/my-inputs.json",
+          "context": "path",
+          "expected": {
+            "tree_path": "examples/my-inputs.json"
+          }
+        }
+      ],
+      "function_names": []
+    },
+    {
+      "id": "run-inputs-symbolic-links",
+      "description": "A symbolic link named inputs.json or inputs.toml is kept out as a regular file of that name is, never followed, so it is never refused as a symbolic link, at the root or below it, dangling or not.",
+      "requires": [
+        "symbolic_links"
+      ],
+      "handed_over": ".",
+      "entries": [
+        {
+          "path": "METHODS.toml",
+          "type": "file",
+          "text": "[package]\nname = \"inputs_links\"\naddress = \"github.com/acme/inputs-links\"\nversion = \"1.0.0\"\ndescription = \"The inputs links method\"\n"
+        },
+        {
+          "path": "main.mthds",
+          "type": "file",
+          "text": "domain = \"inputs_links\"\n"
+        },
+        {
+          "path": "data/sample.json",
+          "type": "file",
+          "text": "{\"invoice\": \"sample.pdf\"}\n"
+        },
+        {
+          "path": "inputs.json",
+          "type": "symlink",
+          "target": "data/sample.json"
+        },
+        {
+          "path": "data/inputs.toml",
+          "type": "symlink",
+          "target": "../missing.toml"
+        }
+      ],
+      "expected": {
+        "root": ".",
+        "files": [
+          {
+            "path": "METHODS.toml",
+            "sha256": "e30a3ac8e3c636524cad7b499b2dc3932463446e25d052fc67a5f72358fbc6f9",
+            "size": 131
+          },
+          {
+            "path": "data/sample.json",
+            "sha256": "eae6b10a8ae1bc784cce9f49bd8be761fda731664271e648a91d9fba47a3d42c",
+            "size": 26
+          },
+          {
+            "path": "main.mthds",
+            "sha256": "ea8341e1059e3d83162185a86c00286533deab91ea502671182ff23f04ce44a0",
+            "size": 24
+          }
+        ],
+        "digest": "sha256:9cb5caa6ea70669f1af773960aef09556ae09f932bc5bb2965f77276fa526735"
+      },
+      "references": [
+        {
+          "holder": "main.mthds",
+          "reference": "inputs.json",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "inputs.json"
+              ],
+              "resolved": "inputs.json",
+              "excluded_by": "run_inputs"
+            }
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "data/inputs.toml",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "data/inputs.toml"
+              ],
+              "resolved": "data/inputs.toml",
+              "excluded_by": "run_inputs"
+            }
+          }
+        }
+      ],
+      "function_names": []
+    },
+    {
       "id": "sort-order-is-bytewise",
       "description": "The listing is sorted by tree path byte for byte on its UTF-8 encoding, as LC_ALL=C sort orders it.",
       "requires": [],
@@ -5842,7 +6344,7 @@
     },
     {
       "id": "spec-invoices",
-      "description": "The standard's opening example: dot names, a __pycache__ directory and a self-excluding results directory stay out, every other file is in.",
+      "description": "The standard's opening example: dot names, a __pycache__ directory, the inputs.json of the last run and a self-excluding results directory stay out, every other file is in, example inputs under another name included.",
       "requires": [],
       "handed_over": ".",
       "entries": [
@@ -5865,6 +6367,16 @@
           "path": "requirements.txt",
           "type": "file",
           "text": "num2words==0.5.13\n"
+        },
+        {
+          "path": "inputs.json",
+          "type": "file",
+          "text": "{\"invoice\": \"invoice-7.pdf\"}\n"
+        },
+        {
+          "path": "examples/invoice-inputs.json",
+          "type": "file",
+          "text": "{\"invoice\": \"sample.pdf\"}\n"
         },
         {
           "path": "funcs/__init__.py",
@@ -5931,6 +6443,11 @@
             "size": 11
           },
           {
+            "path": "examples/invoice-inputs.json",
+            "sha256": "eae6b10a8ae1bc784cce9f49bd8be761fda731664271e648a91d9fba47a3d42c",
+            "size": 26
+          },
+          {
             "path": "funcs/__init__.py",
             "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             "size": 0
@@ -5961,7 +6478,7 @@
             "size": 33
           }
         ],
-        "digest": "sha256:0104886d1758621de0d62e6029469f9c029fdc009ea2fcbee9b0a94f69256094"
+        "digest": "sha256:67386bee43c8ea5b6c4f7ade8b33c674d94374e18498581fe4f7b86647114918"
       },
       "references": [
         {
@@ -6015,6 +6532,29 @@
               "resolved": ".gitignore",
               "excluded_by": "dot_segment"
             }
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "inputs.json",
+          "context": "path",
+          "expected": {
+            "refusal": {
+              "code": "reference_not_in_tree",
+              "names": [
+                "inputs.json"
+              ],
+              "resolved": "inputs.json",
+              "excluded_by": "run_inputs"
+            }
+          }
+        },
+        {
+          "holder": "main.mthds",
+          "reference": "examples/invoice-inputs.json",
+          "context": "path",
+          "expected": {
+            "tree_path": "examples/invoice-inputs.json"
           }
         }
       ],
@@ -7167,6 +7707,114 @@
       }
     },
     {
+      "id": "run-inputs-json-key",
+      "description": "A key naming a run's inputs file inputs.json at the root is refused: no tree has such a member.",
+      "document": "{\"inputs.json\": \"{}\\n\", \"main.mthds\": \"x\"}",
+      "blob_store": [],
+      "expected": {
+        "refusal": {
+          "code": "excluded_name",
+          "names": [
+            "inputs.json"
+          ]
+        }
+      }
+    },
+    {
+      "id": "run-inputs-toml-key",
+      "description": "A key naming a run's inputs file inputs.toml at the root is refused.",
+      "document": "{\"inputs.toml\": \"\", \"main.mthds\": \"x\"}",
+      "blob_store": [],
+      "expected": {
+        "refusal": {
+          "code": "excluded_name",
+          "names": [
+            "inputs.toml"
+          ]
+        }
+      }
+    },
+    {
+      "id": "run-inputs-key-below-root",
+      "description": "A key whose last segment is inputs.json is refused below the root too.",
+      "document": "{\"examples/inputs.json\": \"{}\\n\", \"main.mthds\": \"x\"}",
+      "blob_store": [],
+      "expected": {
+        "refusal": {
+          "code": "excluded_name",
+          "names": [
+            "examples/inputs.json"
+          ]
+        }
+      }
+    },
+    {
+      "id": "run-inputs-names-as-directories-keys",
+      "description": "A directory named inputs.json or inputs.toml excludes nothing: keys under it are members.",
+      "document": "{\"inputs.json/sample.json\": \"{}\\n\", \"docs/inputs.toml/notes.md\": \"# Notes\\n\", \"main.mthds\": \"x\"}",
+      "blob_store": [],
+      "expected": {
+        "files": [
+          {
+            "path": "docs/inputs.toml/notes.md",
+            "sha256": "365d0b84ae63c2afc293dedd2b00bdf0dc8d6ef70c9297d90f9e5682ab0d72ee",
+            "size": 8
+          },
+          {
+            "path": "inputs.json/sample.json",
+            "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+            "size": 3
+          },
+          {
+            "path": "main.mthds",
+            "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881",
+            "size": 1
+          }
+        ],
+        "digest": "sha256:b89b17272c5d426bd11b5a905b1e106918b76d4383d7c2ccc6e1449a5e09102f"
+      }
+    },
+    {
+      "id": "run-inputs-case-variant-keys",
+      "description": "The run-inputs names match byte for byte: Inputs.json and INPUTS.TOML are members.",
+      "document": "{\"Inputs.json\": \"{}\\n\", \"examples/INPUTS.TOML\": \"\", \"main.mthds\": \"x\"}",
+      "blob_store": [],
+      "expected": {
+        "files": [
+          {
+            "path": "Inputs.json",
+            "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+            "size": 3
+          },
+          {
+            "path": "examples/INPUTS.TOML",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0
+          },
+          {
+            "path": "main.mthds",
+            "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881",
+            "size": 1
+          }
+        ],
+        "digest": "sha256:7e89d46f1086ea34ba3336bce1a007ffd03efe9d34a916c102dd2ebca5613dab"
+      }
+    },
+    {
+      "id": "run-inputs-key-beside-case-variant",
+      "description": "A key inputs.json beside Inputs.json is refused as excluded_name alone: a key refused as excluded_name takes no part in the collision check, so Inputs.json collides with nothing.",
+      "document": "{\"inputs.json\": \"{}\\n\", \"Inputs.json\": \"{}\\n\", \"main.mthds\": \"x\"}",
+      "blob_store": [],
+      "expected": {
+        "refusal": {
+          "code": "excluded_name",
+          "names": [
+            "inputs.json"
+          ]
+        }
+      }
+    },
+    {
       "id": "case-collision-keys",
       "description": "Two keys equal once case-folded are refused, naming both.",
       "document": "{\"README.md\": \"1\", \"readme.md\": \"2\"}",
@@ -7710,6 +8358,13 @@
     {
       "path": ".env",
       "description": "A segment may start with a dot: the tree path rules allow it, and only the membership rule keeps such a file out of a tree.",
+      "expected": {
+        "valid": true
+      }
+    },
+    {
+      "path": "inputs.json",
+      "description": "A run's inputs file is a tree path: the tree path rules allow it, and only the membership rule keeps such a file out of a tree.",
       "expected": {
         "valid": true
       }

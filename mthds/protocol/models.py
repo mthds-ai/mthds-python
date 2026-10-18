@@ -1,14 +1,18 @@
 """Wire models for the MTHDS Protocol — mirrors `mthds-protocol.openapi.yaml` (the standard's normative artifact).
 
-    POST /execute  : -> RunResultExecute (200: pipeline_run_id + pipe_output)
-    POST /start    : -> RunResultStart   (202: pipeline_run_id only)
-    POST /validate :              -> ValidationResult (200 union: ValidationReport | InvalidValidationReport, items ProblemItem)
-    GET  /models   :              -> ModelDeck
-    GET  /version  :              -> VersionInfo
+    POST /execute       : -> RunResultExecute (200: pipeline_run_id + pipe_output)
+    POST /start         : -> RunResultStart   (202: pipeline_run_id only)
+    POST /validate      :              -> ValidationResult (200 union: ValidationReport | InvalidValidationReport, items ProblemItem)
+    GET  /models        :              -> ModelDeck
+    GET  /version       :              -> VersionInfo
+    POST /blobs/missing : MissingBlobsRequest -> MissingBlobsResult (optional, a runner with a blob store)
 
-The protocol has no request *model*: the SDK runners take the request's basic
-arguments as named parameters and serialize the wire body directly, merging
-any server-specific extension args as top-level properties.
+The run and validate routes have no request *model*: the SDK runners take the
+request's basic arguments as named parameters and serialize the wire body
+directly, merging any server-specific extension args as top-level properties.
+The method those routes carry, `files`, is typed by `MethodFiles` in
+`mthds.method_tree.file_entry`. The optional blob routes do have one, since a
+sender builds their request from a listed tree rather than from named arguments.
 
 Response models declare the protocol's BASE fields only and are extension-open
 too: an implementation may return more, and those server-specific fields are
@@ -21,7 +25,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Any, Generic, Literal, TypeAlias, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from mthds._utils.pydantic_utils import empty_list_factory_of
 from mthds.protocol.problem.models import ProblemItem
@@ -202,12 +206,93 @@ verdict. Non-2xx means the endpoint could not produce a verdict.
 class VersionInfo(BaseModel):
     """Protocol + runner versions — `GET /version` (always public).
 
-    The handshake clients use for feature detection. The protocol defines two
-    fields; implementations may add their own identification (a name, an
-    underlying runtime version, anything else) as extensions.
+    The handshake clients use for feature detection. The protocol defines
+    `protocol_version`, an optional `runner_version` and an optional
+    `blob_store` flag; implementations may add their own identification (a
+    name, an underlying runtime version, anything else) as extensions.
     """
 
     model_config = ConfigDict(extra="allow")
 
     protocol_version: str
     runner_version: str | None = None
+    blob_store: bool = Field(
+        default=False,
+        description=(
+            "True when the runner keeps a blob store: it serves POST /blobs/missing and resolves hash entries in a files map. "
+            "False or absent when it does not, in which case it answers any hash entry with a 422 listing missing_blobs."
+        ),
+    )
+
+
+# ── Sending files by hash (`POST /blobs/missing`, optional) ──────────
+
+SHA256_HEX_PATTERN = r"^[0-9a-f]{64}$"
+TREE_DIGEST_PATTERN = r"^sha256:[0-9a-f]{64}$"
+
+_SIZE_DESCRIPTION = (
+    "The length of the bytes, a JSON integer written without a fraction or an exponent. "
+    "A size written 13.0 is refused, although JSON Schema's integer type admits it."
+)
+
+
+class BlobRef(BaseModel):
+    """A blob, named by its SHA-256 in lowercase hexadecimal and its length in bytes.
+
+    Closed, as the protocol declares it. `size` is strict, so a size read as a float, being
+    written with a fraction or an exponent, or a boolean is refused.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    sha256: str = Field(pattern=SHA256_HEX_PATTERN, description="The SHA-256 of the bytes, in lowercase hexadecimal.")
+    size: StrictInt = Field(ge=0, description=_SIZE_DESCRIPTION)
+
+
+class MissingBlobsRequest(BaseModel):
+    """`POST /blobs/missing` request — the blobs a sender is about to send by hash, and optionally the tree they make up.
+
+    Each hash is listed once. `digest` names the tree the blobs make up, so a runner that has
+    recorded that tree as held in full may answer with an empty list at once. Extension-open
+    (`extra="allow"`), as the protocol declares it.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    blobs: list[BlobRef] = Field(default_factory=empty_list_factory_of(BlobRef), description="The blobs to check, each hash listed once.")
+    digest: str | None = Field(default=None, pattern=TREE_DIGEST_PATTERN, description="The tree digest of the method tree the blobs make up.")
+
+
+class UploadTarget(BaseModel):
+    """Where to upload one blob: its bytes as the whole body of a request with this `method` to this `url`, with exactly these `headers`.
+
+    The target is the runner's choice: its own `PUT /blobs/{sha256}`, or any address that stores
+    the bytes where the runner reads its blobs, such as a presigned object-store URL. Extension-open.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    method: str = Field(description="The HTTP method, such as PUT.")
+    url: str = Field(description="Where to send the bytes.")
+    headers: dict[str, str] = Field(description="The headers to send, exactly.")
+
+
+class MissingBlob(BaseModel):
+    """A blob the runner lacks, with where to upload it. Extension-open."""
+
+    model_config = ConfigDict(extra="allow")
+
+    sha256: str = Field(pattern=SHA256_HEX_PATTERN, description="The SHA-256 of the bytes, in lowercase hexadecimal.")
+    size: StrictInt = Field(ge=0, description=_SIZE_DESCRIPTION)
+    upload: UploadTarget
+
+
+class MissingBlobsResult(BaseModel):
+    """`POST /blobs/missing` 200 — every blob of the request the runner does not hold; empty when there is nothing to upload.
+
+    Extension-open (`extra="allow"`).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    missing: list[MissingBlob]
