@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from mthds.protocol.working_memory import WorkingMemoryAbstract
 
 
-PROTOCOL_VERSION: Final[str] = "1.0.0"
+PROTOCOL_VERSION: Final[str] = "2.0.0"
 """The MTHDS Protocol version this SDK implements.
 
 This is a copy of a cut made by the standard, and the only place this library
@@ -30,6 +30,18 @@ exchange — and it moves on its own cadence: a release of the standard that
 leaves those alone leaves this number exactly where it is, so it never tracks
 `MTHDS_STANDARD_VERSION`. See https://mthds.ai/latest/spec/versioning/ ("The Protocol
 Version") for what bumps it.
+"""
+
+CORE_ERROR_REGISTRY_VERSION: Final[str] = "8.0.0"
+"""The version of the MTHDS core error registry this SDK reads problems against.
+
+The registry is published with each release of the standard and carries that release's
+number, so this is the standard version whose registry is vendored under
+`vendor/mthds-error-registry/` and generated into `mthds.protocol.problem.registry`. A new
+code moves no protocol number, so this moves on its own: following a registry release is a
+re-vendor (`make vendor-error-registry`), a regeneration (`make generate-error-registry`)
+and this one edit, and `tests/unit/test_error_registry_vendored.py` fails until all three
+agree.
 """
 
 
@@ -83,11 +95,14 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             RunResultExecute — the completed run: `pipeline_run_id` + `pipe_output`.
 
         Raises:
-            RunStillRunningError: If the server answers 202 (the protocol's
-                optional async degrade) instead of a final result.
-            ApiResponseError: If the server answers non-2xx (the API runner), with
-                the members of its problem document typed.
-            ClientAuthenticationError: If an API token is missing for API execution.
+            PipelineRequestError: From the API runner, for every failure of the call,
+                carrying it as a problem document under a registered code
+                (`exc.problem`): `RunStillRunningError` when the server answers 202
+                (the protocol's optional async degrade) instead of a final result,
+                `ApiResponseError` when it answers non-2xx or a success the client
+                cannot read, and `ApiTransportError` when no answer came back. Each
+                implementation names its own errors: the local `PipelexRunner` raises
+                `PipelexRunnerError`, which carries no problem yet.
         """
         ...
 
@@ -126,9 +141,12 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
             (no output yet)
 
         Raises:
-            ApiResponseError: If the server answers non-2xx (the API runner), with
-                the members of its problem document typed.
-            ClientAuthenticationError: If an API token is missing for API execution.
+            PipelineRequestError: From the API runner, for every failure of the call,
+                carrying it as a problem document under a registered code
+                (`exc.problem`): `ApiResponseError` when the server answers non-2xx or
+                a success the client cannot read, and `ApiTransportError` when no
+                answer came back. Each implementation names its own errors: the local
+                `PipelexRunner` does not start runs and raises `NotImplementedError`.
         """
         ...
 
@@ -153,7 +171,7 @@ class MTHDSProtocol(Protocol, Generic[PipeOutputT]):
         Returns:
             The 200-diagnostic verdict union, discriminated on `is_valid`: a
             `ValidationReport` (`is_valid: true`, structural artifacts) or an
-            `InvalidValidationReport` (`is_valid: false`, `validation_errors[]`).
+            `InvalidValidationReport` (`is_valid: false`, its faults in `errors[]`).
             An invalid bundle is a produced verdict, NOT a raised 422 — non-2xx is
             reserved for "no verdict could be produced". (The local CLI runner is the
             documented exception: it surfaces an invalid bundle as a raised

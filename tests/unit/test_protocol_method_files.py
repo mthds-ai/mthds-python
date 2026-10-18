@@ -123,6 +123,8 @@ class TestMethodFiles:
         with pytest.raises(PipelineRequestError) as exc_info:
             parse_method_files(source)
         assert "method file" in str(exc_info.value).lower(), topic
+        assert exc_info.value.problem.code == "client.argument_invalid", topic
+        assert exc_info.value.problem.as_wire()["params"]["argument"] == "source", topic
 
     def test_a_source_that_exhausts_the_decoder_is_a_contract_violation(self):
         # `json.loads` raises `RecursionError` rather than `JSONDecodeError` on a source nested

@@ -61,8 +61,11 @@ class TestRunSourceOptions:
 
     def test_selector_error_names_the_argument_and_the_type(self) -> None:
         """The message names the argument the caller passed and the type they passed for it."""
-        with pytest.raises(PipelineRequestError, match=r"method_id must be a string, received int\."):
+        with pytest.raises(PipelineRequestError, match=r"method_id must be a string, received int\.") as exc_info:
             normalized_selector(name=RUN_ARG_METHOD_ID, value=7)
+        # The refusal is the client's own `client.argument_invalid`, naming the argument and why.
+        assert exc_info.value.problem.code == "client.argument_invalid"
+        assert exc_info.value.problem.as_wire()["params"] == {"argument": "method_id", "reason": "not_a_string"}
 
     # ── run_selector_extensions ──────────────────────────────────
 

@@ -10,9 +10,10 @@ from pytest_mock import MockerFixture
 
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import InvalidValidationReport, ModelCategory, ModelDeck, ValidationReport, VersionInfo
+from mthds.protocol.problem.registry import ProblemDomain
 from mthds.protocol.protocol import MTHDSProtocol
 from mthds.runners.api.client import MthdsAPIClient
-from mthds.runners.api.exceptions import ApiResponseError
+from mthds.runners.api.exceptions import ApiResponseError, ClientNotConfiguredError
 from tests.unit.test_data import ExecuteWireResponses, MethodFileMaps, ModelDeckWireBodies
 
 _BASE_URL = "http://localhost:8081"
@@ -75,6 +76,28 @@ class TestMthdsAPIClientProtocol:
         client = MthdsAPIClient(api_key="test-token", base_url=_BASE_URL, request_timeout_seconds=timeout_seconds)
         assert client.request_timeout_seconds == timeout_seconds
 
+    @pytest.mark.parametrize(
+        ("topic", "timeout_seconds"),
+        [
+            ("negative", -1.0),
+            ("not a number", float("nan")),
+            ("infinite", float("inf")),
+            ("a boolean", True),
+            ("a string", "30"),
+            ("an integer past the range of a float", 10**400),
+        ],
+    )
+    def test_a_timeout_no_problem_can_state_is_a_setting_to_fix(self, topic: str, timeout_seconds: float) -> None:
+        """A time limit that is no finite number of seconds, never negative, is refused when it is set, so that a timeout always reads."""
+        with pytest.raises(ClientNotConfiguredError) as exc_info:
+            MthdsAPIClient(api_key="test-token", base_url=_BASE_URL, request_timeout_seconds=timeout_seconds)
+        assert exc_info.value.problem.as_wire()["params"] == {"setting": "request_timeout_seconds"}, topic
+
+        client = self._client()
+        with pytest.raises(ClientNotConfiguredError):
+            client.request_timeout_seconds = timeout_seconds
+        assert client.request_timeout_seconds == 1200.0, topic
+
     # ── validate ─────────────────────────────────────────────────
 
     def test_validate_posts_files_and_parses_valid_report(self, mocker: MockerFixture) -> None:
@@ -125,20 +148,33 @@ class TestMthdsAPIClientProtocol:
         client = self._client()
         body: dict[str, object] = {
             "is_valid": False,
-            "validation_errors": [{"category": "pipe_validation", "message": "Unknown concept.", "pipe_code": "summarize"}],
+            "errors": [
+                {
+                    "code": "method.concept_unresolved",
+                    "detail": "The method names the concept 'legal.Clausee', which no library declares.",
+                    "params": {"concept": "legal.Clausee"},
+                    "location": {"pipe": "summarize", "file": "contracts.mthds", "line": 12},
+                    "rule_version": 3,
+                }
+            ],
+            "warnings": [{"code": "method.input_unused", "detail": "Pipe 'summarize' declares inputs it never reads: draft."}],
             "pending_signatures": [],
             "is_runnable": False,
-            "message": "Validation found errors.",
         }
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
 
         report = asyncio.run(client.validate({"main.mthds": "domain = "}))
         assert isinstance(report, InvalidValidationReport)
         assert report.is_valid is False
-        # Neutral arm: `category` is a plain string and `pipe_code` rides model_extra — the
-        # `pipelex-sdk` subclass narrows category to its closed enum and types the locators.
-        assert report.validation_errors[0].category == "pipe_validation"
-        assert (report.validation_errors[0].model_extra or {})["pipe_code"] == "summarize"
+        # Every fault and warning is a problem item: a code, its sentence, its params and location,
+        # and an item's extra member rides model_extra. The `message` is optional on this arm.
+        assert report.errors[0].code == "method.concept_unresolved"
+        assert report.errors[0].effective_domain is ProblemDomain.METHOD
+        assert report.errors[0].location is not None
+        assert report.errors[0].location.line == 12
+        assert (report.errors[0].model_extra or {})["rule_version"] == 3
+        assert [warning.code for warning in report.warnings] == ["method.input_unused"]
+        assert report.message is None
 
     def test_validate_no_verdict_response_raises_api_response_error(self, mocker: MockerFixture) -> None:
         """A request-shape 422 (no verdict could be produced) surfaces as an ApiResponseError, not a report.
@@ -147,21 +183,54 @@ class TestMthdsAPIClientProtocol:
         validation of the request beyond the `extra` protocol-arg guard.
         """
         client = self._client()
-        body = {"type": "about:blank", "title": "Malformed request", "status": 422}
+        body = {
+            "type": "https://mthds.ai/errors/request.invalid",
+            "title": "The request does not match the route's schema",
+            "status": 422,
+            "detail": "The request's field 'mthds_contents' does not match the route's schema.",
+            "code": "request.invalid",
+            "domain": "input",
+            "retry": "no",
+            "next_step": {"kind": "change_input", "detail": "Pass this to the caller, who must correct the field 'mthds_contents' of the request."},
+            "params": {"field": "mthds_contents"},
+        }
         mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(422, json=body)))
 
         with pytest.raises(ApiResponseError) as exc_info:
             asyncio.run(client.validate({"main.mthds": "domain = "}))
         assert exc_info.value.status == 422
-        assert exc_info.value.title == "Malformed request"
-        assert str(exc_info.value) == "API POST /v1/validate failed (422): Malformed request"
+        assert exc_info.value.problem.code == "request.invalid"
+        assert str(exc_info.value) == (
+            "API POST /v1/validate failed (422): The request's field 'mthds_contents' does not match the route's schema.\n"
+            "Next step: Pass this to the caller, who must correct the field 'mthds_contents' of the request."
+        )
+
+    @pytest.mark.parametrize(
+        ("topic", "body"),
+        [
+            ("no discriminant", {"errors": []}),
+            ("a non-boolean discriminant", {"is_valid": "false"}),
+            ("an invalid arm without its faults", {"is_valid": False, "is_runnable": False}),
+        ],
+    )
+    def test_validate_malformed_verdict_is_an_unreadable_answer(self, topic: str, body: dict[str, object], mocker: MockerFixture) -> None:
+        """A 200 the client cannot read as a verdict raises `client.response_unreadable`, never a pydantic error and never a verdict."""
+        client = self._client()
+        mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=body)))
+
+        with pytest.raises(ApiResponseError) as exc_info:
+            asyncio.run(client.validate({"main.mthds": "domain = "}))
+        assert exc_info.value.problem.code == "client.response_unreadable", topic
+        assert exc_info.value.problem.as_wire()["params"] == {"status": 200}
 
     @pytest.mark.parametrize("smuggled", [{"files": {"other.mthds": "x"}}, {"allow_signatures": True}])
     def test_validate_extra_rejects_protocol_arg(self, smuggled: dict[str, Any]) -> None:
         """A protocol arg smuggled through `extra` is rejected client-side (mirrors the execute/start guard)."""
         client = self._client()
-        with pytest.raises(PipelineRequestError, match="pass them as named parameters"):
+        with pytest.raises(PipelineRequestError) as exc_info:
             asyncio.run(client.validate(MethodFileMaps.ONE_BUNDLE, extra=smuggled))
+        assert exc_info.value.problem.code == "client.argument_invalid"
+        assert exc_info.value.problem.as_wire()["params"] == {"argument": "extra", "reason": "protocol_argument"}
 
     # ── models ───────────────────────────────────────────────────
 
@@ -246,9 +315,11 @@ class TestMthdsAPIClientProtocol:
         """
         client = self._client()
         send_mock = mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=wire_response)))
-        with pytest.raises(PipelineRequestError, match=f"must be provided to the API {route}"):
+        with pytest.raises(PipelineRequestError, match=f"must be provided to the API {route}") as exc_info:
             asyncio.run(getattr(client, route)())
         send_mock.assert_not_called()
+        assert exc_info.value.problem.code == "client.argument_invalid"
+        assert exc_info.value.problem.as_wire()["params"] == {"argument": "pipe_code", "reason": "nothing_to_run"}
 
     @pytest.mark.parametrize(
         ("route", "wire_response"),
@@ -274,6 +345,17 @@ class TestMthdsAPIClientProtocol:
         assert '"files":{"main.mthds":' in sent
         assert '"bundle_b64":"UEsDBA=="' in sent
         assert '"mthds_contents":["x"]' in sent
+
+    def test_execute_keeps_the_numbers_of_its_output_as_written(self, mocker: MockerFixture) -> None:
+        """A float a method wrote with no fractional part, such as a price of `10.0`, reaches the caller as a float, as `json.loads` reads it."""
+        client = self._client()
+        mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=_response(200, json=ExecuteWireResponses.FLOAT_OUTPUT)))
+
+        result = asyncio.run(client.execute(pipe_code="quote"))
+
+        content = result.pipe_output.working_memory.root["quote"].content
+        assert content == {"price": 10.0, "discounts": [2.0, 2.5], "quantity": 3}
+        assert [type(content["price"]), type(content["discounts"][0]), type(content["quantity"])] == [float, float, int]
 
     def test_execute_accepts_an_extension_arg_as_the_only_run_source(self, mocker: MockerFixture) -> None:
         """A server's own run source in `extra` satisfies the precondition and merges into the body as a top-level property."""
