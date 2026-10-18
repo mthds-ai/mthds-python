@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from mthds.protocol.working_memory import WorkingMemoryAbstract
 
 
-PROTOCOL_VERSION: Final[str] = "1.0.0"
+PROTOCOL_VERSION: Final[str] = "2.0.0"
 """The MTHDS Protocol version this SDK implements.
 
 This is a copy of a cut made by the standard, and the only place this library
@@ -32,7 +32,7 @@ leaves those alone leaves this number exactly where it is, so it never tracks
 Version") for what bumps it.
 """
 
-CORE_ERROR_REGISTRY_VERSION: Final[str] = "7.1.0"
+CORE_ERROR_REGISTRY_VERSION: Final[str] = "8.0.0"
 """The version of the MTHDS core error registry this SDK reads problems against.
 
 The registry is published with each release of the standard and carries that release's

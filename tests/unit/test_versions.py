@@ -12,9 +12,9 @@ class TestVersions:
         # Pinned deliberately: these are copies of a cut made in the standard
         # (https://mthds.ai/latest/spec/versioning/), so a value moving here without a
         # cut moving there is exactly what this asserts against.
-        assert MTHDS_STANDARD_VERSION == "7.0.0"
-        assert PROTOCOL_VERSION == "1.0.0"
-        assert CORE_ERROR_REGISTRY_VERSION == "7.1.0"
+        assert MTHDS_STANDARD_VERSION == "8.0.0"
+        assert PROTOCOL_VERSION == "2.0.0"
+        assert CORE_ERROR_REGISTRY_VERSION == "8.0.0"
         assert is_valid_semver(MTHDS_STANDARD_VERSION)
         assert is_valid_semver(PROTOCOL_VERSION)
         assert is_valid_semver(CORE_ERROR_REGISTRY_VERSION)
@@ -23,26 +23,27 @@ class TestVersions:
         ("topic", "constraint", "is_satisfied"),
         [
             ("the constraint every manifest written before the 2.0.0 cut carries", ">=1.0.0", True),
-            ("an exact pin on the current standard", "7.0.0", True),
+            ("an exact pin on the current standard", "8.0.0", True),
             ("a package needing the crate-key wire form", ">=2.1.0", True),
             ("a package needing the verdict natives", ">=3.0.0", True),
             ("a package needing the binding step", ">=4.0.0", True),
             ("a package needing the evidence-prompt PipeJudge and Rating.label", ">=5.0.0", True),
             ("a package needing plain stored names", ">=6.0.0", True),
             ("a package needing the method tree", ">=7.0.0", True),
-            ("a caret range over the current major", "^7.0.0", True),
-            ("a tilde range over the current minor", "~7.0.0", True),
-            ("a wildcard over the current major", "7.*", True),
+            ("a package needing the problem document", ">=8.0.0", True),
+            ("a caret range over the current major", "^8.0.0", True),
+            ("a tilde range over the current minor", "~8.0.0", True),
+            ("a wildcard over the current major", "8.*", True),
             ("any standard version at all", "*", True),
-            ("a compound range spelled with a space, as the manifest format documents it", ">=7.0.0, <8.0.0", True),
-            ("the same compound range spelled without one", ">=7.0.0,<8.0.0", True),
-            ("a caret range over the superseded major", "^6.0.0", False),
-            ("an exact pin on a superseded cut", "6.0.0", False),
-            ("a tilde range over a superseded minor", "~6.0.0", False),
-            ("a wildcard over the superseded major", "6.*", False),
-            ("a package that predates the cut and says so", "<7.0.0", False),
-            ("a package needing a standard that does not exist yet", ">=8.0.0", False),
-            ("a compound range closing below the current standard", ">=6.0.0, <7.0.0", False),
+            ("a compound range spelled with a space, as the manifest format documents it", ">=8.0.0, <9.0.0", True),
+            ("the same compound range spelled without one", ">=8.0.0,<9.0.0", True),
+            ("a caret range over the superseded major", "^7.0.0", False),
+            ("an exact pin on a superseded cut", "7.0.0", False),
+            ("a tilde range over a superseded minor", "~7.0.0", False),
+            ("a wildcard over the superseded major", "7.*", False),
+            ("a package that predates the cut and says so", "<8.0.0", False),
+            ("a package needing a standard that does not exist yet", ">=9.0.0", False),
+            ("a compound range closing below the current standard", ">=7.0.0, <8.0.0", False),
         ],
     )
     def test_manifest_constraint_evaluated_against_the_standard_version(self, topic: str, constraint: str, is_satisfied: bool):
