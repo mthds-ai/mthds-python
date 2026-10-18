@@ -20,7 +20,8 @@ Every route raises only these, so `except PipelineRequestError` catches every fa
 - `BlobUploadError`: an upload to the target `POST /blobs/missing` named failed. Its problem is the
   target's own problem document when it answered non-2xx with one, else the problem the answer's
   status names; `client.unreachable` or `client.timeout` when the upload got no usable answer, which
-  is safe to repeat; and `client.response_unreadable` when the target is no URL the client can send to.
+  is safe to repeat; and `client.response_unreadable` when the target is malformed: no URL the client
+  can send to, or a header it cannot write.
 """
 
 from __future__ import annotations
@@ -165,9 +166,11 @@ class BlobUploadError(PipelineRequestError):
     The error keeps the status and the body as text beside it. An upload that got no usable answer
     reads as a request that creates nothing, since a blob is named by its bytes and its upload is
     safe to repeat: `client.unreachable` naming the target, or `client.timeout`, with no status, as
-    the TypeScript client's `BlobUploadError` has none then. A target that is no URL the client can
-    send to, such as one naming another scheme than `http` or `https`, makes the answer that named
-    it one the client cannot use: `client.response_unreadable`, naming that answer's `200`.
+    the TypeScript client's `BlobUploadError` has none then. A malformed target, one that is no URL
+    the client can send to, such as one naming another scheme than `http` or `https`, or one with a
+    header the client cannot write, such as a value not in ASCII or holding a line break, makes the
+    answer that named it one the client cannot use: `client.response_unreadable`, naming that
+    answer's `200`, which no repeat changes. Its headers are never quoted, as they may carry credentials.
     `upload_url` is the target without its userinfo, its query and its fragment, since a presigned
     query carries a signature that grants the write and a `user:password@` is a credential; the
     full URL is never kept, nor written into the message or the problem.

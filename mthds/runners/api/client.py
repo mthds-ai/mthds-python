@@ -712,8 +712,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 the problem a request that creates nothing reads as, since a blob is named by its bytes
                 and its upload is safe to repeat (`client.unreachable` naming the target without its
                 userinfo, query and fragment, or `client.timeout`), with no status; or if the target is
-                no URL the client can send to (`client.response_unreadable`, naming the `200` of the
-                answer that named it).
+                malformed: no URL the client can send to, or a header the client cannot write, such as
+                one not in ASCII or holding a line break (`client.response_unreadable`, naming the `200`
+                of the answer that named it, never quoting the headers).
         """
         data_sha256 = await asyncio.to_thread(sha256_hex, data)
         if len(data) != blob.size or data_sha256 != blob.sha256:
@@ -748,7 +749,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             ApiResponseError: If the runner answers `version` or `missing_blobs` with a failure, an answer
                 naming a blob the tree does not hold included (`client.response_unreadable`).
             ApiTransportError: If `version` or `missing_blobs` got no answer.
-            BlobUploadError: If an upload target answers non-2xx, the upload gets no usable answer, or the target is no URL the client can send to.
+            BlobUploadError: If an upload target answers non-2xx, the upload gets no usable answer, or the target is malformed.
         """
         if tree.directory is None:
             msg = "This tree was not listed from a directory, so its files cannot be read from disk: send its bytes with prepare_files_from_contents."
@@ -780,7 +781,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             ApiResponseError: If the runner answers `version` or `missing_blobs` with a failure, an answer
                 naming a blob the tree does not hold included (`client.response_unreadable`).
             ApiTransportError: If `version` or `missing_blobs` got no answer.
-            BlobUploadError: If an upload target answers non-2xx, the upload gets no usable answer, or the target is no URL the client can send to.
+            BlobUploadError: If an upload target answers non-2xx, the upload gets no usable answer, or the target is malformed.
         """
         tree_files = await asyncio.to_thread(tree_files_from_contents, contents)
         return await self._prepare_files(
@@ -872,8 +873,13 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             # The target is the runner's choice, not a setting of this client, and no repeat changes it: the
             # `POST /blobs/missing` answer that named it is one the client cannot use. httpx's own words are left
             # out, as they may quote a part of the URL.
-            msg = f"The runner named an upload target for blob {blob.sha256} that the client cannot send to: {upload_url}"
-            raise BlobUploadError(msg, problem=unreadable_answer(_MISSING_BLOBS_SUCCESS_STATUS), sha256=blob.sha256, upload_url=upload_url) from exc
+            raise _unusable_target_error(blob=blob, upload_url=upload_url) from exc
+        except (httpx.LocalProtocolError, UnicodeEncodeError):
+            # A header the client cannot write, one httpx cannot encode in ASCII or one h11 refuses, such as a value
+            # holding a line break, makes the target as unusable as an invalid URL, and nothing was sent. It is named
+            # before the transport failures it belongs to, which would read it as a retryable `client.unreachable`.
+            # The cause is left off: h11's refusal quotes the header's value, which may be a credential.
+            raise _unusable_target_error(blob=blob, upload_url=upload_url) from None
         except (httpx.TransportError, httpx.DecodingError) as exc:
             # Read as on a route that creates nothing: a blob is named by its bytes, so storing them twice is
             # harmless and an upload that may have reached the target is safe to repeat.
@@ -1202,6 +1208,16 @@ def _read_listed_file(tree: MethodTree, *, tree_file: TreeFile) -> bytes:
         msg = f"The file {tree_file.path!r} of the tree rooted at {tree.directory} changed after the tree was listed: list the tree again."
         raise TreeSourceError(msg)
     return data
+
+
+def _unusable_target_error(*, blob: MissingBlob, upload_url: str) -> BlobUploadError:
+    """The error of an upload target the client cannot send to: `client.response_unreadable`, naming the `200` of the answer that named it.
+
+    The message names the target without its userinfo, query and fragment, and never quotes its headers,
+    whose values may be credentials too.
+    """
+    msg = f"The runner named an upload target for blob {blob.sha256} that the client cannot send to: {upload_url}"
+    return BlobUploadError(msg, problem=unreadable_answer(_MISSING_BLOBS_SUCCESS_STATUS), sha256=blob.sha256, upload_url=upload_url)
 
 
 def _is_create_only(target: UploadTarget) -> bool:

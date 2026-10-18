@@ -1069,6 +1069,13 @@ class BlobWireBodies:
     UPLOAD_URL_WITH_INVALID_PORT_STRIPPED: ClassVar[str] = "https://bucket.example:abc/org_1/blobs/card"
     UPLOAD_URL_WITH_OTHER_SCHEME: ClassVar[str] = "ftp://uploader:pa55word@bucket.example/org_1/blobs/card?X-Amz-Signature=0123abcd#part"
     UPLOAD_URL_WITH_OTHER_SCHEME_STRIPPED: ClassVar[str] = "ftp://bucket.example/org_1/blobs/card"
+    # A header value that may be a credential, which no error may quote, in the two headers the client cannot write:
+    # httpx cannot encode the first in ASCII, and h11 refuses the line break of the second before writing anything.
+    HEADER_SECRET: ClassVar[str] = "s3cr3t-hdr"
+    UNWRITABLE_TARGET_HEADERS: ClassVar[list[tuple[str, dict[str, str]]]] = [
+        ("a header value that is not ASCII", {"If-None-Match": "*", "x-amz-meta-owner": f"tökén-{HEADER_SECRET}"}),
+        ("a header value holding a line break", {"If-None-Match": "*", "x-amz-meta-owner": f"owner\r\nAuthorization: {HEADER_SECRET}"}),
+    ]
     UPLOAD_HEADERS: ClassVar[dict[str, str]] = {
         "If-None-Match": "*",
         "Content-Type": "application/octet-stream",

@@ -1,6 +1,8 @@
 import asyncio
 import json
 import threading
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +34,8 @@ class _FakeRunner:
 
     It answers `version`, `blobs/missing` and `execute`, and stores an upload as a create-only object
     store does: bytes it already holds draw a `412`. An upload can be made to fail in transport, by the
-    httpx failure `upload_failure` names, or to get an answer whose body cannot be decoded.
+    httpx failure `upload_failure` names, or to get an answer whose body cannot be decoded, and the targets
+    it names can be moved to another origin, with other headers.
     """
 
     def __init__(self) -> None:
@@ -42,6 +45,8 @@ class _FakeRunner:
         self.upload_failure: type[httpx.TransportError] | None = None
         self.upload_body_broken = False
         self.unrequested_missing: list[str] = []
+        self.target_origin = f"https://{_BUCKET_HOST}"
+        self.target_headers: dict[str, str] = {"If-None-Match": "*"}
         self.requests: list[httpx.Request] = []
 
     def handle(self, request: httpx.Request) -> httpx.Response:
@@ -69,10 +74,9 @@ class _FakeRunner:
     def api_paths(self) -> list[str]:
         return [request.url.path for request in self.requests if request.url.host != _BUCKET_HOST]
 
-    @staticmethod
-    def _missing(sha256: str, size: int) -> dict[str, Any]:
-        url = f"https://{_BUCKET_HOST}/org_1/blobs/{sha256}?X-Amz-Signature=0123abcd"
-        return {"sha256": sha256, "size": size, "upload": {"method": "PUT", "url": url, "headers": {"If-None-Match": "*"}}}
+    def _missing(self, sha256: str, size: int) -> dict[str, Any]:
+        url = f"{self.target_origin}/org_1/blobs/{sha256}?X-Amz-Signature=0123abcd"
+        return {"sha256": sha256, "size": size, "upload": {"method": "PUT", "url": url, "headers": self.target_headers}}
 
     def _store(self, request: httpx.Request) -> httpx.Response:
         if self.upload_failure is not None:
@@ -87,6 +91,28 @@ class _FakeRunner:
             return httpx.Response(412, text="<Error><Code>PreconditionFailed</Code></Error>")
         self.held[sha256] = request.content
         return httpx.Response(200)
+
+
+@asynccontextmanager
+async def _silent_server() -> AsyncGenerator[tuple[str, list[bytes]], None]:
+    """A local server that accepts every connection and answers nothing, giving its origin and, once it is closed, what each connection sent.
+
+    httpx writes a request only once it is connected, so a request it refuses to write must reach a server
+    that accepts it for the refusal to be the client's own, rather than a connection that never opened.
+    """
+    received: list[bytes] = []
+
+    async def accept(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        received.append(await reader.read())
+        writer.close()
+
+    server = await asyncio.start_server(accept, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    try:
+        yield f"http://127.0.0.1:{port}", received
+    finally:
+        server.close()
+        await server.wait_closed()
 
 
 def _write_tree(root: Path) -> None:
@@ -395,6 +421,36 @@ class TestMthdsAPIClientBlobs:
         for credential in ("uploader", "pa55word", "Signature", "0123abcd", "#part"):
             assert credential not in str(error), topic
 
+    @pytest.mark.parametrize(("topic", "target_headers"), BlobWireBodies.UNWRITABLE_TARGET_HEADERS)
+    def test_an_upload_target_whose_headers_cannot_be_written_is_an_unusable_answer(self, topic: str, target_headers: dict[str, str]) -> None:
+        """Httpx's real transport refuses such a header before writing a byte, and no repeat changes it: never the retryable `client.unreachable`."""
+        client = self._client()
+
+        async def scenario() -> tuple[BlobUploadError, list[bytes]]:
+            async with _silent_server() as (origin, received):
+                target = UploadTarget(method="PUT", url=f"{origin}/org_1/blobs/card?X-Amz-Signature=0123abcd", headers=target_headers)
+                blob = MissingBlob(sha256=MethodFileMaps.CARD_SHA256, size=13, upload=target)
+                with pytest.raises(BlobUploadError) as exc_info:
+                    await client.upload_blob(blob, MethodFileMaps.CARD)
+            return exc_info.value, received
+
+        error, received = asyncio.run(scenario())
+
+        assert b"".join(received) == b"", topic
+        assert error.problem.as_wire() == make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": 200}).as_wire(), topic
+        assert not error.problem.is_retryable, topic
+        # The refusal is never chained, since h11's words quote the header's value.
+        assert error.__cause__ is None, topic
+        assert error.__suppress_context__, topic
+        assert (error.status, error.response_body) == (None, None), topic
+        assert str(error).startswith(f"The runner named an upload target for blob {MethodFileMaps.CARD_SHA256} that the client cannot send to: "), (
+            topic
+        )
+        serialized_problem = json.dumps(error.problem.as_wire())
+        for secret in (BlobWireBodies.HEADER_SECRET, "Signature", "0123abcd"):
+            assert secret not in str(error), topic
+            assert secret not in serialized_problem, topic
+
     # ── prepare_files ────────────────────────────────────────────
 
     def test_prepare_files_sends_a_small_tree_inline_without_asking(self, runner: _FakeRunner, tmp_path: Path) -> None:
@@ -574,6 +630,33 @@ class TestMthdsAPIClientBlobs:
 
         assert exc_info.value.problem.code == expected_code, topic
         assert len(runner.uploads) == 3, topic
+
+    @pytest.mark.parametrize(("topic", "target_headers"), BlobWireBodies.UNWRITABLE_TARGET_HEADERS)
+    def test_prepare_files_raises_a_target_whose_headers_cannot_be_written(
+        self, mocker: MockerFixture, runner: _FakeRunner, tmp_path: Path, topic: str, target_headers: dict[str, str]
+    ) -> None:
+        """A runner naming targets whose headers cannot be written gave an answer the client cannot use, which no retry of the tree changes."""
+        _write_tree(tmp_path)
+        tree = list_method_tree(tmp_path)
+        runner.target_headers = target_headers
+        client = self._client()
+        # The runner's routes stay on the fake, while the uploads go through httpx's real transport, whose h11 refuses a line break.
+        mocker.patch.object(client, "_make_upload_client", side_effect=_REAL_ASYNC_CLIENT)
+
+        async def scenario() -> tuple[BlobUploadError, list[bytes]]:
+            async with _silent_server() as (origin, received):
+                runner.target_origin = origin
+                with pytest.raises(BlobUploadError) as exc_info:
+                    await client.prepare_files(tree, inline_max_bytes=0)
+            return exc_info.value, received
+
+        error, received = asyncio.run(scenario())
+
+        assert b"".join(received) == b"", topic
+        assert error.problem.as_wire() == make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": 200}).as_wire(), topic
+        assert not error.problem.is_retryable, topic
+        for secret in (BlobWireBodies.HEADER_SECRET, "Signature", "0123abcd"):
+            assert secret not in str(error), topic
 
     @pytest.mark.parametrize(
         ("topic", "unrequested_sha256"),
