@@ -26,7 +26,8 @@ as a problem under a registered code, so that a caller branches on one shape:
 - **Anything else reads as `client.response_unreadable`**, naming the answer's status.
 
 `unreadable_answer` states the last case directly, for a success answer whose body is not the
-route's answer.
+route's answer. A success body is decoded by `decode_success_json`, which keeps none of the guards
+above but the refusal of what is not JSON: it is the caller's payload, not a problem document.
 """
 
 from __future__ import annotations
@@ -129,8 +130,8 @@ def _parse_int(text: str) -> int:
     return value
 
 
-def _parse_float(text: str) -> float:
-    """A JSON number with a fraction or an exponent, as written.
+def _parse_float_as_javascript(text: str) -> int | float:
+    """A JSON number with a fraction or an exponent, an integral value reading as an integer, as a JavaScript reader sees it.
 
     A literal past the range of a double, such as `1e999`, which Python and a JavaScript reader both
     read as an infinity, is refused.
@@ -138,12 +139,7 @@ def _parse_float(text: str) -> float:
     value = float(text)
     if not math.isfinite(value):
         _refuse_non_finite(text)
-    return value
-
-
-def _parse_float_as_javascript(text: str) -> int | float:
-    """A JSON number with a fraction or an exponent, an integral value reading as an integer, as a JavaScript reader sees it."""
-    return integral_as_int(_parse_float(text))
+    return integral_as_int(value)
 
 
 def nests_deeper_than(text: str, *, limit: int) -> bool:
@@ -163,26 +159,45 @@ def nests_deeper_than(text: str, *, limit: int) -> bool:
     return max(itertools.accumulate(map(_BRACKET_STEPS.__getitem__, brackets)), default=0) > limit
 
 
-def decode_json(text: str, *, numbers_as_written: bool = False) -> DecodedBody:
-    """Decode a body as JSON, as every reader of the protocol does.
+def decode_json(text: str) -> DecodedBody:
+    """Decode an error answer's body as JSON, as every reader of the protocol does when it looks for a problem.
 
     A body nested deeper than `MAX_BODY_NESTING` is refused before it is parsed. The constants
     `NaN`, `Infinity` and `-Infinity`, which Python's decoder accepts and JSON does not define, are
     refused, and so is a number past the range of a double, such as `1e999`, which would read as an
     infinity. Numbers read as a JavaScript reader reads them, so that the twins agree on a problem
-    document: one with no fractional part reads as an integer, so that `2.0` reads as `2`.
+    document: one with no fractional part reads as an integer, so that `2.0` reads as `2`. A success
+    body is the route's answer rather than a problem, and is decoded by `decode_success_json`.
 
     Args:
         text: The body.
-        numbers_as_written: Keep every number as written, so that `10.0` stays a float, as
-            `json.loads` reads it: for a success body, whose payload, such as a pipe's output, is
-            the caller's and not the protocol's.
     """
     if nests_deeper_than(text, limit=MAX_BODY_NESTING):
         return DecodedBody(is_json=False, value=None)
-    parse_float = _parse_float if numbers_as_written else _parse_float_as_javascript
     try:
-        value = json.loads(text, parse_constant=_refuse_constant, parse_float=parse_float, parse_int=_parse_int)
+        value = json.loads(text, parse_constant=_refuse_constant, parse_float=_parse_float_as_javascript, parse_int=_parse_int)
+    except (ValueError, RecursionError):
+        return DecodedBody(is_json=False, value=None)
+    return DecodedBody(is_json=True, value=value)
+
+
+def decode_success_json(content: bytes) -> DecodedBody:
+    """Decode a success body as JSON, as `httpx.Response.json()` reads it, with none of the guards a problem is read under.
+
+    A success body is the route's answer, whose payload, such as a pipe's output, is the caller's and not
+    the protocol's, so it is read within Python's own limits alone: an output nested deeper than
+    `MAX_BODY_NESTING` reads whole, and so does an integer past the range of a double, while every
+    number stays as written, so that `10.0` stays a float, and a float past that range, such as `1e999`,
+    reads as an infinity, as a JavaScript reader reads it. The bytes are decoded as UTF-8, strictly, a
+    leading byte order mark ignored as `Response.json()` ignores it, so that a body that is not UTF-8 is
+    no JSON rather than read with its bad bytes replaced. The constants `NaN` and `Infinity`, which
+    Python's decoder accepts and JSON does not define, are refused, as a JavaScript reader refuses them.
+
+    Args:
+        content: The body, as the bytes received.
+    """
+    try:
+        value = json.loads(content.decode("utf-8-sig"), parse_constant=_refuse_constant)
     except (ValueError, RecursionError):
         return DecodedBody(is_json=False, value=None)
     return DecodedBody(is_json=True, value=value)

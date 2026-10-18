@@ -28,7 +28,7 @@ from mthds.protocol.models import (
     ValidationResult,
     VersionInfo,
 )
-from mthds.protocol.problem.answers import RETRY_AFTER_HEADER, decode_json, parse_retry_after, unreadable_answer
+from mthds.protocol.problem.answers import RETRY_AFTER_HEADER, decode_json, decode_success_json, parse_retry_after, unreadable_answer
 from mthds.protocol.problem.client_problems import make_client_problem
 from mthds.protocol.problem.registry import CoreCode
 from mthds.protocol.protocol import MTHDSProtocol
@@ -335,11 +335,13 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         raises it with `client.response_unreadable`, except on a route that creates a run: there
         the runtime said it accepted the request, so the run may exist, and the answer reads as
         `client.outcome_unknown`, naming the run when the body gives its `pipeline_run_id` as a
-        non-empty string, in the problem's parameters and as its member. A success body is decoded by the rules every
-        body is (`mthds.protocol.problem.answers.decode_json`): `NaN`, `Infinity` and a number past
-        the range of a double are not JSON. Its numbers are kept as written, so that a pipe output's
-        `10.0` stays a float. A documented protected extension seam: a client built on this one
-        parses its own routes' answers through it too.
+        non-empty string, in the problem's parameters and as its member. A success body is decoded
+        from its bytes as `Response.json()` decodes it (`mthds.protocol.problem.answers.decode_success_json`),
+        within Python's own limits rather than a problem's: a body that is not UTF-8, or that holds
+        `NaN` or `Infinity`, is not JSON, while an output nested deeper than a problem may be, or
+        holding an integer past the range of a double, reads whole, and its numbers are kept as
+        written, so that a pipe output's `10.0` stays a float. A documented protected extension seam:
+        a client built on this one parses its own routes' answers through it too.
 
         Args:
             method: The HTTP method of the request, for the message.
@@ -360,7 +362,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             self._raise_api_response_error(
                 method=method, endpoint=endpoint, response=response, problem=reading.problem, problem_from_body=reading.from_body
             )
-        decoded = decode_json(response.text, numbers_as_written=True)
+        decoded = decode_success_json(response.content)
         if not decoded.is_json:
             self._raise_unreadable_success(method=method, endpoint=endpoint, response=response, creates_run=creates_run, body=None)
         try:
