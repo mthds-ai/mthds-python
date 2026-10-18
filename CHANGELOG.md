@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [v0.22.1] - 2026-10-19
+
+### Highlights
+
+**The problem document on the 0.22 line.** This maintenance release brings the problem work of `0.25.0` to consumers not yet on the files map that `0.23.0` introduced: every error this package raises carries the standard's problem document, read by its registry `code`, against the core error registry `8.0.0`, while a method still travels as `mthds_contents`. **Nothing of the files map comes with it**: no blob routes, no `files` argument and no run inputs rule, so `MTHDS_STANDARD_VERSION` stays `7.0.0` and `PROTOCOL_VERSION` stays `1.0.0`, while `CORE_ERROR_REGISTRY_VERSION` is `8.0.0`.
 
 ### Added
 
