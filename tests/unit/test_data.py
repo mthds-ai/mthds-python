@@ -84,6 +84,13 @@ class ExecuteWireResponses:
         "main_stuff_name": "extracted_entities",
     }
 
+    # The reduced answer naming no run the client can read: every field has the route's shape, but the run id is empty.
+    EMPTY_RUN_ID: ClassVar[dict[str, Any]] = {
+        **REDUCED,
+        "pipeline_run_id": "",
+        "pipe_output": {**REDUCED["pipe_output"], "pipeline_run_id": ""},
+    }
+
     # An output whose numbers a method wrote as floats, `10.0` among them: a caller reads them as
     # written, as `json.loads` does, never with the integral ones turned into integers.
     FLOAT_OUTPUT: ClassVar[dict[str, Any]] = {
