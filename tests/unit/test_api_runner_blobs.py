@@ -180,6 +180,30 @@ class TestMthdsAPIClientBlobs:
         )
         assert exc_info.value.request_url == f"{_BASE_URL}/v1/blobs/missing"
 
+    @pytest.mark.parametrize(("topic", "answer"), BlobWireBodies.UNREADABLE_SIGNED_ANSWERS)
+    def test_an_unreadable_missing_blobs_success_never_shows_its_signed_urls(self, mocker: MockerFixture, topic: str, answer: dict[str, Any]) -> None:
+        """A success naming upload targets is never quoted, malformed or not the route's answer: only `response_body` keeps its signed URLs."""
+        client = self._client()
+        body = json.dumps(answer)
+        request = httpx.Request("POST", f"{_BASE_URL}/v1/blobs/missing")
+        response = httpx.Response(200, text=body, headers={"Content-Type": "application/json"}, request=request)
+        mocker.patch.object(client, "_send", mocker.AsyncMock(return_value=response))
+
+        with pytest.raises(ApiResponseError) as exc_info:
+            asyncio.run(client.missing_blobs([BlobRef(sha256=MethodFileMaps.CARD_SHA256, size=13)]))
+
+        error = exc_info.value
+        assert error.problem.as_wire() == make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": 200}).as_wire(), topic
+        assert str(error) == (
+            "API POST /v1/blobs/missing failed (200): "
+            "The runtime answered with the HTTP status 200 and a body that is not a problem document the client can read.\n"
+            "Next step: Report this to whoever runs the runtime, with the status and the body."
+        ), topic
+        for shown in (str(error), json.dumps(error.problem.as_wire())):
+            assert BlobWireBodies.SECRET_SIGNATURE not in shown, topic
+            assert "X-Amz-Signature" not in shown, topic
+        assert error.response_body == body, topic
+
     # ── upload_blob ──────────────────────────────────────────────
 
     def test_upload_blob_sends_exactly_the_target_headers(self, runner: _FakeRunner) -> None:

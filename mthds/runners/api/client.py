@@ -905,9 +905,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         Every route calls this for a non-2xx answer and for a success it cannot read, so it is the one
         place an answer becomes an error. When the body is not the problem the error carries, the
         message quotes its start on its own line (`mthds.runners.api.problem.answer_excerpt`), so that
-        a person sees what the server said while the problem keeps the registry's words. A documented
-        protected extension seam: a client built on this one overrides it to raise its own subclass of
-        `ApiResponseError`, and every inherited route then raises that subclass.
+        a person sees what the server said while the problem keeps the registry's words. A success of
+        `POST /blobs/missing` is never quoted, as the TypeScript client never quotes it: it names each
+        upload target by its URL, whose query, such as a presigned signature, is the permission to
+        write. `response_body` keeps every body whole. A documented protected extension seam: a client
+        built on this one overrides it to raise its own subclass of `ApiResponseError`, and every
+        inherited route then raises that subclass.
 
         Args:
             method: The HTTP method of the request, for the message (`POST`).
@@ -923,7 +926,8 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             ApiResponseError: Always.
         """
         msg = f"API {method} /{self._API_PREFIX}/{endpoint} failed ({response.status_code}): {problem.detail}"
-        excerpt = answer_excerpt(response, problem_from_body=problem_from_body)
+        names_upload_targets = response.is_success and endpoint in _SUCCESSES_NAMING_UPLOAD_TARGETS
+        excerpt = None if names_upload_targets else answer_excerpt(response, problem_from_body=problem_from_body)
         if excerpt is not None:
             msg = f"{msg}\nThe server answered: {excerpt}"
         raise ApiResponseError(
@@ -1147,6 +1151,10 @@ def _build_extensions(extra: dict[str, Any] | None, *, protocol_args: frozenset[
         raise make_argument_invalid_error(msg, argument="extra", reason="protocol_argument")
     return extensions
 
+
+# The endpoints whose success names upload targets by their URLs, each URL's query being the permission to
+# write, such as a presigned signature: an error's message never quotes such a body.
+_SUCCESSES_NAMING_UPLOAD_TARGETS: Final[frozenset[str]] = frozenset({"blobs/missing"})
 
 # The status of the `POST /blobs/missing` success, which an upload target it names that the client cannot
 # send to is read under, as `client.response_unreadable`.

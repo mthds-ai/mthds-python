@@ -443,7 +443,11 @@ class TestMthdsAPIClientErrors:
             assert exc.problem.code == "client.response_unreadable", f"{route}, {topic}"
             assert exc.problem.as_wire()["params"] == {"status": status}
         assert exc.status == status
-        assert str(exc).split("\n")[1] == f"The server answered: {body}"
+        if route == "POST /v1/blobs/missing":
+            # A success of this route names upload targets whose query is the permission to write, so it is never quoted.
+            assert "The server answered" not in str(exc), topic
+        else:
+            assert str(exc).split("\n")[1] == f"The server answered: {body}"
 
     @pytest.mark.parametrize(
         ("topic", "route", "status", "body", "expected_run_id"),

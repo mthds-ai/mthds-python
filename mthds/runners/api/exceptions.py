@@ -49,10 +49,12 @@ class ApiResponseError(PipelineRequestError):
     answer that is no problem document (`client.response_unreadable`, or the one code its status
     names). `str(exc)` names the request and the status, gives the problem's `detail`, quotes on its
     own line the start of a body that is not the problem it carries, such as a gateway's HTML page,
+    but never a `POST /blobs/missing` success, whose upload URLs carry the permission to write,
     and gives on its own line the problem's next step.
 
     The transport's view rides beside it: `status` and `status_text`, `headers` (names in lower case,
-    so `headers.get("retry-after")` reads the raw delay), `response_body` the raw text,
+    so `headers.get("retry-after")` reads the raw delay), `response_body` the raw text, a
+    `/blobs/missing` success's upload URLs and their signatures included, so treat it as a secret,
     `request_url` the URL requested and `api_url` the runner's base URL. `request_id` is the id to
     hand to support: the problem's own `request_id` member when the runtime sent one, else the
     answer's `X-Request-ID` header, which is never added to the problem. The error keeps this plain

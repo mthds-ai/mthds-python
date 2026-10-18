@@ -1097,3 +1097,18 @@ class BlobWireBodies:
         ("no upload target", {"sha256": CARD_SHA256, "size": 13}),
         ("an upload target without headers", {"sha256": CARD_SHA256, "size": 13, "upload": {"method": "PUT", "url": UPLOAD_URL}}),
     ]
+
+    # A presigned target whose signature neither an error's message nor its problem may show.
+    SECRET_SIGNATURE: ClassVar[str] = "secret-5f1c9e0a"
+    SIGNED_UPLOAD_URL: ClassVar[str] = f"https://bucket.example/org_1/blobs/{CARD_SHA256}?X-Amz-Signature={SECRET_SIGNATURE}"
+    # `/blobs/missing` successes the client cannot read, each naming the signed target, for a request listing the card's blob alone.
+    UNREADABLE_SIGNED_ANSWERS: ClassVar[list[tuple[str, dict[str, Any]]]] = [
+        (
+            "a malformed answer",
+            {"missing": [{"sha256": CARD_SHA256, "size": 13.0, "upload": {"method": "PUT", "url": SIGNED_UPLOAD_URL, "headers": {}}}]},
+        ),
+        (
+            "an answer naming a blob the request did not list",
+            {"missing": [{"sha256": "f" * 64, "size": 13, "upload": {"method": "PUT", "url": SIGNED_UPLOAD_URL, "headers": {}}}]},
+        ),
+    ]
