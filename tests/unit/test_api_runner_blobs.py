@@ -23,6 +23,7 @@ from tests.unit.test_data import BlobWireBodies, ExecuteWireResponses, MethodFil
 
 _BASE_URL = "http://localhost:8081"
 _BUCKET_HOST = "bucket.example"
+_MISSING_BLOBS_REQUEST_ID = "req_3c1e9a52"
 _REAL_ASYNC_CLIENT = httpx.AsyncClient
 
 
@@ -54,7 +55,7 @@ class _FakeRunner:
                 asked = json.loads(request.content)["blobs"]
                 missing = [self._missing(blob["sha256"], blob["size"]) for blob in asked if blob["sha256"] not in self.held]
                 missing.extend(self._missing(sha256, 1) for sha256 in self.unrequested_missing)
-                return httpx.Response(200, json={"missing": missing})
+                return httpx.Response(200, json={"missing": missing}, headers={"X-Request-ID": _MISSING_BLOBS_REQUEST_ID})
             case "/v1/execute":
                 return httpx.Response(200, json=ExecuteWireResponses.REDUCED)
             case _:
@@ -558,17 +559,23 @@ class TestMthdsAPIClientBlobs:
         ],
     )
     def test_prepare_files_refuses_a_blob_it_did_not_ask_for(self, runner: _FakeRunner, tmp_path: Path, topic: str, unrequested_sha256: str) -> None:
-        """A runner naming a blob the tree does not hold, by hash or by size, breaks the protocol, and nothing is uploaded."""
+        """An answer naming a blob the request did not list, by hash or by size, is an unreadable success, and nothing is uploaded."""
         _write_tree(tmp_path)
         runner.unrequested_missing = [unrequested_sha256]
         client = self._client()
 
-        with pytest.raises(PipelineRequestError, match=f"asked for blobs this tree does not hold: {unrequested_sha256}") as exc_info:
+        with pytest.raises(ApiResponseError) as exc_info:
             asyncio.run(client.prepare_files(list_method_tree(tmp_path), inline_max_bytes=0))
 
+        error = exc_info.value
         assert runner.uploads == [], topic
-        assert exc_info.value.problem.code == "client.response_unreadable", topic
-        assert exc_info.value.problem.as_wire()["params"] == {"status": 200}, topic
+        assert error.problem.as_wire() == make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": 200}).as_wire(), topic
+        assert (error.status, error.request_url, error.request_id) == (200, f"{_BASE_URL}/v1/blobs/missing", _MISSING_BLOBS_REQUEST_ID), topic
+        assert json.loads(error.response_body)["missing"][-1]["sha256"] == unrequested_sha256, topic
+        assert str(error).split("\n")[0] == (
+            "API POST /v1/blobs/missing failed (200): "
+            "The runtime answered with the HTTP status 200 and a body that is not a problem document the client can read."
+        ), topic
 
     def test_prepare_files_refuses_a_tree_not_listed_from_a_directory(self, runner: _FakeRunner) -> None:
         """A tree read from a map has no files on disk: its bytes go through `prepare_files_from_contents`."""

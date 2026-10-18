@@ -15,7 +15,7 @@ from mthds.config import load_config
 from mthds.method_tree.digest import sha256_hex, tree_digest, tree_files_from_contents
 from mthds.method_tree.exceptions import TreeSourceError
 from mthds.method_tree.file_entry import FileEntry, HashFileEntry, encode_file_entry
-from mthds.protocol.exceptions import PipelineRequestError, make_argument_invalid_error
+from mthds.protocol.exceptions import make_argument_invalid_error
 from mthds.protocol.models import (
     BlobRef,
     MissingBlob,
@@ -672,15 +672,22 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         Raises:
             ApiResponseError: If the runner answers non-2xx — a hash listed twice with different
                 sizes, a blob past the runner's limits, a runner that serves no blob routes, auth,
-                or a server fault — or a success the client cannot read (`client.response_unreadable`).
+                or a server fault — or a success the client cannot read, one naming a blob the
+                request did not list, by its hash or its size, included (`client.response_unreadable`).
             ApiTransportError: If no answer came back.
         """
         request = MissingBlobsRequest(blobs=list(blobs), digest=digest)
         content = request.model_dump_json(exclude_none=True).encode("utf-8")
         response = await self._request("POST", "blobs/missing", content=content, creates_run=False)
-        return self._parse_answer(
+        answer = self._parse_answer(
             method="POST", endpoint="blobs/missing", response=response, creates_run=False, parse=MissingBlobsResult.model_validate
         )
+        # The route lists only blobs of the request, and a blob is named by its hash and its size, so an
+        # answer naming another, such as a hash of the request at another size, is not the route's answer.
+        requested = {(blob.sha256, blob.size) for blob in request.blobs}
+        if any((blob.sha256, blob.size) not in requested for blob in answer.missing):
+            self._raise_unreadable_success(method="POST", endpoint="blobs/missing", response=response, creates_run=False, body=None)
+        return answer
 
     async def upload_blob(self, blob: MissingBlob, data: bytes) -> None:
         """Upload one blob's bytes to the target `missing_blobs` named for it.
@@ -734,10 +741,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         Raises:
             PipelineRequestError: If the tree was not listed from a directory or holds no file
-                (`client.argument_invalid`), or the runner asks for a blob the tree does not hold
-                (`client.response_unreadable`).
+                (`client.argument_invalid`).
             TreeSourceError: If a file cannot be read, or changed after the tree was listed.
-            ApiResponseError: If the runner answers `version` or `missing_blobs` with a failure.
+            ApiResponseError: If the runner answers `version` or `missing_blobs` with a failure, an answer
+                naming a blob the tree does not hold included (`client.response_unreadable`).
             ApiTransportError: If `version` or `missing_blobs` got no answer.
             BlobUploadError: If an upload target answers non-2xx, the upload gets no usable answer, or the target is no URL the client can send to.
         """
@@ -767,9 +774,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             The map of file entries, keyed by tree path in tree path order, ready for `files`.
 
         Raises:
-            PipelineRequestError: If `contents` holds no file (`client.argument_invalid`), or the
-                runner asks for a blob the tree does not hold (`client.response_unreadable`).
-            ApiResponseError: If the runner answers `version` or `missing_blobs` with a failure.
+            PipelineRequestError: If `contents` holds no file (`client.argument_invalid`).
+            ApiResponseError: If the runner answers `version` or `missing_blobs` with a failure, an answer
+                naming a blob the tree does not hold included (`client.response_unreadable`).
             ApiTransportError: If `version` or `missing_blobs` got no answer.
             BlobUploadError: If an upload target answers non-2xx, the upload gets no usable answer, or the target is no URL the client can send to.
         """
@@ -822,19 +829,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
 
         Every upload runs to its end before the first failure is raised, so no upload is left
         running against a closed connection; a blob uploaded beside a failed one is stored, which
-        is harmless since a blob is named by its bytes. A blob is named by its hash and its size, so
-        one the tree holds under the same hash at another size is a blob the tree does not hold.
-        An answer naming such a blob is not the route's answer, which lists only blobs of the
-        request, so it reads as `client.response_unreadable`, naming the route's `200`.
+        is harmless since a blob is named by its bytes. `missing` lists only blobs of the request,
+        one per hash of the tree, since `missing_blobs` refuses an answer naming any other.
         """
-        unknown: set[str] = set()
-        for blob in missing:
-            tree_file = file_of_blob.get(blob.sha256)
-            if tree_file is None or tree_file.size != blob.size:
-                unknown.add(blob.sha256)
-        if unknown:
-            msg = f"The runner asked for blobs this tree does not hold: {', '.join(sorted(unknown))}."
-            raise PipelineRequestError(msg, problem=unreadable_answer(_MISSING_BLOBS_SUCCESS_STATUS))
         if not missing:
             return
         slots = asyncio.Semaphore(_MAX_CONCURRENT_UPLOADS)
@@ -1151,8 +1148,8 @@ def _build_extensions(extra: dict[str, Any] | None, *, protocol_args: frozenset[
     return extensions
 
 
-# The status of the `POST /blobs/missing` success, which a `missing_blobs` answer naming a blob the tree
-# does not hold, or an upload target the client cannot send to, is read under, as `client.response_unreadable`.
+# The status of the `POST /blobs/missing` success, which an upload target it names that the client cannot
+# send to is read under, as `client.response_unreadable`.
 _MISSING_BLOBS_SUCCESS_STATUS = 200
 
 
