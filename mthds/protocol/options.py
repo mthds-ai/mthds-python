@@ -49,7 +49,7 @@ which of the two may be combined with what). When it does, it changes it here.
 from collections.abc import Mapping
 from typing import Final
 
-from mthds.protocol.exceptions import PipelineRequestError
+from mthds.protocol.exceptions import make_argument_invalid_error
 
 RUN_ARG_FILES: Final[str] = "files"
 """Wire key of the pipelex-api `files` extension — a whole method bundle as a path-to-text map."""
@@ -95,7 +95,7 @@ def normalized_selector(*, name: str, value: object) -> str | None:
         return None
     if not isinstance(value, str):
         msg = f"{name} must be a string, received {type(value).__name__}."
-        raise PipelineRequestError(msg)
+        raise make_argument_invalid_error(msg, argument=name, reason="not_a_string")
     return value or None
 
 
@@ -181,10 +181,10 @@ def assert_exclusive_run_sources(
     has_contents = bool(mthds_contents)
     if has_files and has_zip:
         msg = "files and bundle_b64 are two encodings of the same bundle and are mutually exclusive; provide one."
-        raise PipelineRequestError(msg)
+        raise make_argument_invalid_error(msg, argument="bundle_b64", reason="mutually_exclusive")
     if (has_files or has_zip) and has_contents:
         msg = "A method bundle (files/bundle_b64) is self-contained; it cannot be combined with mthds_contents."
-        raise PipelineRequestError(msg)
+        raise make_argument_invalid_error(msg, argument="mthds_contents", reason="mutually_exclusive")
 
 
 def assert_method_ref_pairs_with_nothing(
@@ -230,13 +230,13 @@ def assert_method_ref_pairs_with_nothing(
         return
     if mthds_contents:
         msg = "method_ref and inline mthds_contents are mutually exclusive; send one or the other."
-        raise PipelineRequestError(msg)
+        raise make_argument_invalid_error(msg, argument=RUN_ARG_METHOD_REF, reason="mutually_exclusive")
     if files is not None or bundle_b64 is not None:
         msg = "method_ref and a method bundle (bundle_b64 / files) are mutually exclusive; send one or the other."
-        raise PipelineRequestError(msg)
+        raise make_argument_invalid_error(msg, argument=RUN_ARG_METHOD_REF, reason="mutually_exclusive")
     if selected_method_id is not None:
         msg = (
             "method_ref and method_id are mutually exclusive: an address run carries its own provenance "
             "and takes no run-history linkage id. Send exactly one method selector."
         )
-        raise PipelineRequestError(msg)
+        raise make_argument_invalid_error(msg, argument=RUN_ARG_METHOD_REF, reason="mutually_exclusive")

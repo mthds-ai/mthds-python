@@ -15,7 +15,7 @@ _BASE_URL = "http://localhost:8081"
 _VERSION_BODY: dict[str, str] = {"protocol_version": "0.6.0", "runner_version": "1.0.0"}
 _INVALID_VALIDATION_BODY: dict[str, object] = {
     "is_valid": False,
-    "validation_errors": [{"category": "pipe_validation", "message": "Unknown concept."}],
+    "errors": [{"code": "method.concept_unresolved", "detail": "The method names the concept 'legal.Clausee', which no library declares."}],
     "pending_signatures": [],
     "is_runnable": False,
     "message": "Validation found errors.",

@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      # The 0.22 maintenance line publishes from the reviewed merge into its own branch.
+      - maint/v0.22
 
 jobs:
   build:
@@ -145,20 +147,31 @@ jobs:
             TITLE_SUFFIX=" (Pre-release)"
           fi
 
+          # A release from a maintenance line is never the repository's latest release, which stays
+          # the newest release from main.
+          LATEST_FLAG=""
+          case "$GITHUB_REF" in
+            refs/heads/maint/*) LATEST_FLAG="--latest=false" ;;
+          esac
+
+          # The tag is cut at the commit this run built: gh would otherwise cut it at the default
+          # branch's head, which is not the commit a maintenance line publishes.
           if [ -n "$CHANGELOG_NOTES" ]; then
             gh release create "v$VERSION" \
               --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
               --title "v$VERSION$TITLE_SUFFIX" \
               --generate-notes \
               --notes "$CHANGELOG_NOTES" \
-              $PRERELEASE_FLAG
+              $PRERELEASE_FLAG $LATEST_FLAG
           else
             gh release create "v$VERSION" \
               --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
               --title "v$VERSION$TITLE_SUFFIX" \
               --generate-notes \
               --notes "Release v$VERSION" \
-              $PRERELEASE_FLAG
+              $PRERELEASE_FLAG $LATEST_FLAG
           fi
       - name: Upload artifact signatures to GitHub Release
         env:

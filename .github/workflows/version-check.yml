@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - main
+      # A maintenance line, released from its own branch: the same check as a release into main.
+      - 'maint/v*'
 jobs:
   version-check:
     runs-on: ubuntu-latest
@@ -72,3 +74,23 @@ jobs:
             echo "✅ Version in pyproject.toml ($PR_VERSION) matches release branch version ($RELEASE_VERSION)"
           fi
           echo "======================================="
+
+      # A maintenance line maint/vX.Y releases X.Y.Z versions only, so its merge never publishes another line's version.
+      - name: Check version belongs to the maintenance line
+        if: startsWith(github.event.pull_request.base.ref, 'maint/v')
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          PR_VERSION: ${{ steps.current_version.outputs.version }}
+        run: |
+          LINE="${BASE_BRANCH#maint/v}"
+          echo "Maintenance line: $LINE"
+          echo "pyproject.toml version: $PR_VERSION"
+          if [[ ! "$LINE" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ ERROR: The base branch $BASE_BRANCH does not name a maintenance line in the form maint/vX.Y"
+            exit 1
+          fi
+          if [[ ! "$PR_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || "${PR_VERSION%.*}" != "$LINE" ]]; then
+            echo "❌ ERROR: Version in pyproject.toml ($PR_VERSION) is not a $LINE.Z version of the maintenance line $BASE_BRANCH"
+            exit 1
+          fi
+          echo "✅ Version in pyproject.toml ($PR_VERSION) belongs to the maintenance line $BASE_BRANCH"
