@@ -631,6 +631,24 @@ class TestMthdsAPIClientErrors:
                 f"Next step: Check that the runtime at {shown_url} is up and reachable, then try again."
             ), topic
 
+    def test_a_base_url_httpx_cannot_read_is_named_without_httpx_words(self) -> None:
+        """The `InvalidURL` of httpx 0.23 quotes the whole authority it cannot read, a credential included, so the message leaves it out."""
+
+        def refuse(_request: httpx.Request) -> httpx.Response:
+            msg = "The authority (user:token@runner.example) is not valid."
+            raise httpx.InvalidURL(msg)
+
+        client = MthdsAPIClient(api_key="test-token", base_url="https://user:token@runner.example", request_timeout_seconds=30.0)
+        client.client = httpx.AsyncClient(transport=httpx.MockTransport(refuse))
+        exc = self._raised(client, lambda client: client.version())
+
+        assert isinstance(exc, ClientNotConfiguredError)
+        assert exc.problem.code == "client.not_configured"
+        assert exc.problem.as_wire()["params"] == {"setting": "base_url"}
+        assert str(exc).startswith("API base URL 'https://runner.example' does not make a valid URL.\n"), str(exc)
+        for credential in ("user", "token"):
+            assert credential not in str(exc), str(exc)
+
     def test_a_202_on_execute_raises_run_still_running(self) -> None:
         """The protocol's async degrade reads as `client.follow_failed` naming the run, with the 202's hints on the error."""
         handler = _answering(202, text='{"pipeline_run_id":"run_7f3a"}', headers={"Location": "/v1/runs/run_7f3a", "Retry-After": "5"})

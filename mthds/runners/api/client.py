@@ -275,7 +275,9 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             msg = f"API {method} /{self._API_PREFIX}/{endpoint} failed: {problem.detail}"
             raise ApiTransportError(msg, problem=problem, api_url=self.base_url, request_url=url) from exc
         except httpx.InvalidURL as exc:
-            msg = f"API base URL '{url_without_credentials(self.base_url)}' does not make a valid URL: {exc}"
+            # httpx's own words are left out here too: the httpx versions this package accepts from 0.23 quote the
+            # whole authority they could not read, a `user:password@` in it included.
+            msg = f"API base URL '{url_without_credentials(self.base_url)}' does not make a valid URL."
             raise ClientNotConfiguredError(msg, problem=make_client_problem(CoreCode.CLIENT_NOT_CONFIGURED, params={"setting": "base_url"})) from exc
 
     def _parse_answer(

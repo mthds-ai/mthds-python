@@ -60,10 +60,11 @@ def url_without_credentials(url: str) -> str:
     """The URL without anything in it that may grant access: its userinfo, its query and its fragment.
 
     A `user:password@` in the authority is a credential and a presigned query carries the signature that
-    grants a write, so neither is written into a problem, a message or an error's member; the scheme, the
-    host, the port and the path are kept. The URL is cut by hand rather than by `urllib.parse.urlsplit`,
-    so that a URL it refuses, such as one whose host opens a bracket it never closes, cannot fail the
-    error that reports it, and a URL written without a scheme loses its userinfo too.
+    grants a write, so neither is written into a problem or a message, while an error's `api_url` and
+    `request_url` keep the URL as configured; the scheme, the host, the port and the path are kept. The
+    URL is cut by hand rather than by `urllib.parse.urlsplit`, so that a URL it refuses, such as one whose
+    host opens a bracket it never closes, cannot fail the error that reports it, and a URL written without
+    a scheme loses its userinfo too.
 
     Args:
         url: The URL, as configured or as the runner named it, valid or not.
