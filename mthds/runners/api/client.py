@@ -384,8 +384,10 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 carrying `client.outcome_unknown`, since the run may exist.
             ApiResponseError: If the server answers non-2xx — a refusal to run an invalid
                 method (`method.invalid`, its faults on `problem.errors`), a failed run, auth,
-                or a server fault — or a success the client cannot read, which leaves the
-                outcome unknown (`client.outcome_unknown`, naming the run when the body does).
+                or a server fault — or a success the client cannot read, an empty
+                `pipeline_run_id` included, which leaves the outcome unknown
+                (`client.outcome_unknown`, naming the run when the body names one the client
+                can read).
             ApiTransportError: If no answer came back; a request that left reads as
                 `client.outcome_unknown`, since the run may exist.
         """
@@ -404,7 +406,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
         content = to_json(body)
         response = await self._request("POST", "execute", content=content, creates_run=True)
         self._raise_if_execute_degraded(response)
-        return self._parse_answer(method="POST", endpoint="execute", response=response, creates_run=True, parse=DictRunResultExecute.model_validate)
+        result = self._parse_answer(method="POST", endpoint="execute", response=response, creates_run=True, parse=DictRunResultExecute.model_validate)
+        if _usable_run_id(result.pipeline_run_id) is None:
+            # The answer has the route's shape but names no run the client can read, such as an empty id:
+            # the runtime accepted the request, so the run may exist, as `start` reads the same answer.
+            self._raise_unreadable_success(method="POST", endpoint="execute", response=response, creates_run=True, body=None)
+        return result
 
     @override
     async def start(

@@ -450,6 +450,7 @@ class TestMthdsAPIClientErrors:
             ("an execute whose output is not one", "POST /v1/execute", 200, '{"pipeline_run_id":"run_7f3a","pipe_output":42}', "run_7f3a"),
             ("an execute with no output", "POST /v1/execute", 200, '{"pipeline_run_id":"run_7f3a"}', "run_7f3a"),
             ("an execute naming an empty run", "POST /v1/execute", 200, '{"pipeline_run_id":"","pipe_output":{}}', None),
+            ("an execute whose answer reads but names an empty run", "POST /v1/execute", 200, json.dumps(ExecuteWireResponses.EMPTY_RUN_ID), None),
             ("a start whose run id is no string", "POST /v1/start", 202, '{"pipeline_run_id":42}', None),
             ("a start naming an empty run", "POST /v1/start", 202, '{"pipeline_run_id":""}', None),
             ("a start naming an empty run with members of its own", "POST /v1/start", 201, '{"pipeline_run_id":"","state":"queued"}', None),
