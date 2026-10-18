@@ -15,6 +15,8 @@ from mthds.method_tree.file_entry import Base64FileEntry, HashFileEntry, read_fi
 from mthds.method_tree.lister import list_method_tree
 from mthds.protocol.exceptions import PipelineRequestError
 from mthds.protocol.models import BlobRef, MissingBlob, MissingBlobsResult, UploadTarget
+from mthds.protocol.problem.client_problems import make_client_problem
+from mthds.protocol.problem.registry import CoreCode
 from mthds.runners.api.client import DEFAULT_INLINE_TREE_MAX_BYTES, MthdsAPIClient
 from mthds.runners.api.exceptions import ApiResponseError, BlobUploadError
 from tests.unit.test_data import BlobWireBodies, ExecuteWireResponses, MethodFileMaps
@@ -28,13 +30,16 @@ class _FakeRunner:
     """A runner keeping a blob store whose upload targets are presigned object-store URLs, served through httpx's MockTransport.
 
     It answers `version`, `blobs/missing` and `execute`, and stores an upload as a create-only object
-    store does: bytes it already holds draw a `412`.
+    store does: bytes it already holds draw a `412`. An upload can be made to fail in transport, by the
+    httpx failure `upload_failure` names, or to get an answer whose body cannot be decoded.
     """
 
     def __init__(self) -> None:
         self.blob_store = True
         self.held: dict[str, bytes] = {}
         self.upload_status: int | None = None
+        self.upload_failure: type[httpx.TransportError] | None = None
+        self.upload_body_broken = False
         self.unrequested_missing: list[str] = []
         self.requests: list[httpx.Request] = []
 
@@ -69,6 +74,11 @@ class _FakeRunner:
         return {"sha256": sha256, "size": size, "upload": {"method": "PUT", "url": url, "headers": {"If-None-Match": "*"}}}
 
     def _store(self, request: httpx.Request) -> httpx.Response:
+        if self.upload_failure is not None:
+            msg = "the transport failed"
+            raise self.upload_failure(msg, request=request)
+        if self.upload_body_broken:
+            return httpx.Response(200, stream=httpx.ByteStream(b"this was never gzip"), headers={"Content-Encoding": "gzip"})
         if self.upload_status is not None:
             return httpx.Response(self.upload_status, text="<Error><Code>AccessDenied</Code></Error>")
         sha256 = request.url.path.rsplit("/", 1)[-1]
@@ -271,6 +281,95 @@ class TestMthdsAPIClientBlobs:
         for credential in ("uploader", "pa55word", "Signature", "#part"):
             assert credential not in str(error)
 
+    @pytest.mark.parametrize(
+        ("topic", "failure", "expected_code", "expected_params"),
+        [
+            ("no connection opened", httpx.ConnectError, "client.unreachable", {"base_url": BlobWireBodies.UPLOAD_URL_WITH_USERINFO_STRIPPED}),
+            ("no answer in time", httpx.ReadTimeout, "client.timeout", {"seconds": 30}),
+            (
+                "the connection dropped mid-answer",
+                httpx.ReadError,
+                "client.unreachable",
+                {"base_url": BlobWireBodies.UPLOAD_URL_WITH_USERINFO_STRIPPED},
+            ),
+            ("a body that cannot be decoded", None, "client.unreachable", {"base_url": BlobWireBodies.UPLOAD_URL_WITH_USERINFO_STRIPPED}),
+        ],
+    )
+    def test_an_upload_that_got_no_answer_is_an_upload_error_safe_to_repeat(
+        self,
+        runner: _FakeRunner,
+        topic: str,
+        failure: type[httpx.TransportError] | None,
+        expected_code: str,
+        expected_params: dict[str, Any],
+    ) -> None:
+        """No usable answer reads as on a route that creates nothing, a blob being named by its bytes, naming the target without its credentials."""
+        client = MthdsAPIClient(api_key="test-token", base_url=_BASE_URL, request_timeout_seconds=30.0)
+        runner.upload_failure = failure
+        runner.upload_body_broken = failure is None
+        target = UploadTarget(method="PUT", url=BlobWireBodies.UPLOAD_URL_WITH_USERINFO, headers={})
+        blob = MissingBlob(sha256=MethodFileMaps.CARD_SHA256, size=13, upload=target)
+
+        with pytest.raises(BlobUploadError) as exc_info:
+            asyncio.run(client.upload_blob(blob, MethodFileMaps.CARD))
+
+        error = exc_info.value
+        assert len(runner.uploads) == 1, topic
+        assert isinstance(error.__cause__, httpx.TransportError | httpx.DecodingError), topic
+        assert error.problem.code == expected_code, topic
+        assert error.problem.as_wire()["params"] == expected_params, topic
+        assert error.problem.is_retryable, topic
+        assert not error.problem.outcome_is_unknown, topic
+        assert (error.sha256, error.upload_url) == (MethodFileMaps.CARD_SHA256, BlobWireBodies.UPLOAD_URL_WITH_USERINFO_STRIPPED), topic
+        assert (error.status, error.status_text, error.response_body) == (None, None, None), topic
+        assert str(error) == (
+            f"Uploading blob {MethodFileMaps.CARD_SHA256} to {BlobWireBodies.UPLOAD_URL_WITH_USERINFO_STRIPPED} failed: {error.problem.detail}\n"
+            f"Next step: {error.problem.next_step.detail}"
+        ), topic
+        serialized_problem = json.dumps(error.problem.as_wire())
+        for credential in ("uploader", "pa55word", "Signature", "0123abcd", "#part"):
+            assert credential not in str(error), topic
+            assert credential not in serialized_problem, topic
+
+    @pytest.mark.parametrize(
+        ("topic", "url", "shown_url", "cause"),
+        [
+            (
+                "a port that is no number",
+                BlobWireBodies.UPLOAD_URL_WITH_INVALID_PORT,
+                BlobWireBodies.UPLOAD_URL_WITH_INVALID_PORT_STRIPPED,
+                httpx.InvalidURL,
+            ),
+            (
+                "a scheme the client does not send to",
+                BlobWireBodies.UPLOAD_URL_WITH_OTHER_SCHEME,
+                BlobWireBodies.UPLOAD_URL_WITH_OTHER_SCHEME_STRIPPED,
+                httpx.UnsupportedProtocol,
+            ),
+        ],
+    )
+    def test_an_upload_target_the_client_cannot_send_to_is_an_unusable_answer(
+        self, topic: str, url: str, shown_url: str, cause: type[httpx.InvalidURL | httpx.UnsupportedProtocol]
+    ) -> None:
+        """Such a target is refused before anything leaves, and no repeat changes it: the answer that named it is one the client cannot use."""
+        client = self._client()
+        blob = MissingBlob(sha256=MethodFileMaps.CARD_SHA256, size=13, upload=UploadTarget(method="PUT", url=url, headers={}))
+
+        with pytest.raises(BlobUploadError) as exc_info:
+            asyncio.run(client.upload_blob(blob, MethodFileMaps.CARD))
+
+        error = exc_info.value
+        assert isinstance(error.__cause__, cause), topic
+        assert error.problem.as_wire() == make_client_problem(CoreCode.CLIENT_RESPONSE_UNREADABLE, params={"status": 200}).as_wire(), topic
+        assert not error.problem.is_retryable, topic
+        assert (error.upload_url, error.status, error.response_body) == (shown_url, None, None), topic
+        assert str(error) == (
+            f"The runner named an upload target for blob {MethodFileMaps.CARD_SHA256} that the client cannot send to: {shown_url}\n"
+            "Next step: Report this to whoever runs the runtime, with the status and the body."
+        ), topic
+        for credential in ("uploader", "pa55word", "Signature", "0123abcd", "#part"):
+            assert credential not in str(error), topic
+
     # ── prepare_files ────────────────────────────────────────────
 
     def test_prepare_files_sends_a_small_tree_inline_without_asking(self, runner: _FakeRunner, tmp_path: Path) -> None:
@@ -423,16 +522,33 @@ class TestMthdsAPIClientBlobs:
 
         assert all(upload.url.path.rsplit("/", 1)[-1] != sha256_hex(MethodFileMaps.LOGO) for upload in runner.uploads), topic
 
-    def test_prepare_files_raises_the_first_failed_upload(self, runner: _FakeRunner, tmp_path: Path) -> None:
-        """An upload target's refusal surfaces as the typed upload error once every upload has run to its end."""
+    @pytest.mark.parametrize(
+        ("topic", "upload_status", "upload_failure", "expected_code"),
+        [
+            ("a target's refusal", 403, None, "client.response_unreadable"),
+            ("an upload that got no answer", None, httpx.ConnectError, "client.unreachable"),
+        ],
+    )
+    def test_prepare_files_raises_the_first_failed_upload(
+        self,
+        runner: _FakeRunner,
+        tmp_path: Path,
+        topic: str,
+        upload_status: int | None,
+        upload_failure: type[httpx.TransportError] | None,
+        expected_code: str,
+    ) -> None:
+        """A failed upload, refused or unanswered, surfaces as the typed upload error once every upload has run to its end."""
         _write_tree(tmp_path)
-        runner.upload_status = 403
+        runner.upload_status = upload_status
+        runner.upload_failure = upload_failure
         client = self._client()
 
-        with pytest.raises(BlobUploadError):
+        with pytest.raises(BlobUploadError) as exc_info:
             asyncio.run(client.prepare_files(list_method_tree(tmp_path), inline_max_bytes=0))
 
-        assert len(runner.uploads) == 3
+        assert exc_info.value.problem.code == expected_code, topic
+        assert len(runner.uploads) == 3, topic
 
     @pytest.mark.parametrize(
         ("topic", "unrequested_sha256"),

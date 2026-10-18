@@ -17,8 +17,10 @@ Every route raises only these, so `except PipelineRequestError` catches every fa
 - `RunStillRunningError`: `/execute` answered `202`, the protocol's optional degrade, so the run
   goes on on the runtime and the client does not follow it: `client.follow_failed`, naming the run.
 - `ClientNotConfiguredError`: the client has no API key, no base URL, or a base URL it cannot send to: `client.not_configured`.
-- `BlobUploadError`: an upload target named by `POST /blobs/missing` answered non-2xx. Its problem is
-  the target's own problem document when it sent one, else the problem the answer's status names.
+- `BlobUploadError`: an upload to the target `POST /blobs/missing` named failed. Its problem is the
+  target's own problem document when it answered non-2xx with one, else the problem the answer's
+  status names; `client.unreachable` or `client.timeout` when the upload got no usable answer, which
+  is safe to repeat; and `client.response_unreadable` when the target is no URL the client can send to.
 """
 
 from __future__ import annotations
@@ -151,16 +153,22 @@ class RunStillRunningError(PipelineRequestError):
 
 
 class BlobUploadError(PipelineRequestError):
-    """An upload of one blob's bytes, to the target `POST /blobs/missing` named, answered non-2xx.
+    """An upload of one blob's bytes, to the target `POST /blobs/missing` named, failed: a non-2xx answer, no usable answer, or no URL to send to.
 
     The target is the runner's choice and may be another server than the runner, such as an
     object store behind a presigned URL, so its answer may be no problem document. `problem` reads
     it as any failed answer is read: the target's own problem document when it sent one, such as a
     runner's `PUT /blobs/{sha256}` refusal, else the problem its status names
     (`client.response_unreadable` naming the status, or the one code a status such as `503` names).
-    The error keeps the status and the body as text beside it. `upload_url` is the target without
-    its userinfo, its query and its fragment, since a presigned query carries a signature that
-    grants the write and a `user:password@` is a credential; the full URL is never kept.
+    The error keeps the status and the body as text beside it. An upload that got no usable answer
+    reads as a request that creates nothing, since a blob is named by its bytes and its upload is
+    safe to repeat: `client.unreachable` naming the target, or `client.timeout`, with no status, as
+    the TypeScript client's `BlobUploadError` has none then. A target that is no URL the client can
+    send to, such as one naming another scheme than `http` or `https`, makes the answer that named
+    it one the client cannot use: `client.response_unreadable`, naming that answer's `200`.
+    `upload_url` is the target without its userinfo, its query and its fragment, since a presigned
+    query carries a signature that grants the write and a `user:password@` is a credential; the
+    full URL is never kept, nor written into the message or the problem.
     """
 
     def __init__(
@@ -169,21 +177,21 @@ class BlobUploadError(PipelineRequestError):
         *,
         problem: Problem,
         sha256: str,
-        status: int,
-        status_text: str,
-        response_body: str,
         upload_url: str,
+        status: int | None = None,
+        status_text: str | None = None,
+        response_body: str | None = None,
     ) -> None:
         """Build the error; its message is `message` followed by the problem's next step.
 
         Args:
-            message: What failed and why, naming the blob and the status.
-            problem: The failure as a problem document, as the target's answer reads.
+            message: What failed and why, naming the blob, and the status when an answer came back.
+            problem: The failure as a problem document, as the target's answer, or the lack of one, reads.
             sha256: The SHA-256 of the blob whose upload failed, in lowercase hexadecimal.
-            status: The HTTP status code of the answer.
-            status_text: The HTTP reason phrase of the answer.
-            response_body: The answer's body, as text.
             upload_url: The upload target's URL without its userinfo, its query or its fragment.
+            status: The HTTP status code of the answer, `None` when no usable answer came back.
+            status_text: The HTTP reason phrase of the answer, `None` when no usable answer came back.
+            response_body: The answer's body, as text, `None` when no usable answer came back.
         """
         super().__init__(message, problem=problem)
         self.sha256 = sha256

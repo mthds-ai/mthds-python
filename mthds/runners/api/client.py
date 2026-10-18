@@ -693,7 +693,12 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             PipelineRequestError: If `data` is not the blob named: another SHA-256 or another size
                 (`client.argument_invalid`).
             BlobUploadError: If the target answers non-2xx, other than a create-only target's `412`,
-                carrying the problem its answer reads as.
+                carrying the problem its answer reads as; if the upload got no usable answer, carrying
+                the problem a request that creates nothing reads as, since a blob is named by its bytes
+                and its upload is safe to repeat (`client.unreachable` naming the target without its
+                userinfo, query and fragment, or `client.timeout`), with no status; or if the target is
+                no URL the client can send to (`client.response_unreadable`, naming the `200` of the
+                answer that named it).
         """
         data_sha256 = await asyncio.to_thread(sha256_hex, data)
         if len(data) != blob.size or data_sha256 != blob.sha256:
@@ -728,7 +733,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
             TreeSourceError: If a file cannot be read, or changed after the tree was listed.
             ApiResponseError: If the runner answers `version` or `missing_blobs` with a failure.
             ApiTransportError: If `version` or `missing_blobs` got no answer.
-            BlobUploadError: If an upload target answers non-2xx.
+            BlobUploadError: If an upload target answers non-2xx, the upload gets no usable answer, or the target is no URL the client can send to.
         """
         if tree.directory is None:
             msg = "This tree was not listed from a directory, so its files cannot be read from disk: send its bytes with prepare_files_from_contents."
@@ -760,7 +765,7 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
                 runner asks for a blob the tree does not hold (`client.response_unreadable`).
             ApiResponseError: If the runner answers `version` or `missing_blobs` with a failure.
             ApiTransportError: If `version` or `missing_blobs` got no answer.
-            BlobUploadError: If an upload target answers non-2xx.
+            BlobUploadError: If an upload target answers non-2xx, the upload gets no usable answer, or the target is no URL the client can send to.
         """
         tree_files = await asyncio.to_thread(tree_files_from_contents, contents)
         return await self._prepare_files(
@@ -846,19 +851,32 @@ class MthdsAPIClient(MTHDSProtocol[DictPipeOutputAbstract]):
     async def _upload_blob_with(self, *, upload_client: httpx.AsyncClient, blob: MissingBlob, data: bytes) -> None:
         """Upload one blob's bytes, already checked to be that blob, through `upload_client` with exactly its target's headers; see `upload_blob`."""
         target = blob.upload
-        # A request built outside the client carries exactly the target's headers (httpx adds only
-        # `Host` and `Content-Length`), where `client.request` would merge the client's defaults in.
-        request = httpx.Request(
-            target.method,
-            target.url,
-            content=data,
-            headers=target.headers,
-            extensions={"timeout": httpx.Timeout(self.request_timeout_seconds).as_dict()},
-        )
-        response = await upload_client.send(request)
+        upload_url = url_without_credentials(target.url)
+        try:
+            # A request built outside the client carries exactly the target's headers (httpx adds only
+            # `Host` and `Content-Length`), where `client.request` would merge the client's defaults in.
+            request = httpx.Request(
+                target.method,
+                target.url,
+                content=data,
+                headers=target.headers,
+                extensions={"timeout": httpx.Timeout(self.request_timeout_seconds).as_dict()},
+            )
+            response = await upload_client.send(request)
+        except (httpx.InvalidURL, httpx.UnsupportedProtocol) as exc:
+            # The target is the runner's choice, not a setting of this client, and no repeat changes it: the
+            # `POST /blobs/missing` answer that named it is one the client cannot use. httpx's own words are left
+            # out, as they may quote a part of the URL.
+            msg = f"The runner named an upload target for blob {blob.sha256} that the client cannot send to: {upload_url}"
+            raise BlobUploadError(msg, problem=unreadable_answer(_MISSING_BLOBS_SUCCESS_STATUS), sha256=blob.sha256, upload_url=upload_url) from exc
+        except (httpx.TransportError, httpx.DecodingError) as exc:
+            # Read as on a route that creates nothing: a blob is named by its bytes, so storing them twice is
+            # harmless and an upload that may have reached the target is safe to repeat.
+            problem = transport_failure_problem(exc, creates_run=False, base_url=upload_url, timeout_seconds=self.request_timeout_seconds)
+            msg = f"Uploading blob {blob.sha256} to {upload_url} failed: {problem.detail}"
+            raise BlobUploadError(msg, problem=problem, sha256=blob.sha256, upload_url=upload_url) from exc
         if response.is_success or (response.status_code == 412 and _is_create_only(target)):
             return
-        upload_url = url_without_credentials(target.url)
         # The target's answer reads as any failed answer does: its own problem document when it is one,
         # such as a runner's `PUT /blobs/{sha256}` refusal, else the problem its status names.
         reading = read_error_answer(response, creates_run=False)
@@ -1128,7 +1146,7 @@ def _build_extensions(extra: dict[str, Any] | None, *, protocol_args: frozenset[
 
 
 # The status of the `POST /blobs/missing` success, which a `missing_blobs` answer naming a blob the tree
-# does not hold is read under, as `client.response_unreadable`.
+# does not hold, or an upload target the client cannot send to, is read under, as `client.response_unreadable`.
 _MISSING_BLOBS_SUCCESS_STATUS = 200
 
 

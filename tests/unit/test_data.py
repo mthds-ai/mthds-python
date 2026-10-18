@@ -1057,6 +1057,11 @@ class BlobWireBodies:
     # A target whose authority carries a credential, with a query and a fragment: none of the three may reach an error.
     UPLOAD_URL_WITH_USERINFO: ClassVar[str] = "https://uploader:pa55word@bucket.example:8443/org_1/blobs/card?X-Amz-Signature=0123abcd#part"
     UPLOAD_URL_WITH_USERINFO_STRIPPED: ClassVar[str] = "https://bucket.example:8443/org_1/blobs/card"
+    # Targets the client cannot send to, each carrying the three credentials: httpx refuses the first's port, and the second's scheme.
+    UPLOAD_URL_WITH_INVALID_PORT: ClassVar[str] = "https://uploader:pa55word@bucket.example:abc/org_1/blobs/card?X-Amz-Signature=0123abcd#part"
+    UPLOAD_URL_WITH_INVALID_PORT_STRIPPED: ClassVar[str] = "https://bucket.example:abc/org_1/blobs/card"
+    UPLOAD_URL_WITH_OTHER_SCHEME: ClassVar[str] = "ftp://uploader:pa55word@bucket.example/org_1/blobs/card?X-Amz-Signature=0123abcd#part"
+    UPLOAD_URL_WITH_OTHER_SCHEME_STRIPPED: ClassVar[str] = "ftp://bucket.example/org_1/blobs/card"
     UPLOAD_HEADERS: ClassVar[dict[str, str]] = {
         "If-None-Match": "*",
         "Content-Type": "application/octet-stream",
