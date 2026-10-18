@@ -1,5 +1,7 @@
 """Shared test data constants for unit tests."""
 
+import json
+from pathlib import Path
 from typing import Any, ClassVar
 
 from mthds.method_tree.file_entry import Base64FileEntry, FileEntry, HashFileEntry
@@ -80,6 +82,32 @@ class ExecuteWireResponses:
             },
         },
         "main_stuff_name": "extracted_entities",
+    }
+
+    # The reduced answer naming no run the client can read: every field has the route's shape, but the run id is empty.
+    EMPTY_RUN_ID: ClassVar[dict[str, Any]] = {
+        **REDUCED,
+        "pipeline_run_id": "",
+        "pipe_output": {**REDUCED["pipe_output"], "pipeline_run_id": ""},
+    }
+
+    # An output whose numbers a method wrote as floats, `10.0` among them: a caller reads them as
+    # written, as `json.loads` does, never with the integral ones turned into integers.
+    FLOAT_OUTPUT: ClassVar[dict[str, Any]] = {
+        "pipeline_run_id": "run_7f3a",
+        "pipe_output": {
+            "pipeline_run_id": "run_7f3a",
+            "working_memory": {
+                "root": {
+                    "quote": {
+                        "concept": "pricing.Quote",
+                        "content": {"price": 10.0, "discounts": [2.0, 2.5], "quantity": 3},
+                    },
+                },
+                "aliases": {"main_stuff": "quote"},
+            },
+        },
+        "main_stuff_name": "quote",
     }
 
     # What the hosted runner sent before the runtime stopped dumping the concept object onto the
@@ -861,15 +889,15 @@ class MethodFileCases:
     OVERSIZED_INTEGER_DIGITS: ClassVar[int] = 4301
 
 
-class RefusedRunBodies:
-    """Problem documents a runner answers when it refuses a request, as they came off the wire.
+class LegacyAnswerBodies:
+    """Error answers that are no problem document of the protocol, as a runner or a gateway in front of it may send them.
 
-    The first three are the dev plane's `POST /v1/execute` refusals of the execution-errors
-    acceptance methods, captured on 2026-09-27 through `MthdsAPIClient` against
-    `https://api-dev.pipelex.com` (pipelex-api v0.29.0 on pipelex 0.67.0) and kept verbatim: a bundle
-    the runner refused at load with an itemized diagnostic, a run that failed at a pipe's combine
-    step, and a run that failed on a model the deck does not serve. The rest are the other shapes a
-    runner or a gateway in front of it may answer.
+    `UNKNOWN_MODEL_AT_LOAD` is the dev plane's `POST /v1/execute` refusal of a bundle naming an unknown
+    model, captured on 2026-09-27 through `MthdsAPIClient` against `https://api-dev.pipelex.com`
+    (pipelex-api v0.29.0 on pipelex 0.67.0) and kept verbatim: an RFC 9457 document written before the
+    protocol's core members existed, with no `code`, `domain`, `retry` or `next_step`, so a reader of
+    the protocol reads it as an answer it cannot read. The rest are the other shapes a runner or a
+    gateway may answer.
     """
 
     UNKNOWN_MODEL_AT_LOAD: ClassVar[str] = (
@@ -885,58 +913,99 @@ class RefusedRunBodies:
         '"user_action":{"kind":"change_input","detail":"Edit the bundle as each validation error says: apply its suggested fix '
         'where it has one, after confirming an unsafe one"}}'
     )
-    UNKNOWN_MODEL_DETAIL: ClassVar[str] = (
-        "Pipe 'draft_pitch' (PipeLLM), field 'model': Model handle 'gpt-5.1' was not found in the model deck\n\n"
-        "Did you mean: gpt-5.5, gpt-5.4, gpt-5.6-sol, gpt-5.4-pro, gpt-5.6-luna"
-    )
-    UNKNOWN_MODEL_NEXT_STEP: ClassVar[str] = (
-        "Edit the bundle as each validation error says: apply its suggested fix where it has one, after confirming an unsafe one"
-    )
-
-    COMBINE_FAILURE_AT_RUN: ClassVar[str] = (
-        '{"type":"https://docs.pipelex.com/latest/errors/stuff-factory-error/","title":"Stuff factory","status":422,'
-        "\"detail\":\"Pipe 'analyze_topics' failed (review_topics → analyze_topics): PipeParallel 'analyze_topics' cannot "
-        "combine its branch results into its output 'TopicReview'. Branch 'draft_ideas' gives result 'ideas' as a list, "
-        "'Idea[]', but field 'ideas' of 'TopicReview' holds a single item. Declare the field as a list in the structure of "
-        "'TopicReview', with type 'list', item_type 'concept' and item_concept_ref 'Idea', or make branch 'draft_ideas' output "
-        'a single \'Idea\'.","instance":"/v1/execute","request_id":"req_d4212542-63a6-4ddb-87c9-4b968785c8c5",'
-        '"error_domain":"input","error_type":"StuffFactoryError","user_action":{"kind":"change_input","detail":"Branch '
-        "'draft_ideas' gives result 'ideas' as a list, 'Idea[]', but field 'ideas' of 'TopicReview' holds a single item. "
-        "Declare the field as a list in the structure of 'TopicReview', with type 'list', item_type 'concept' and "
-        "item_concept_ref 'Idea', or make branch 'draft_ideas' output a single 'Idea'.\"}}"
-    )
-    COMBINE_FAILURE_NEXT_STEP: ClassVar[str] = (
-        "Branch 'draft_ideas' gives result 'ideas' as a list, 'Idea[]', but field 'ideas' of 'TopicReview' holds a single item. "
-        "Declare the field as a list in the structure of 'TopicReview', with type 'list', item_type 'concept' and "
-        "item_concept_ref 'Idea', or make branch 'draft_ideas' output a single 'Idea'."
-    )
-
-    UNSERVED_MODEL_AT_RUN: ClassVar[str] = (
-        '{"type":"https://docs.pipelex.com/latest/errors/model-not-found-error/","title":"Model not found","status":422,'
-        "\"detail\":\"Pipe 'condense_article' failed (digest_article → condense_article): Model handle 'gpt-5.1' was not "
-        'found in the model deck.","instance":"/v1/execute","request_id":"req_b7d2c66f-b2d5-4dc7-bd4f-6cf98abfbdc0",'
-        '"error_category":"configuration","error_domain":"input","retryable":false,"error_type":"ModelNotFoundError",'
-        '"user_action":{"kind":"change_model","detail":"Change the model \'gpt-5.1\' to an LLM the model deck serves."}}'
-    )
-    UNSERVED_MODEL_DETAIL: ClassVar[str] = (
-        "Pipe 'condense_article' failed (digest_article → condense_article): Model handle 'gpt-5.1' was not found in the model deck."
-    )
-    UNSERVED_MODEL_NEXT_STEP: ClassVar[str] = "Change the model 'gpt-5.1' to an LLM the model deck serves."
-
     # An older runner answer: `HTTPException` with a dict detail, no RFC 9457 members.
     LEGACY_DETAIL_OBJECT: ClassVar[str] = '{"detail":{"error_type":"PipeRunError","message":"Pipe \'summarize\' failed: the input is empty"}}'
     # A framework's unmatched-route answer.
     PLAIN_DETAIL_STRING: ClassVar[str] = '{"detail":"Not Found"}'
-    # A problem that names its class but not the occurrence.
-    TITLE_ONLY: ClassVar[str] = '{"type":"about:blank","title":"Malformed request","status":422}'
     # A gateway's page in front of the runner: no JSON at all.
     GATEWAY_HTML: ClassVar[str] = "<html><head><title>502 Bad Gateway</title></head><body><h1>502 Bad Gateway</h1></body></html>"
-    # Every member present with the wrong type, or empty, so each reads as absent.
-    MALFORMED_MEMBERS: ClassVar[str] = (
-        '{"type":42,"title":"","instance":["/v1/execute"],"detail":"The input is empty","request_id":"","error_domain":7,'
-        '"retryable":"false","user_action":{"kind":"change_input","detail":""},'
-        '"validation_errors":[{"category":"pipe_validation","message":"ok"},{"message":"no category"}]}'
-    )
+
+
+class ProblemBodies:
+    """Problem documents of the protocol, as a runner writes them from the core registry."""
+
+    MODEL_UNKNOWN: ClassVar[dict[str, Any]] = {
+        "type": "https://mthds.ai/errors/model.unknown",
+        "title": "A model the method names is unknown",
+        "status": 422,
+        "detail": "The method names the llm model 'gpt-5.1', which no catalog knows.",
+        "code": "model.unknown",
+        "domain": "method",
+        "retry": "no",
+        "next_step": {"kind": "contact_owner", "detail": "Ask the method's owner to name a model that exists in place of 'gpt-5.1'."},
+        "params": {"model": "gpt-5.1", "model_type": "llm", "suggestions": ["gpt-5.5", "gpt-5.4"]},
+        "location": {"pipe": "condense_article", "path": ["digest_article", "condense_article"]},
+        "pipeline_run_id": "run_b7d2c66f",
+        "request_id": "req_b7d2c66f-b2d5-4dc7-bd4f-6cf98abfbdc0",
+    }
+    MODEL_UNKNOWN_BODY: ClassVar[str] = json.dumps(MODEL_UNKNOWN)
+
+    METHOD_INVALID: ClassVar[dict[str, Any]] = {
+        "type": "https://mthds.ai/errors/method.invalid",
+        "title": "The method does not validate",
+        "status": 422,
+        "detail": "The method does not validate.",
+        "code": "method.invalid",
+        "domain": "method",
+        "retry": "no",
+        "next_step": {"kind": "contact_owner", "detail": "Ask the method's owner to fix the faults the problem's errors list."},
+        "errors": [
+            {
+                "code": "method.concept_unresolved",
+                "detail": "The method names the concept 'legal.Clausee', which no library declares.",
+                "params": {"concept": "legal.Clausee", "suggestions": ["legal.Clause"]},
+                "location": {"pipe": "extract_clauses", "file": "contracts.mthds", "line": 30},
+                "suggestions": ["legal.Clause"],
+                "suggested_fix": {
+                    "fix_code": "rename-concept-reference",
+                    "description": "Rename the concept 'legal.Clausee' to 'legal.Clause'.",
+                    "safety": "unsafe",
+                    "ops": [
+                        {
+                            "kind": "remap_value",
+                            "table_path": ["pipe", "extract_clauses"],
+                            "key": "output",
+                            "mapping": {"legal.Clausee": "legal.Clause"},
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+    METHOD_INVALID_BODY: ClassVar[str] = json.dumps(METHOD_INVALID)
+
+    RATE_LIMITED: ClassVar[dict[str, Any]] = {
+        "type": "https://mthds.ai/errors/account.rate_limited",
+        "title": "The account is over its request rate",
+        "status": 429,
+        "detail": "The account sent more than 60 requests in 60 seconds.",
+        "code": "account.rate_limited",
+        "domain": "account",
+        "retry": "yes",
+        "next_step": {"kind": "wait", "detail": "Wait for the rate window to pass, then send the request again."},
+        "params": {"limit": 60, "window": 60},
+    }
+    RATE_LIMITED_BODY: ClassVar[str] = json.dumps(RATE_LIMITED)
+
+
+class ProblemReadingCases:
+    """The shared problem-reading cases, which the TypeScript client reads too: every answer a client can meet, and the problem it reads as."""
+
+    PATH: ClassVar[Path] = Path(__file__).resolve().parents[1] / "data" / "problem-reading-cases.json"
+    DOCUMENT: ClassVar[dict[str, Any]] = json.loads(PATH.read_text(encoding="utf-8"))
+    CASES: ClassVar[list[dict[str, Any]]] = DOCUMENT["cases"]
+
+
+class VendoredRegistry:
+    """The vendored core error registry and the generator that turns it into a module."""
+
+    REPO_ROOT: ClassVar[Path] = Path(__file__).resolve().parents[2]
+    DIRECTORY: ClassVar[Path] = REPO_ROOT / "vendor" / "mthds-error-registry"
+    SNAPSHOT_PATH: ClassVar[Path] = DIRECTORY / "mthds-error-registry.json"
+    SIDECAR_PATH: ClassVar[Path] = DIRECTORY / "source.json"
+    GENERATOR_PATH: ClassVar[Path] = REPO_ROOT / "scripts" / "generate_error_registry.py"
+    SNAPSHOT: ClassVar[dict[str, Any]] = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+    SIDECAR: ClassVar[dict[str, Any]] = json.loads(SIDECAR_PATH.read_text(encoding="utf-8"))
 
 
 class MethodFileMaps:
@@ -995,6 +1064,18 @@ class BlobWireBodies:
     # A target whose authority carries a credential, with a query and a fragment: none of the three may reach an error.
     UPLOAD_URL_WITH_USERINFO: ClassVar[str] = "https://uploader:pa55word@bucket.example:8443/org_1/blobs/card?X-Amz-Signature=0123abcd#part"
     UPLOAD_URL_WITH_USERINFO_STRIPPED: ClassVar[str] = "https://bucket.example:8443/org_1/blobs/card"
+    # Targets the client cannot send to, each carrying the three credentials: httpx refuses the first's port, and the second's scheme.
+    UPLOAD_URL_WITH_INVALID_PORT: ClassVar[str] = "https://uploader:pa55word@bucket.example:abc/org_1/blobs/card?X-Amz-Signature=0123abcd#part"
+    UPLOAD_URL_WITH_INVALID_PORT_STRIPPED: ClassVar[str] = "https://bucket.example:abc/org_1/blobs/card"
+    UPLOAD_URL_WITH_OTHER_SCHEME: ClassVar[str] = "ftp://uploader:pa55word@bucket.example/org_1/blobs/card?X-Amz-Signature=0123abcd#part"
+    UPLOAD_URL_WITH_OTHER_SCHEME_STRIPPED: ClassVar[str] = "ftp://bucket.example/org_1/blobs/card"
+    # A header value that may be a credential, which no error may quote, in the two headers the client cannot write:
+    # httpx cannot encode the first in ASCII, and h11 refuses the line break of the second before writing anything.
+    HEADER_SECRET: ClassVar[str] = "s3cr3t-hdr"
+    UNWRITABLE_TARGET_HEADERS: ClassVar[list[tuple[str, dict[str, str]]]] = [
+        ("a header value that is not ASCII", {"If-None-Match": "*", "x-amz-meta-owner": f"tökén-{HEADER_SECRET}"}),
+        ("a header value holding a line break", {"If-None-Match": "*", "x-amz-meta-owner": f"owner\r\nAuthorization: {HEADER_SECRET}"}),
+    ]
     UPLOAD_HEADERS: ClassVar[dict[str, str]] = {
         "If-None-Match": "*",
         "Content-Type": "application/octet-stream",
@@ -1022,4 +1103,33 @@ class BlobWireBodies:
         ),
         ("no upload target", {"sha256": CARD_SHA256, "size": 13}),
         ("an upload target without headers", {"sha256": CARD_SHA256, "size": 13, "upload": {"method": "PUT", "url": UPLOAD_URL}}),
+    ]
+
+    # A presigned target whose signature neither an error's message nor its problem may show.
+    SECRET_SIGNATURE: ClassVar[str] = "secret-5f1c9e0a"
+    SIGNED_UPLOAD_URL: ClassVar[str] = f"https://bucket.example/org_1/blobs/{CARD_SHA256}?X-Amz-Signature={SECRET_SIGNATURE}"
+    # An object store's refusal of a presigned write, shaped as S3's `SignatureDoesNotMatch`: it echoes the key id, the string
+    # it signed and the signature it was given early in the body, and the presigned query later, all synthetic.
+    FAKE_ACCESS_KEY_ID: ClassVar[str] = "FAKE-ACCESS-KEY-ID-0001"
+    SIGNATURE_MISMATCH_BODY: ClassVar[str] = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<Error><Code>SignatureDoesNotMatch</Code>"
+        "<Message>The request signature we calculated does not match the signature you provided.</Message>"
+        f"<AWSAccessKeyId>{FAKE_ACCESS_KEY_ID}</AWSAccessKeyId>"
+        "<StringToSign>AWS4-HMAC-SHA256\n20261018T000000Z\n20261018/us-east-1/s3/aws4_request\n0f1e2d3c4b5a6978</StringToSign>"
+        f"<SignatureProvided>{SECRET_SIGNATURE}</SignatureProvided>"
+        f"<CanonicalRequest>PUT\n/org_1/blobs/{CARD_SHA256}\n"
+        f"X-Amz-Algorithm=AWS4-HMAC-SHA256&amp;X-Amz-Credential={FAKE_ACCESS_KEY_ID}&amp;X-Amz-Signature={SECRET_SIGNATURE}</CanonicalRequest>"
+        "<RequestId>FAKEREQUEST0001</RequestId></Error>"
+    )
+    # `/blobs/missing` successes the client cannot read, each naming the signed target, for a request listing the card's blob alone.
+    UNREADABLE_SIGNED_ANSWERS: ClassVar[list[tuple[str, dict[str, Any]]]] = [
+        (
+            "a malformed answer",
+            {"missing": [{"sha256": CARD_SHA256, "size": 13.0, "upload": {"method": "PUT", "url": SIGNED_UPLOAD_URL, "headers": {}}}]},
+        ),
+        (
+            "an answer naming a blob the request did not list",
+            {"missing": [{"sha256": "f" * 64, "size": 13, "upload": {"method": "PUT", "url": SIGNED_UPLOAD_URL, "headers": {}}}]},
+        ),
     ]

@@ -2,7 +2,7 @@
 
     POST /execute       : -> RunResultExecute (200: pipeline_run_id + pipe_output)
     POST /start         : -> RunResultStart   (202: pipeline_run_id only)
-    POST /validate      :              -> ValidationResult (200 union: ValidationReport | InvalidValidationReport)
+    POST /validate      :              -> ValidationResult (200 union: ValidationReport | InvalidValidationReport, items ProblemItem)
     GET  /models        :              -> ModelDeck
     GET  /version       :              -> VersionInfo
     POST /blobs/missing : MissingBlobsRequest -> MissingBlobsResult (optional, a runner with a blob store)
@@ -23,13 +23,23 @@ principle as the request-side `extra`.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Generic, Literal, TypeAlias, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeAlias, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from mthds._utils.pydantic_utils import empty_list_factory_of
+from mthds.protocol.problem.models import ProblemItem
 
 PipeOutputT = TypeVar("PipeOutputT")
+
+# The item type of a `/validate` verdict's `errors` and `warnings`: the protocol's `ProblemItem`, or an
+# implementation's subclass of it. Covariant, so a narrowed verdict is still a verdict of the base item.
+ProblemItemT = TypeVar("ProblemItemT", bound=ProblemItem, covariant=True)
+
+
+def _no_items() -> list[Any]:
+    """The empty item list a verdict without warnings reads as, whatever its item type."""
+    return []
 
 
 # ── Run responses (`POST /execute` 200, `POST /start` 202) ───────────
@@ -120,7 +130,7 @@ class ModelDeck(BaseModel):
     models: list[ModelInfo] = Field(default_factory=empty_list_factory_of(ModelInfo))
 
 
-class ValidationReport(BaseModel):
+class ValidationReport(BaseModel, Generic[ProblemItemT]):
     """The VALID arm of the `POST /validate` 200 response union (`is_valid: true`).
 
     `/validate` is a diagnostic endpoint: any produced verdict — valid or invalid —
@@ -129,9 +139,10 @@ class ValidationReport(BaseModel):
     problem. Non-2xx is reserved for "no verdict could be produced" (malformed
     request, auth, server fault).
 
-    The protocol declares only the `is_valid` discriminant here; implementations
-    include their own artifacts (parsed structures, graphs, anything else),
-    preserved as extension attributes (`extra="allow"`).
+    The protocol declares the `is_valid` discriminant, the runnability facts and the
+    advisory `warnings` here, one `ProblemItem` each, which never make the bundle
+    invalid; implementations include their own artifacts (parsed structures, graphs,
+    anything else), preserved as extension attributes (`extra="allow"`).
 
     Two of those extensions are the standard's own **recommended extension
     fields**, each with a page of its own since `mthds` v0.9.0 and typed in this
@@ -145,55 +156,43 @@ class ValidationReport(BaseModel):
     annotations, with no adapter machinery. That is how the Pipelex SDK narrows
     the same 200 body. Unlike this envelope, the artifacts themselves are closed
     shapes.
+
+    Generic over the item type of `warnings`, like `InvalidValidationReport`.
     """
 
     model_config = ConfigDict(extra="allow")
 
     is_valid: Literal[True] = True
+    warnings: list[ProblemItemT] = Field(default_factory=_no_items)
 
 
-class ValidationDiagnostic(BaseModel):
-    """One diagnostic in `InvalidValidationReport.validation_errors[]` — protocol base.
-
-    The protocol fixes only the neutral `category` + `message`; implementations
-    narrow `category` to their closed vocabulary and add structured locators
-    (preserved as extensions until narrowed). Named `ValidationDiagnostic` to stay
-    distinct from `pydantic.ValidationError` (this is a wire model, not an exception).
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    category: str
-    message: str
-
-
-ValidationDiagnosticT = TypeVar("ValidationDiagnosticT", bound=ValidationDiagnostic, covariant=True)
-
-
-class InvalidValidationReport(BaseModel, Generic[ValidationDiagnosticT]):
+class InvalidValidationReport(BaseModel, Generic[ProblemItemT]):
     """The INVALID arm of the `POST /validate` 200 response union (`is_valid: false`).
 
-    Carries the per-error diagnostics (`validation_errors[]`, always non-empty on an
-    invalid verdict), best-effort `pending_signatures`, `is_runnable: false`, and a
-    human-readable `message`. The structural artifacts of the valid arm are absent —
-    they do not exist when load/parse/wiring failed.
+    Carries one `ProblemItem` per fault in `errors` (always non-empty on an invalid
+    verdict), each with its own code, detail, params and location, the advisory
+    `warnings` in the same item schema, best-effort `pending_signatures`,
+    `is_runnable: false`, and, when the runner gives one, a human-readable `message`.
+    The structural artifacts of the valid arm are absent — they do not exist when
+    load/parse/wiring failed. An item carries a code and no verdict: its domain is read
+    from its code (`ProblemItem.effective_domain`).
 
-    Generic over the diagnostic item type so an implementation can narrow
-    `validation_errors` to its structured item (e.g. pipelex's `ValidationErrorItem`)
-    without re-declaring the field.
+    Generic over the item type so an implementation can narrow `errors` and `warnings`
+    to its own subclass of `ProblemItem` without re-declaring the fields.
     """
 
     model_config = ConfigDict(extra="allow")
 
     is_valid: Literal[False] = False
-    validation_errors: list[ValidationDiagnosticT]
+    errors: Annotated[list[ProblemItemT], Field(min_length=1)]
+    warnings: list[ProblemItemT] = Field(default_factory=_no_items)
     pending_signatures: list[str] = Field(default_factory=list)
     is_runnable: Literal[False] = False
-    message: str
+    message: str | None = None
 
 
 ValidationResult: TypeAlias = Annotated[
-    ValidationReport | InvalidValidationReport[ValidationDiagnostic],
+    ValidationReport[ProblemItem] | InvalidValidationReport[ProblemItem],
     Field(discriminator="is_valid"),
 ]
 """The `POST /validate` 200 response — discriminated on `is_valid`.
