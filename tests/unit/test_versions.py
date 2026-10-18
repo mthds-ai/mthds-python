@@ -14,7 +14,7 @@ class TestVersions:
         # cut moving there is exactly what this asserts against.
         assert MTHDS_STANDARD_VERSION == "7.0.0"
         assert PROTOCOL_VERSION == "1.0.0"
-        assert CORE_ERROR_REGISTRY_VERSION == "7.1.0"
+        assert CORE_ERROR_REGISTRY_VERSION == "8.0.0"
         assert is_valid_semver(MTHDS_STANDARD_VERSION)
         assert is_valid_semver(PROTOCOL_VERSION)
         assert is_valid_semver(CORE_ERROR_REGISTRY_VERSION)
