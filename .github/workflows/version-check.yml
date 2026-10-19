@@ -4,19 +4,28 @@ on:
   pull_request:
     branches:
       - main
+
+# Usage statistics are off for every job, as the usage-statistics specification requires of every repository's CI
+# (conformance's specs/usage-statistics.md, rule R8): a CI run is never open-source use, and PostHog bills every event.
+env:
+  DO_NOT_TRACK: "1"
+
 jobs:
   version-check:
     runs-on: ubuntu-latest
     steps:
       - name: Get branch info
         id: branch_info
+        # The branch names come through the environment, never interpolated into the script,
+        # since a pull request's head ref is chosen by its author.
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          SOURCE_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           echo "====== DEBUGGING BRANCH INFO ======"
           echo "PR URL: ${{ github.event.pull_request.html_url }}"
           echo "PR Number: ${{ github.event.pull_request.number }}"
-          
-          BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
-          SOURCE_BRANCH="${{ github.event.pull_request.head.ref }}"
+
           echo "Source branch: $SOURCE_BRANCH"
           echo "Target branch: $BASE_BRANCH"
           
@@ -38,7 +47,7 @@ jobs:
           echo "======================================="
 
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
