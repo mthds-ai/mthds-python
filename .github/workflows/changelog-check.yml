@@ -6,6 +6,11 @@ on:
       - main
     types: [opened, synchronize, reopened]
 
+# Usage statistics are off for every job, as the usage-statistics specification requires of every repository's CI
+# (conformance's specs/usage-statistics.md, rule R8): a CI run is never open-source use, and PostHog bills every event.
+env:
+  DO_NOT_TRACK: "1"
+
 jobs:
   check-changelog:
     runs-on: ubuntu-latest
