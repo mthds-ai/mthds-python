@@ -30,7 +30,7 @@ We are open to contributions in all areas of the mthds package:
    ```bash
    make install
    ```
-   This will create a virtual environment and install all project dependencies using uv.
+   This will create a virtual environment and install all project dependencies using uv, on the Python version `.python-version` names. [docs/development.md](docs/development.md) says how to try another one.
 
 3. **Run initial checks**
    ```bash

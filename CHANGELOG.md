@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **Dev tooling: the development Python is pinned in `.python-version`**: the Makefile, uv and CI read the version from that file, `PYTHON_VERSION=<version> make install` still builds `.venv` on another supported version, and each job of the CI matrices now fails unless its environment ran the version the job names. Nothing shipped changes.
+
 ## [v0.25.0] - 2026-10-18
 
 ### Added
