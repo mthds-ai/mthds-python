@@ -38,7 +38,7 @@ jobs:
         run: uv --version
 
       - name: Install dependencies
-        run: TEST_PROFILE=ci make install
+        run: make install
 
       - name: Run ruff format merge check
         run: make merge-check-ruff-format
