@@ -3,6 +3,11 @@ name: Lint check
 on:
   pull_request:
 
+# Usage statistics are off for every job, as the usage-statistics specification requires of every repository's CI
+# (conformance's specs/usage-statistics.md, rule R8): a CI run is never open-source use, and PostHog bills every event.
+env:
+  DO_NOT_TRACK: "1"
+
 jobs:
 # --------------------------------------------------------------------------
 # 1.  Matrix job — one runner *per* Python version
@@ -16,12 +21,13 @@ jobs:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
     env:
       VIRTUAL_ENV: ${{ github.workspace }}/.venv
+      UV_PYTHON: ${{ matrix.python-version }}
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -32,7 +38,7 @@ jobs:
         run: uv --version
 
       - name: Install dependencies
-        run: PYTHON_VERSION=${{ matrix.python-version }} TEST_PROFILE=ci make install
+        run: make install
 
       - name: Run ruff format merge check
         run: make merge-check-ruff-format
@@ -45,6 +51,9 @@ jobs:
 
       - name: Run mypy merge check
         run: make merge-check-mypy
+
+      - name: The interpreter is the one this job names
+        run: .venv/bin/python -c 'import sys; want = "${{ matrix.python-version }}"; got = "%d.%d" % sys.version_info[:2]; assert got == want, f"ran {got}, expected {want}"'
 
 # --------------------------------------------------------------------------
 # 2.  Aggregator job — the *single* required status check

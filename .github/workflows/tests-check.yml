@@ -7,6 +7,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
 
+# Usage statistics are off for every job, as the usage-statistics specification requires of every repository's CI
+# (conformance's specs/usage-statistics.md, rule R8): a CI run is never open-source use, and PostHog bills every event.
+env:
+  DO_NOT_TRACK: "1"
+
 jobs:
 # --------------------------------------------------------------------------
 # 1.  Test matrix — one job per supported Python version
@@ -25,14 +30,18 @@ jobs:
     env:
       VIRTUAL_ENV: ${{ github.workspace }}/.venv
       ENV: dev
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: PYTHON_VERSION=${{ matrix.python-version }} make install
+        run: make install
 
       - name: Run tests
         run: make gha-tests
+
+      - name: The interpreter is the one this job names
+        run: .venv/bin/python -c 'import sys; want = "${{ matrix.python-version }}"; got = "%d.%d" % sys.version_info[:2]; assert got == want, f"ran {got}, expected {want}"'
 
 # --------------------------------------------------------------------------
 # 2.  Aggregator job — the *single* required status check

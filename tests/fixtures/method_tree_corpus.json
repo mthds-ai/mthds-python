@@ -7815,6 +7815,48 @@
       }
     },
     {
+      "id": "run-inputs-key-with-malformed-entry",
+      "description": "A key inputs.json whose entry is malformed is refused as excluded_name alone: the entry checks read only the keys that are tree paths the membership rule could admit, so the unpadded Base64 under a refused key is never checked.",
+      "document": "{\"inputs.json\": {\"base64\": \"e30\"}, \"main.mthds\": \"x\"}",
+      "blob_store": [],
+      "expected": {
+        "refusal": {
+          "code": "excluded_name",
+          "names": [
+            "inputs.json"
+          ]
+        }
+      }
+    },
+    {
+      "id": "invalid-key-with-missing-blob",
+      "description": "A key that is not a tree path, holding a hash entry the blob store does not hold, is refused as invalid_tree_path alone, never as missing_blob: the entry under a refused key is never checked, so its hash is never named.",
+      "document": "{\"templates\\\\card.html\": {\"sha256\": \"3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0\", \"size\": 13}, \"main.mthds\": \"x\"}",
+      "blob_store": [],
+      "expected": {
+        "refusal": {
+          "code": "invalid_tree_path",
+          "names": [
+            "templates\\card.html"
+          ]
+        }
+      }
+    },
+    {
+      "id": "missing-blob-beside-excluded-key",
+      "description": "A map holding a key inputs.json beside a hash entry the blob store does not hold, under a key it admits, is refused as excluded_name alone, never as missing_blob: the bytes a hash entry names are checked last, only for a map that earns no other refusal, so a sender never uploads blobs for a map refused anyway.",
+      "document": "{\"inputs.json\": \"{}\\n\", \"card.html\": {\"sha256\": \"3e9b68b71cc667168399f0bccfb64b2d16314cdc0ed78fac4819aba0dda121a0\", \"size\": 13}, \"main.mthds\": \"x\"}",
+      "blob_store": [],
+      "expected": {
+        "refusal": {
+          "code": "excluded_name",
+          "names": [
+            "inputs.json"
+          ]
+        }
+      }
+    },
+    {
       "id": "case-collision-keys",
       "description": "Two keys equal once case-folded are refused, naming both.",
       "document": "{\"README.md\": \"1\", \"readme.md\": \"2\"}",

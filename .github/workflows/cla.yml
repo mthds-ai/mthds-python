@@ -11,6 +11,11 @@ permissions:
   pull-requests: write
   statuses: write
 
+# Usage statistics are off for every job, as the usage-statistics specification requires of every repository's CI
+# (conformance's specs/usage-statistics.md, rule R8): a CI run is never open-source use, and PostHog bills every event.
+env:
+  DO_NOT_TRACK: "1"
+
 jobs:
   CLAAssistant:
     runs-on: ubuntu-latest
