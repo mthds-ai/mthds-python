@@ -12,8 +12,8 @@ class TestVersions:
         # Pinned deliberately: these are copies of a cut made in the standard
         # (https://mthds.ai/latest/spec/versioning/), so a value moving here without a
         # cut moving there is exactly what this asserts against.
-        assert MTHDS_STANDARD_VERSION == "8.0.0"
-        assert PROTOCOL_VERSION == "2.0.0"
+        assert MTHDS_STANDARD_VERSION == "8.0.1"
+        assert PROTOCOL_VERSION == "2.0.1"
         assert CORE_ERROR_REGISTRY_VERSION == "8.0.1"
         assert is_valid_semver(MTHDS_STANDARD_VERSION)
         assert is_valid_semver(PROTOCOL_VERSION)
@@ -23,7 +23,8 @@ class TestVersions:
         ("topic", "constraint", "is_satisfied"),
         [
             ("the constraint every manifest written before the 2.0.0 cut carries", ">=1.0.0", True),
-            ("an exact pin on the current standard", "8.0.0", True),
+            ("an exact pin on the current standard", "8.0.1", True),
+            ("the constraint the standard's own manifest example carries", ">=8.0.1", True),
             ("a package needing the crate-key wire form", ">=2.1.0", True),
             ("a package needing the verdict natives", ">=3.0.0", True),
             ("a package needing the binding step", ">=4.0.0", True),
@@ -39,6 +40,7 @@ class TestVersions:
             ("the same compound range spelled without one", ">=8.0.0,<9.0.0", True),
             ("a caret range over the superseded major", "^7.0.0", False),
             ("an exact pin on a superseded cut", "7.0.0", False),
+            ("an exact pin on the superseded patch of the current minor", "8.0.0", False),
             ("a tilde range over a superseded minor", "~7.0.0", False),
             ("a wildcard over the superseded major", "7.*", False),
             ("a package that predates the cut and says so", "<8.0.0", False),

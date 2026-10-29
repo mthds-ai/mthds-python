@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from mthds.protocol.working_memory import WorkingMemoryAbstract
 
 
-PROTOCOL_VERSION: Final[str] = "2.0.0"
+PROTOCOL_VERSION: Final[str] = "2.0.1"
 """The MTHDS Protocol version this SDK implements.
 
 This is a copy of a cut made by the standard, and the only place this library

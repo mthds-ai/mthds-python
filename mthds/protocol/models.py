@@ -220,7 +220,9 @@ class VersionInfo(BaseModel):
         default=False,
         description=(
             "True when the runner keeps a blob store: it serves POST /blobs/missing and resolves hash entries in a files map. "
-            "False or absent when it does not, in which case it answers any hash entry with a 422 listing missing_blobs."
+            "False or absent when it does not, in which case it answers a files map that breaks no other rule but holds hash entries "
+            "with a 422 coded request.blobs_missing, listing their hashes in params.missing_blobs, and serves no upload route, "
+            "so a sender sends those files inline instead."
         ),
     )
 
