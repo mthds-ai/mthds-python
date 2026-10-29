@@ -32,7 +32,7 @@ leaves those alone leaves this number exactly where it is, so it never tracks
 Version") for what bumps it.
 """
 
-CORE_ERROR_REGISTRY_VERSION: Final[str] = "8.0.0"
+CORE_ERROR_REGISTRY_VERSION: Final[str] = "8.0.1"
 """The version of the MTHDS core error registry this SDK reads problems against.
 
 The registry is published with each release of the standard and carries that release's

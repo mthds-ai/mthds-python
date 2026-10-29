@@ -43,7 +43,7 @@ The same number appears in a library crate as a **stamp** rather than a constrai
 The core error registry is published with each release of the standard, under that release's number, and a new code moves no protocol number: that is why the registry has a version of its own here, and why it can stand ahead of `MTHDS_STANDARD_VERSION`, which follows the language rather than the codes. The registry's JSON snapshot and its schema are vendored byte for byte from the `mthds` repository, with a sidecar (`vendor/mthds-error-registry/source.json`) recording the ref, the commit and each file's SHA-256, and the module `mthds/protocol/problem/registry.py` is generated from them. Following a registry release takes three steps:
 
 ```bash
-make vendor-error-registry MTHDS=<path to an mthds checkout> REF=<tag, such as v8.0.0>
+make vendor-error-registry MTHDS=<path to an mthds checkout> REF=<tag, such as v8.0.1>
 make generate-error-registry
 # then set CORE_ERROR_REGISTRY_VERSION in mthds/protocol/protocol.py to the registry's version
 ```
