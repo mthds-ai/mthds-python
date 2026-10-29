@@ -4,6 +4,7 @@
 
 ### Changed
 
+- **Standard version `8.0.1`, Protocol `2.0.1` and core error registry `8.0.1` (Breaking)**: the package follows the standard's `v8.0.1` release: `MTHDS_STANDARD_VERSION` moved from `8.0.0` to `8.0.1`, so a manifest's `mthds_version` of `>=8.0.1`, as the standard's own examples now read, passes while an exact `8.0.0` no longer does; `PROTOCOL_VERSION` moved from `2.0.0` to `2.0.1`, the cut that states the order of a files map's refusals, which `read_file_map` already followed; and `CORE_ERROR_REGISTRY_VERSION` moved from `8.0.0` to `8.0.1`, with `mthds.protocol.problem.registry` generated from that release's registry. The titles of the codes a run can raise, and the next steps they give a reader other than the method's author, are reworded for someone following a run of a method they did not write: `pipe.output_invalid`, for one, is now titled "A step's result does not have the structure the method declares" where it read "A pipe's output does not fit its concept". No code, domain, retry verdict, step kind or status changes.
 - **Dev tooling: the development Python is pinned in `.python-version`**: the Makefile, uv and CI read the version from that file, `PYTHON_VERSION=<version> make install` still builds `.venv` on another supported version, and each job of the CI matrices now fails unless its environment ran the version the job names. Nothing shipped changes.
 
 ## [v0.25.0] - 2026-10-18

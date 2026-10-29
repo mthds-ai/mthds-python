@@ -94,7 +94,7 @@ def differs_from(checkout: Path, *, ref: str) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("mthds", type=Path, help="the path of an mthds checkout")
-    parser.add_argument("--ref", required=True, help="the ref or tag to vendor from, such as v8.0.0")
+    parser.add_argument("--ref", required=True, help="the ref or tag to vendor from, such as v8.0.1")
     parser.add_argument("--check", action="store_true", help="write nothing and fail when the vendored files differ from the ref's")
     arguments = parser.parse_args()
     try:
