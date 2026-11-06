@@ -22,6 +22,7 @@ See [docs/runners.md](./docs/runners.md) for the protocol + runners reference.
 See [docs/inputs-template.md](./docs/inputs-template.md) for the inputs-template projection.
 See [docs/versioning.md](./docs/versioning.md) for the MTHDS standard and protocol versions this package carries.
 See [docs/method-tree.md](./docs/method-tree.md) for listing a method tree, its digest, file entries and file references.
+See [docs/manifest.md](./docs/manifest.md) for reading and writing a `METHODS.toml`, and for a method's categories.
 
 ## Quick start
 
