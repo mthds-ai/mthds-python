@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.27.0] - 2026-11-06
+
+### Added
+
+- **`categories` in a manifest**: `MethodsManifest` reads the optional `categories` key of `[package]`, the categories a catalog can offer a method under, and `serialize_manifest_to_toml` writes them back as written. An entry that does not match the standard's `^[a-z0-9]+(-[a-z0-9]+)*$` as a whole refuses the manifest, while a repeated entry, the order of the entries and a value no catalog knows never do, and an empty array reads as leaving the key out. `is_valid_category` checks one value.
+
+### Changed
+
+- **Standard version `8.1.0` and core error registry `8.1.0` (Breaking)**: the package follows the standard's `v8.1.0` release: `MTHDS_STANDARD_VERSION` moved from `8.0.1` to `8.1.0`, so a manifest's `mthds_version` of `>=8.1.0`, as the standard's own examples now read, passes while an exact `8.0.1` or a `~8.0.0` no longer does; and `CORE_ERROR_REGISTRY_VERSION` moved from `8.0.1` to `8.1.0`, with `mthds.protocol.problem.registry` generated from that release's registry, whose codes did not change. `PROTOCOL_VERSION` stays at `2.0.1`.
+
 ## [v0.26.0] - 2026-10-29
 
 ### Changed
