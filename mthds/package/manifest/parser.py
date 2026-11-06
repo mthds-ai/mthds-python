@@ -64,6 +64,8 @@ def serialize_manifest_to_toml(manifest: MethodsManifest) -> str:
         package_table.add("main_pipe", manifest.main_pipe)
     if manifest.exclude:
         package_table.add("exclude", manifest.exclude)
+    if manifest.categories:
+        package_table.add("categories", manifest.categories)
     doc.add("package", package_table)
 
     # [exports] section — build nested tables from dotted domain paths

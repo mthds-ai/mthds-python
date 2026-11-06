@@ -34,7 +34,7 @@ ADDRESS_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+/[a-zA-Z0-9._/-]
 
 RESERVED_DOMAINS: frozenset[str] = frozenset({"native", "mthds", "pipelex"})
 
-MTHDS_STANDARD_VERSION: Final[str] = "8.0.1"
+MTHDS_STANDARD_VERSION: Final[str] = "8.1.0"
 """The MTHDS standard version this library implements.
 
 This is a copy of a cut made by the standard, and the only place this library
@@ -53,10 +53,22 @@ of the value the crate was normalized against.
 # Method name: snake_case, 2-25 chars, must start with a letter
 METHOD_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,24}$")
 
+# Category: a lowercase slug, the standard's pattern as it spells it, which holds for an entry as a whole
+CATEGORY_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
 
 def is_valid_method_name(name: str) -> bool:
     """Check if a method name is valid (2-25 lowercase snake_case chars, starts with letter, allows digits/underscores)."""
     return METHOD_NAME_PATTERN.match(name) is not None
+
+
+def is_valid_category(category: str) -> bool:
+    """Check if a category is a lowercase slug: runs of lowercase ASCII letters and digits joined by single hyphens.
+
+    It uses `fullmatch` because the pattern holds for the entry as a whole, and with `match` the `$`
+    would also let through an entry ending in a line feed.
+    """
+    return CATEGORY_PATTERN.fullmatch(category) is not None
 
 
 def is_reserved_domain_path(domain_path: str) -> bool:
@@ -190,6 +202,7 @@ class MethodsManifest(BaseModel):
     mthds_version: str | None = None
     main_pipe: str | None = None
     exclude: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(default_factory=list)
 
     exports: dict[str, DomainExports] = Field(default_factory=dict)
 
@@ -312,6 +325,19 @@ class MethodsManifest(BaseModel):
         """Each entry is one pattern in `.gitignore` syntax, keeping files out of the method tree, and holds no line break."""
         check_exclude_patterns(exclude)
         return exclude
+
+    @field_validator("categories")
+    @classmethod
+    def validate_categories(cls, categories: list[str]) -> list[str]:
+        """Each entry must be a slug. A repeated entry, the order and a value no catalog knows are never errors, and stay as written."""
+        for category in categories:
+            if not is_valid_category(category):
+                msg = (
+                    f"Invalid category {category!r}. A category is a lowercase slug, such as 'legal' or 'customer-support': "
+                    "lowercase ASCII letters and digits, joined by single hyphens."
+                )
+                raise ValueError(msg)
+        return categories
 
     @field_validator("mthds_version")
     @classmethod
