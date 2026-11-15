@@ -1,11 +1,11 @@
 {
   "source_repository": "mthds-ai/mthds",
   "source_directory": "docs/spec/openapi",
-  "source_ref": "v8.1.0",
-  "source_commit": "7ec648d7bd6e25c0facdedbe810c5a17cf88b873",
-  "registry_version": "8.1.0",
+  "source_ref": "v9.0.0",
+  "source_commit": "fae62d032e5b18238706f88a3c94cd1ec6600e13",
+  "registry_version": "9.0.0",
   "files": {
-    "mthds-error-registry.json": "4460097c17fe174f6ad7306bc65d063bca2ca6e514f1fdcd754db0664befccb2",
+    "mthds-error-registry.json": "be2f16549aa7816c293d650614d14c2ecb7959a50ce2368a6bd6f7061979df2e",
     "mthds-error-registry.schema.json": "2923af37db081788fdfaf43d8d0e24a39e68be3ebd43f75ef64a04f87480e723"
   }
 }

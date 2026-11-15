@@ -15,7 +15,7 @@ MANIFEST_WITHOUT_CATEGORIES = textwrap.dedent("""\
     description = "Legal document analysis"
 """)
 
-# The complete example of the standard's manifest format, as `v8.1.0` publishes it.
+# The complete example of the standard's manifest format, as `v9.0.0` publishes it.
 STANDARD_COMPLETE_EXAMPLE = textwrap.dedent("""\
     [package]
     name          = "nda_analyzer"
@@ -25,7 +25,7 @@ STANDARD_COMPLETE_EXAMPLE = textwrap.dedent("""\
     description   = "Legal document analysis and contract review methods."
     authors       = ["ACME Legal Tech <legal@acme.com>"]
     license       = "MIT"
-    mthds_version = ">=8.1.0"
+    mthds_version = ">=9.0.0"
     main_pipe     = "analyze_nda"
     exclude       = ["drafts/"]
     categories    = ["legal", "compliance"]
