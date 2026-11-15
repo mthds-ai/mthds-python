@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **Standard version `9.0.0` and core error registry `9.0.0` (Breaking)**: the package follows the standard's `v9.0.0` release, which carries `v8.2.0` with it: `MTHDS_STANDARD_VERSION` moved from `8.1.0` to `9.0.0`, so a manifest's `mthds_version` of `>=9.0.0`, as the standard's own examples now read, passes while `^8.0.0`, `8.*`, `~8.2.0` or an exact `8.2.0` no longer does, and a crate stamped with it materializes the native set pinned at `9.0.0`, in which `native.Text`, `native.Html` and `native.JSON` may carry a stored value at `url` with its `size`, `mime_type` and `preview` in place of the inline `text`, `inner_html` or `json_obj`, which are no longer required; and `CORE_ERROR_REGISTRY_VERSION` moved from `8.1.0` to `9.0.0`, with `mthds.protocol.problem.registry` generated from that release's registry, whose codes did not change. `PROTOCOL_VERSION` stays at `2.0.1`.
+
 ## [v0.27.0] - 2026-11-06
 
 ### Added

@@ -14,7 +14,7 @@ The standard's numbers are **copies of a cut made by the standard**, not decisio
 
 Two properties of the rule are worth knowing before you read a version out of this package:
 
-- **The standard version and the protocol version are independent.** The protocol version never tracks the standard version. A release of the standard that leaves the routes alone leaves `PROTOCOL_VERSION` exactly where it is, which is why `2.0.1` and `8.1.0` are as far apart as they are.
+- **The standard version and the protocol version are independent.** The protocol version never tracks the standard version. A release of the standard that leaves the routes alone leaves `PROTOCOL_VERSION` exactly where it is, which is why `2.0.1` and `9.0.0` are as far apart as they are.
 - **The standard version moves on every release of the specification**, including one that changes nothing normative. So the number rising is not by itself evidence that anything you depend on changed; the standard's changelog is. The corollary is that the pinned native set is identified by the standard version in which it *last changed*, and an implementation of version `V` materializes the set pinned at the greatest version less than or equal to `V`.
 
 ## `mthds_version` in a manifest is a constraint
@@ -34,6 +34,8 @@ Parsing a manifest deliberately does **not** evaluate the constraint. A package 
 
 The same number appears in a library crate as a **stamp** rather than a constraint: the exact standard version the crate was normalized against, recording which pinned native set produced its materialized natives. Crates are produced by the runtime (`pipelex`), which stamps them with this package's `MTHDS_STANDARD_VERSION`.
 
+The set this package's `9.0.0` selects is the one pinned at `9.0.0`, in which `native.Text`, `native.Html` and `native.JSON` may hold their value in storage: the inline value (`text`, `inner_html`, `json_obj`) is no longer required, and each of the three gains the optional `url`, `size`, `mime_type` and `preview`, a compliant value carrying exactly one of its inline value and `url`. This package declares no model of those contents. Where it meets them, in the pipe I/O contracts and the input-form and output-form descriptors, it reads the shapes the runtime that produced the artifact states, so the stored form reaches it through that runtime's artifacts rather than through a model here. A crate stamped from `5.0.0` to `8.2.0` materialized the earlier set, in which the inline value is required and there is no `url`.
+
 ## Reading a runner's versions
 
 `VersionInfo`, returned by a runner's `version()` route, carries `protocol_version`, an optional `runner_version`, and `blob_store`, true when the runner keeps a blob store and so accepts files sent by hash (false when the runner does not say). The protocol version a runner reports is the one it implements — compare it against `PROTOCOL_VERSION` to know whether this client and that runner agree on the wire contract. `runner_version` is that server's own build number and means nothing outside it.
@@ -43,7 +45,7 @@ The same number appears in a library crate as a **stamp** rather than a constrai
 The core error registry is published with each release of the standard, under that release's number, and a new code moves no protocol number: that is why the registry has a version of its own here, and why it can stand ahead of `MTHDS_STANDARD_VERSION`, which follows the language rather than the codes. The registry's JSON snapshot and its schema are vendored byte for byte from the `mthds` repository, with a sidecar (`vendor/mthds-error-registry/source.json`) recording the ref, the commit and each file's SHA-256, and the module `mthds/protocol/problem/registry.py` is generated from them. Following a registry release takes three steps:
 
 ```bash
-make vendor-error-registry MTHDS=<path to an mthds checkout> REF=<tag, such as v8.1.0>
+make vendor-error-registry MTHDS=<path to an mthds checkout> REF=<tag, such as v9.0.0>
 make generate-error-registry
 # then set CORE_ERROR_REGISTRY_VERSION in mthds/protocol/protocol.py to the registry's version
 ```
