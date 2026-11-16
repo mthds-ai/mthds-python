@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **A `JSON` slot's compact inputs template is the bare object (Breaking)**: `project_inputs_template` and `render_inputs_template` with `explicit=False` now render a `native.JSON` slot, a slot of a concept refining it and each element of a `JSON[]` slot as the object it carries, `{}`, in place of the `{"concept": "native.JSON", "content": {"json_obj": {}}}` envelope, matching the reference projection and the runtime's input shaper, which reads a bare object at a `JSON` position literally; the explicit shape is unchanged.
+
 ## [v0.28.0] - 2026-11-15
 
 ### Changed

@@ -1,0 +1,25 @@
+[approved_in]
+concept = "native.YesNo"
+
+[approved_in.content]
+yes_no = false
+
+[team_in]
+concept = "native.Choice"
+
+[team_in.content]
+choice = "choice_value"
+confidence = 0.0
+
+[team_in.content.probabilities]
+
+[grade_in]
+concept = "native.Rating"
+
+[grade_in.content]
+level = 0
+label = "label_value"
+confidence = 0.0
+position = 0.0
+
+[grade_in.content.probabilities]

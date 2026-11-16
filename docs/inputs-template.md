@@ -18,7 +18,7 @@ as_json = render_inputs_template(descriptor=descriptor, explicit=True, output_fo
 
 The difference between them is what a runtime's input shaper can take back:
 
-- **compact** (`explicit=False`) — the light form a smart-inputs run accepts directly: a bare string for a text slot, a bare URL for a file-ish one, the content mapping for a structured one. A slot whose bare value the shaper could *not* rebuild keeps its `{concept, content}` envelope, because a template that does not run is not a template. **A plural slot is decided by its element**, since what a shaper is handed at one is a single element at a time: `native.Date[]` keeps the envelope for the same reason a single `native.Date` does, and `native.Image[]` drops it for the same reason a single `native.Image` does.
+- **compact** (`explicit=False`) — the light form a smart-inputs run accepts directly: a bare string for a text slot, a bare URL for a file-ish one, the content mapping for a structured one. A slot whose bare value the shaper could *not* rebuild keeps its `{concept, content}` envelope, because a template that does not run is not a template. A `native.JSON` slot, or one of a concept refining it, is the bare object it carries (`{}`), since a shaper reads a bare object at a `JSON` position literally. **A plural slot is decided by its element**, since what a shaper is handed at one is a single element at a time: `native.Date[]` keeps the envelope for the same reason a single `native.Date` does, and `native.Image[]` drops it for the same reason a single `native.Image` does.
 - **explicit** (`explicit=True`) — every slot keeps the ceremonial `{concept, content}` envelope, whatever it holds.
 
 In TOML the compact shape carries a `# concept: …` line above each key, in io-ref notation — `native.Text`, `native.Text!`, `native.Text?`, `legal.Clause[]`, `legal.Clause[2]`. That notation is rebuilt from the descriptor alone by `format_slot_signature`, from the concept reference, the `list` node's own `item_count` and the authored presence marker; JSON has no comments, which is one reason the explicit shape stays around.
@@ -30,6 +30,8 @@ In TOML the compact shape carries a `# concept: …` line above each key, in io-
 - an `enum` takes its **first** choice, never a random one — these bytes are committed;
 - an `unknown` node renders as an empty mapping, the escape hatch's only honest value;
 - a fixed `Concept[N]` slot renders **N** elements.
+
+The natives a run may store, `native.Text`, `native.Html` and `native.JSON` and every concept refining them, need no rule of their own. Their pinned blueprints carry a stored value's `url`, `size`, `mime_type` and `preview` beside the inline `text`, `inner_html` or `json_obj`, and a pipe's input contract schema shows all of them as optional; but the descriptor leaves the stored-value fields out, because a caller supplies the value itself, so every template asks for the inline value alone. The corpus pins that in its `scaffold_stored_natives` pipe.
 
 Every difference between the two renderers is recorded, with worked sites, in `tests/fixtures/protocol/inputs_template/manifest.json`, and its README explains each one.
 

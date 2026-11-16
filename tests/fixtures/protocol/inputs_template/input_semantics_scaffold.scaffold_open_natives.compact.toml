@@ -1,6 +1,8 @@
 # concept: native.JSON
-json_in = {concept = "native.JSON", content = {json_obj = {}}}
+json_in = {}
 # concept: native.Dynamic
 dynamic_in = {concept = "native.Dynamic", content = {}}
 # concept: native.Composite
 composite_in = {concept = "native.Composite", content = {}}
+# concept: native.Anything
+anything_in = {concept = "native.Anything", content = {}}

@@ -1,0 +1,6 @@
+# concept: native.YesNo
+approved_in = false
+# concept: native.Choice
+team_in = {concept = "native.Choice", content = {choice = "choice_value", confidence = 0.0, probabilities = {}}}
+# concept: native.Rating
+grade_in = {concept = "native.Rating", content = {level = 0, label = "label_value", confidence = 0.0, probabilities = {}, position = 0.0}}

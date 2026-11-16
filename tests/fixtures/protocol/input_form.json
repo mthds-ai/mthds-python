@@ -1481,11 +1481,7 @@
         "required": true,
         "presence": "plain",
         "gating": true
-      }
-    ]
-  },
-  "input_semantics_scaffold.scaffold_anything_slot": {
-    "fields": [
+      },
       {
         "kind": "unknown",
         "name": "anything_in",
@@ -1542,6 +1538,164 @@
             "required": false
           }
         ]
+      }
+    ]
+  },
+  "input_semantics_scaffold.scaffold_verdict_natives": {
+    "fields": [
+      {
+        "kind": "boolean",
+        "name": "approved_in",
+        "concept_ref": "native.YesNo",
+        "description": "The answer to a yes/no question",
+        "required": true,
+        "presence": "plain",
+        "gating": true
+      },
+      {
+        "kind": "object",
+        "name": "team_in",
+        "concept_ref": "native.Choice",
+        "description": "One option picked out of a declared set",
+        "required": true,
+        "presence": "plain",
+        "gating": true,
+        "fields": [
+          {
+            "kind": "text",
+            "name": "choice",
+            "description": "The key of the selected option.",
+            "required": true
+          },
+          {
+            "kind": "number",
+            "name": "confidence",
+            "description": "The producer's confidence in the choice, from 0 to 1, when it reports one.",
+            "required": false,
+            "integer": false
+          },
+          {
+            "kind": "unknown",
+            "name": "probabilities",
+            "description": "The probability of each option, keyed by option key, when the producer measures a distribution.",
+            "required": false
+          }
+        ]
+      },
+      {
+        "kind": "object",
+        "name": "grade_in",
+        "concept_ref": "native.Rating",
+        "description": "A position on an ordered scale of described levels",
+        "required": true,
+        "presence": "plain",
+        "gating": true,
+        "fields": [
+          {
+            "kind": "number",
+            "name": "level",
+            "description": "The index of the selected level, 0 being the first level declared.",
+            "required": true,
+            "integer": true
+          },
+          {
+            "kind": "text",
+            "name": "label",
+            "description": "The label of the selected level, when the scale declares labels.",
+            "required": false
+          },
+          {
+            "kind": "number",
+            "name": "confidence",
+            "description": "The producer's confidence in the level, from 0 to 1, when it reports one.",
+            "required": false,
+            "integer": false
+          },
+          {
+            "kind": "unknown",
+            "name": "probabilities",
+            "description": "The probability of each level, keyed by level index written as text, when the producer measures a distribution.",
+            "required": false
+          },
+          {
+            "kind": "number",
+            "name": "position",
+            "description": "A continuous position on the scale, from 0 to the index of the last level, when the producer measures one.",
+            "required": false,
+            "integer": false
+          }
+        ]
+      }
+    ]
+  },
+  "input_semantics_scaffold.scaffold_stored_natives": {
+    "fields": [
+      {
+        "kind": "prose",
+        "name": "markdown_in",
+        "concept_ref": "native.Markdown",
+        "description": "A text written in Markdown",
+        "required": true,
+        "presence": "plain",
+        "gating": true
+      },
+      {
+        "kind": "object",
+        "name": "webpage_in",
+        "concept_ref": "input_semantics_scaffold.Webpage",
+        "refines": [
+          "native.Html"
+        ],
+        "description": "SCAFFOLD_desc_concept_Webpage: a page of HTML, refining the native",
+        "required": true,
+        "presence": "plain",
+        "gating": true,
+        "fields": [
+          {
+            "kind": "text",
+            "name": "inner_html",
+            "description": "The inner HTML of the content",
+            "required": true
+          },
+          {
+            "kind": "text",
+            "name": "css_class",
+            "description": "The CSS class of the content",
+            "required": false
+          }
+        ]
+      },
+      {
+        "kind": "object",
+        "name": "payload_in",
+        "concept_ref": "input_semantics_scaffold.Payload",
+        "refines": [
+          "native.JSON"
+        ],
+        "description": "SCAFFOLD_desc_concept_Payload: a JSON payload, refining the native",
+        "required": true,
+        "presence": "plain",
+        "gating": true,
+        "fields": [
+          {
+            "kind": "unknown",
+            "name": "json_obj",
+            "description": "The JSON object",
+            "required": true
+          }
+        ]
+      },
+      {
+        "kind": "prose",
+        "name": "memo_in",
+        "concept_ref": "input_semantics_scaffold.Memo",
+        "refines": [
+          "native.Text"
+        ],
+        "description": "SCAFFOLD_desc_concept_Memo: a memo, refining the native text",
+        "required": true,
+        "presence": "plain",
+        "gating": true
       }
     ]
   },
@@ -1628,6 +1782,19 @@
       {
         "kind": "prose",
         "name": "subject",
+        "concept_ref": "native.Text",
+        "description": "A text",
+        "required": true,
+        "presence": "plain",
+        "gating": true
+      }
+    ]
+  },
+  "input_semantics_output.output_native_yes_no": {
+    "fields": [
+      {
+        "kind": "prose",
+        "name": "note",
         "concept_ref": "native.Text",
         "description": "A text",
         "required": true,

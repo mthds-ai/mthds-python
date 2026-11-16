@@ -12,3 +12,8 @@ concept = "native.Dynamic"
 concept = "native.Composite"
 
 [composite_in.content]
+
+[anything_in]
+concept = "native.Anything"
+
+[anything_in.content]

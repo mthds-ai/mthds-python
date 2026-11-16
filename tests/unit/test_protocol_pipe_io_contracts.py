@@ -17,7 +17,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from mthds.protocol.pipe_io_contracts import IOMultiplicity, PipeInputContract, PipeIOContract, PipeIOContracts, PipeOutputContract, PresenceMarker
-from tests.unit.test_data import PipeIOContractWireNodes
+from tests.unit.test_data import PipeIOContractWireNodes, StoredNativeContractCases
 
 
 class NarrowedValidateReport(BaseModel):
@@ -116,6 +116,35 @@ class TestPipeIOContractsProtocolModels:
         natives = _CONTRACTS["input_semantics_probe.probe_native_inputs"].inputs
         assert list(natives) == ["text_in", "image_in", "document_in", "page_in", "number_in", "date_in", "time_in", "html_in", "yesno_in"]
         assert natives["document_in"].concept_ref == "native.Document"
+
+    def test_a_storable_native_holds_its_value_or_a_url(self) -> None:
+        """Text, Html and JSON slots state their inline value beside a stored value's fields, none required."""
+        inputs = _CONTRACTS[StoredNativeContractCases.PIPE_REF].inputs
+        assert list(inputs) == list(StoredNativeContractCases.VALUE_FIELD_BY_SLOT)
+        for slot_name, value_field in StoredNativeContractCases.VALUE_FIELD_BY_SLOT.items():
+            json_schema = inputs[slot_name].json_schema
+            properties: dict[str, Any] = json_schema["properties"]
+            assert value_field in properties, slot_name
+            for stored_field in StoredNativeContractCases.STORED_VALUE_FIELDS:
+                assert stored_field in properties, (slot_name, stored_field)
+            assert "required" not in json_schema, slot_name
+
+    def test_every_storable_native_slot_states_the_stored_form(self) -> None:
+        """Wherever the capture holds a single Text, Markdown, Html or JSON slot, its schema states both forms and requires neither."""
+        natives_seen: set[str] = set()
+        for pipe_ref, contract in _CONTRACTS.items():
+            for input_name, input_contract in contract.inputs.items():
+                value_field = StoredNativeContractCases.VALUE_FIELD_BY_NATIVE.get(input_contract.concept_ref)
+                if value_field is None or input_contract.multiplicity is not IOMultiplicity.SINGLE:
+                    continue
+                properties: dict[str, Any] = input_contract.json_schema["properties"]
+                assert value_field in properties, (pipe_ref, input_name)
+                for stored_field in StoredNativeContractCases.STORED_VALUE_FIELDS:
+                    assert stored_field in properties, (pipe_ref, input_name, stored_field)
+                assert "required" not in input_contract.json_schema, (pipe_ref, input_name)
+                natives_seen.add(input_contract.concept_ref)
+        # Every storable native is reached at least once, so the check cannot pass vacuously.
+        assert natives_seen == set(StoredNativeContractCases.VALUE_FIELD_BY_NATIVE)
 
     @pytest.mark.parametrize(
         "node",

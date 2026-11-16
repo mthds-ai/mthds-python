@@ -69,7 +69,8 @@ class TestInputsTemplateRendering:
     def test_a_verdict_native_keeps_its_envelope_unless_it_is_a_yes_or_no(self, topic: str, field: InputFormField, keeps: bool, compact: Any):
         # The standard's 3.0.0 natives reach the projection through the descriptor's own kinds, with
         # no table naming them: `Choice` and `Rating` as `object`s, `YesNo` still as a `boolean`. The
-        # shared corpus captures neither new native, so the rule is held here.
+        # shared corpus captures them in `scaffold_verdict_natives`; each rule is also held here, so a
+        # regression fails by name rather than as a wall of differing bytes.
         assert PipeInputFormDescriptor(fields=[field]).fields == [field], topic
         assert keeps_envelope(node=field) is keeps, topic
         compact_slot = project_inputs_template(descriptor=PipeInputFormDescriptor(fields=[field]), explicit=False)[field.name]
@@ -79,6 +80,15 @@ class TestInputsTemplateRendering:
         # place, and the TypeScript twin compares this rendered JSON byte for byte.
         rendered = render_inputs_template(descriptor=PipeInputFormDescriptor(fields=[field]), explicit=False, output_format=InputsTemplateFormat.JSON)
         assert rendered == json.dumps({field.name: compact}, indent=2, ensure_ascii=False), topic
+
+    @pytest.mark.parametrize(("topic", "field", "compact"), CompactSlotCases.JSON_SLOTS)
+    def test_a_json_slot_compacts_to_the_object_it_carries(self, topic: str, field: InputFormField, compact: Any):
+        # A shaper reads a bare object at a `JSON` position literally, so the compact form is the
+        # `json_obj` value itself. The corpus captures the single slot and a refining concept; the
+        # plural slot it holds no example of is stated here.
+        assert PipeInputFormDescriptor(fields=[field]).fields == [field], topic
+        assert keeps_envelope(node=field) is False, topic
+        assert project_inputs_template(descriptor=PipeInputFormDescriptor(fields=[field]), explicit=False)[field.name] == compact, topic
 
     @pytest.mark.parametrize("explicit", [False, True])
     def test_each_element_of_a_fixed_count_slot_is_its_own_value(self, explicit: bool):
