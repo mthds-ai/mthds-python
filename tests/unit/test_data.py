@@ -391,10 +391,36 @@ class InputFormWireNodes:
     EMPTY_FORM: ClassVar[dict[str, Any]] = {"fields": []}
 
 
+class StoredNativeContractCases:
+    """The natives a run may store, as the corpus's `scaffold_stored_natives` pipe captures them.
+
+    Each input slot maps to the field holding its inline value; beside it, the contract's
+    `json_schema` states a stored value's fields, and none of them is required.
+    """
+
+    PIPE_REF: ClassVar[str] = "input_semantics_scaffold.scaffold_stored_natives"
+    STORED_VALUE_FIELDS: ClassVar[tuple[str, ...]] = ("url", "size", "mime_type", "preview")
+    VALUE_FIELD_BY_SLOT: ClassVar[dict[str, str]] = {
+        "markdown_in": "text",
+        "webpage_in": "inner_html",
+        "payload_in": "json_obj",
+        "memo_in": "text",
+    }
+    VALUE_FIELD_BY_NATIVE: ClassVar[dict[str, str]] = {
+        "native.Text": "text",
+        "native.Markdown": "text",
+        "native.Html": "inner_html",
+        "native.JSON": "json_obj",
+    }
+
+
 class PipeIOContractWireNodes:
     """Hand-written contract entries probing the closed shapes of `mthds.protocol.pipe_io_contracts`."""
 
-    _TEXT_SCHEMA: ClassVar[dict[str, Any]] = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
+    # A `native.Text` payload as the standard pins it from 9.0.0: the inline `text` or a stored value's
+    # `url`, neither required. The contract models treat `json_schema` as opaque, so only realism rides
+    # on it.
+    _TEXT_SCHEMA: ClassVar[dict[str, Any]] = {"type": "object", "properties": {"text": {"type": "string"}, "url": {"type": "string"}}}
     _OUTPUT: ClassVar[dict[str, Any]] = {
         "concept_ref": "legal.Summary",
         "multiplicity": "single",
@@ -636,7 +662,10 @@ class SlotSignatureCases:
 
 
 class CompactSlotCases:
-    """Top-level slots the shared fixture corpus holds no example of, each a slot a method may author.
+    """Top-level slots whose projection rule is stated by name, each a slot a method may author.
+
+    Some the shared fixture corpus holds no example of; others it captures too, and stating the rule
+    here makes a regression fail by name rather than as a wall of differing bytes.
 
     The corpus captures no plural native slot at all, and the envelope rule is decided per element:
     what an input shaper is handed at a plural slot is one element at a time. `native.Date` is the
@@ -744,6 +773,46 @@ class CompactSlotCases:
             BooleanField(name="yes_no_in", concept_ref="native.YesNo", required=True, presence=PresenceMarker.PLAIN, gating=True),
             False,
             False,
+        ),
+    ]
+
+    # `native.JSON` and a concept refining it, as the input-form descriptor states them: an object
+    # holding one `unknown` `json_obj`. The stored-value fields its pinned blueprint also carries
+    # (`url`, `size`, `mime_type`, `preview`) are absent, because the descriptor leaves them out.
+    JSON_PAYLOAD: ClassVar[list[InputFormField]] = [UnknownField(name="json_obj", required=True)]
+
+    # Each case carries the compact slot it projects to: the bare object a shaper reads literally at
+    # a `JSON` position, never the `{concept, content}` envelope nor a `{"json_obj": …}` mapping.
+    JSON_SLOTS: ClassVar[list[tuple[str, InputFormField, Any]]] = [
+        (
+            "a JSON slot unwraps to the object itself",
+            ObjectField(name="json_in", concept_ref="native.JSON", required=True, presence=PresenceMarker.PLAIN, gating=True, fields=JSON_PAYLOAD),
+            {},
+        ),
+        (
+            "a concept refining JSON unwraps the same way, read through its refines chain",
+            ObjectField(
+                name="payload_in",
+                concept_ref="scaffold.Payload",
+                refines=["native.JSON"],
+                required=True,
+                presence=PresenceMarker.PLAIN,
+                gating=True,
+                fields=JSON_PAYLOAD,
+            ),
+            {},
+        ),
+        (
+            "a list of JSON unwraps each element: the question is the element's, never the list's",
+            ListField(
+                name="jsons_in",
+                concept_ref="native.JSON",
+                required=True,
+                presence=PresenceMarker.PLAIN,
+                gating=False,
+                item=ObjectItem(concept_ref="native.JSON", required=True, fields=JSON_PAYLOAD),
+            ),
+            [{}],
         ),
     ]
 

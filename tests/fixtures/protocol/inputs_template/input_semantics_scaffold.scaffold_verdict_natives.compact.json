@@ -1,0 +1,21 @@
+{
+  "approved_in": false,
+  "team_in": {
+    "concept": "native.Choice",
+    "content": {
+      "choice": "choice_value",
+      "confidence": 0.0,
+      "probabilities": {}
+    }
+  },
+  "grade_in": {
+    "concept": "native.Rating",
+    "content": {
+      "level": 0,
+      "label": "label_value",
+      "confidence": 0.0,
+      "probabilities": {},
+      "position": 0.0
+    }
+  }
+}

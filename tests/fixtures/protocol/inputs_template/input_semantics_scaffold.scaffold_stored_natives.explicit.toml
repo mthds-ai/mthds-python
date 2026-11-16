@@ -1,0 +1,23 @@
+[markdown_in]
+concept = "native.Markdown"
+
+[markdown_in.content]
+text = "text_value"
+
+[webpage_in]
+concept = "input_semantics_scaffold.Webpage"
+
+[webpage_in.content]
+inner_html = "inner_html_value"
+css_class = "css_class_value"
+
+[payload_in]
+concept = "input_semantics_scaffold.Payload"
+
+[payload_in.content.json_obj]
+
+[memo_in]
+concept = "input_semantics_scaffold.Memo"
+
+[memo_in.content]
+text = "text_value"

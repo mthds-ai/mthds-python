@@ -1,16 +1,15 @@
 {
-  "json_in": {
-    "concept": "native.JSON",
-    "content": {
-      "json_obj": {}
-    }
-  },
+  "json_in": {},
   "dynamic_in": {
     "concept": "native.Dynamic",
     "content": {}
   },
   "composite_in": {
     "concept": "native.Composite",
+    "content": {}
+  },
+  "anything_in": {
+    "concept": "native.Anything",
     "content": {}
   }
 }

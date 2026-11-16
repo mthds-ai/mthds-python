@@ -10,6 +10,7 @@
     "input_semantics_output.output_fixed_plural",
     "input_semantics_output.output_native_image",
     "input_semantics_output.output_native_text",
+    "input_semantics_output.output_native_yes_no",
     "input_semantics_output.output_nested",
     "input_semantics_output.output_optional",
     "input_semantics_output.output_plural",
@@ -18,11 +19,12 @@
     "input_semantics_probe.probe_native_inputs",
     "input_semantics_probe.probe_refined",
     "input_semantics_probe.probe_single",
-    "input_semantics_scaffold.scaffold_anything_slot",
     "input_semantics_scaffold.scaffold_dynamic_prompt",
     "input_semantics_scaffold.scaffold_fixed_batch",
     "input_semantics_scaffold.scaffold_nesting",
-    "input_semantics_scaffold.scaffold_open_natives"
+    "input_semantics_scaffold.scaffold_open_natives",
+    "input_semantics_scaffold.scaffold_stored_natives",
+    "input_semantics_scaffold.scaffold_verdict_natives"
   ],
   "shapes": [
     "compact",
@@ -238,7 +240,7 @@
       "divergence_id": "optional-field-included",
       "reason": "The engine passes include_optional=False at the top of an input's own structure class and not through the recursion, so it hides an optional field at depth one and shows one nested deeper. The projection renders every field the descriptor states, at every depth.",
       "ledger_item": "L-260830-d51440",
-      "occurrences": 167,
+      "occurrences": 181,
       "examples": [
         {
           "pipe_ref": "input_semantics_hinted.hinted_slots",
@@ -296,12 +298,12 @@
       "divergence_id": "unknown-empty-object",
       "reason": "An unknown node renders as the empty object, because the descriptor withholds the payload shape at that position and a projection that invented one would stop projecting the descriptor. The engine reflects the runtime content class instead and fills a required dict with a sample key/value pair whoever fills the template in has to delete. The empty object is re-shapable: the round-trip takes it back.",
       "ledger_item": null,
-      "occurrences": 2,
+      "occurrences": 4,
       "examples": [
         {
           "pipe_ref": "input_semantics_scaffold.scaffold_open_natives",
           "shape": "compact",
-          "path": "json_in.content.json_obj",
+          "path": "json_in",
           "engine": {
             "json_obj_key": "json_obj_value"
           },
@@ -311,6 +313,15 @@
           "pipe_ref": "input_semantics_scaffold.scaffold_open_natives",
           "shape": "explicit",
           "path": "json_in.content.json_obj",
+          "engine": {
+            "json_obj_key": "json_obj_value"
+          },
+          "expected": {}
+        },
+        {
+          "pipe_ref": "input_semantics_scaffold.scaffold_stored_natives",
+          "shape": "compact",
+          "path": "payload_in",
           "engine": {
             "json_obj_key": "json_obj_value"
           },
@@ -329,7 +340,7 @@
     {
       "pipe_ref": "input_semantics_probe.probe_markers",
       "shape": "explicit",
-      "error_type": "ValidationError",
+      "error_type": "StuffFactoryError",
       "ledger_item": "L-260830-191719"
     },
     {
@@ -341,20 +352,8 @@
     {
       "pipe_ref": "input_semantics_probe.probe_single",
       "shape": "explicit",
-      "error_type": "ValidationError",
+      "error_type": "StuffFactoryError",
       "ledger_item": "L-260830-191719"
-    },
-    {
-      "pipe_ref": "input_semantics_scaffold.scaffold_anything_slot",
-      "shape": "compact",
-      "error_type": "StuffFactoryError",
-      "ledger_item": "L-260902-10eb56"
-    },
-    {
-      "pipe_ref": "input_semantics_scaffold.scaffold_anything_slot",
-      "shape": "explicit",
-      "error_type": "StuffFactoryError",
-      "ledger_item": "L-260902-10eb56"
     }
   ]
 }

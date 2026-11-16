@@ -1,0 +1,27 @@
+{
+  "markdown_in": {
+    "concept": "native.Markdown",
+    "content": {
+      "text": "text_value"
+    }
+  },
+  "webpage_in": {
+    "concept": "input_semantics_scaffold.Webpage",
+    "content": {
+      "inner_html": "inner_html_value",
+      "css_class": "css_class_value"
+    }
+  },
+  "payload_in": {
+    "concept": "input_semantics_scaffold.Payload",
+    "content": {
+      "json_obj": {}
+    }
+  },
+  "memo_in": {
+    "concept": "input_semantics_scaffold.Memo",
+    "content": {
+      "text": "text_value"
+    }
+  }
+}

@@ -12,5 +12,9 @@
   "composite_in": {
     "concept": "native.Composite",
     "content": {}
+  },
+  "anything_in": {
+    "concept": "native.Anything",
+    "content": {}
   }
 }

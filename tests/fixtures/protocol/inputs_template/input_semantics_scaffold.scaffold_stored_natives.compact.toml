@@ -1,0 +1,8 @@
+# concept: native.Markdown
+markdown_in = "text_value"
+# concept: input_semantics_scaffold.Webpage
+webpage_in = {concept = "input_semantics_scaffold.Webpage", content = {inner_html = "inner_html_value", css_class = "css_class_value"}}
+# concept: input_semantics_scaffold.Payload
+payload_in = {}
+# concept: input_semantics_scaffold.Memo
+memo_in = "text_value"

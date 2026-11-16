@@ -45,6 +45,7 @@ from mthds.protocol.input_form import (
     FieldKind,
     InputFormField,
     InputFormItem,
+    ObjectItem,
     PipeInputFormDescriptor,
 )
 from mthds.protocol.pipe_io_contracts import PresenceMarker
@@ -71,22 +72,29 @@ TIME_CONTENT_KEY = "time"
 
 NATIVE_PREFIX = "native."
 
-# The natives an input shaper cannot build top-down: their compact form keeps the whole
-# `{concept, content}` envelope, because a bare value at one of these positions is not re-shapable.
-# The vocabulary is the standard's closed native set (`docs/spec/native-concepts.md`), which is why
-# a projection may consult it: it reads an identity the descriptor states, never sniffs a shape.
+# The open natives whose compact form keeps the whole `{concept, content}` envelope: a bare value at
+# one of these positions either has no reading every runtime shares or, for `Anything`, would
+# misstate what the slot takes — its bare placeholder `{}` reads as "send an object", while the
+# envelope names the concept that says any value goes. The vocabulary is the standard's closed native
+# set (`docs/spec/native-concepts.md`), which is why a projection may consult it: it reads an
+# identity the descriptor states, never sniffs a shape.
 OUT_OF_MATRIX_NATIVES = frozenset(
     {
         "Anything",
         "Composite",
         "Dynamic",
         "Html",
-        "JSON",
         "Page",
         "SearchResult",
         "TextAndImages",
     }
 )
+
+# `native.JSON`'s compact form is the JSON object itself: the descriptor states the content form, an
+# object holding one `json_obj`, and the compact projection unwraps it, since a shaper reads a bare
+# object at a `JSON` position literally. A concept refining `JSON` unwraps the same way.
+NATIVE_JSON = "JSON"
+JSON_CONTENT_KEY = "json_obj"
 
 # `native.Number`'s content is a number union, placeholdered as `1` rather than as the `0` / `0.0` a
 # plain `type = "number"` structure field takes. The descriptor states `kind = "number"` for both,
@@ -232,9 +240,12 @@ def keeps_envelope(*, node: InputFormItem) -> bool:
     already reads it — a `list` node's `concept_ref` names the ELEMENT concept — and the kind test
     has to be asked of the `item` for the same reason, or `native.Date[]` unwraps to a bare array of
     the very objects a single `native.Date` keeps its envelope to avoid.
+
+    `native.JSON` never keeps it, although the descriptor states it as an object: its compact form is
+    the bare object a shaper reads literally, the `json_obj` value unwrapped (`_compact_value`).
     """
     code = native_code(node=node)
-    if code is None:
+    if code is None or code == NATIVE_JSON:
         return False
     if code in OUT_OF_MATRIX_NATIVES:
         return True
@@ -379,11 +390,25 @@ def _slot_content(*, node: InputFormItem, name: str) -> Any:
 
 
 def _compact_value(*, node: InputFormItem, name: str) -> Any:
-    """One slot's (or one slot element's) compact value: a scalar unwraps, everything else keeps its mapping."""
+    """One slot's (or one slot element's) compact value: a scalar unwraps, a `JSON` object unwraps its
+    `json_obj`, and everything else keeps its mapping.
+    """
     content_key = slot_content_key(node=node)
     if content_key is not None:
         return _leaf_placeholder(node=node, name=content_key)
+    if native_code(node=node) == NATIVE_JSON:
+        return _json_object(node=node)
     return project_value(node=node, name=name)
+
+
+def _json_object(*, node: InputFormItem) -> Any:
+    """The value a `JSON` node carries under `json_obj`, which its compact form is."""
+    if isinstance(node, ObjectItem):
+        for member in node.fields:
+            if member.name == JSON_CONTENT_KEY:
+                return project_value(node=member, name=JSON_CONTENT_KEY)
+    msg = f"A '{NATIVE_PREFIX}{NATIVE_JSON}' node must be an object carrying a '{JSON_CONTENT_KEY}' field, got a '{node.kind}' node"
+    raise ValueError(msg)
 
 
 def _compact_slot(*, field: InputFormField) -> Any:
