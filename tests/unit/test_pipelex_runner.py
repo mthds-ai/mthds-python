@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -11,7 +12,7 @@ from pytest_mock import MockerFixture, MockType
 
 from mthds.method_tree.file_entry import FileEntry, HashFileEntry
 from mthds.runners.pipelex.runner import PipelexRunner, PipelexRunnerError
-from tests.unit.test_data import CliWorkingMemoryDumps, MethodFileMaps
+from tests.unit.test_data import CliWorkingMemoryDumps, MethodFileMaps, PipeCodeCases
 
 if TYPE_CHECKING:
     from mthds.protocol.pipeline_inputs import PipelineInputs
@@ -138,6 +139,45 @@ class TestPipelexRunner:
             asyncio.run(PipelexRunner().execute())
 
         run_subprocess.assert_not_called()
+
+    @pytest.mark.parametrize(("topic", "pipe_code"), PipeCodeCases.VALID)
+    def test_execute_runs_a_pipe_code_behind_the_end_of_options(self, mocker: MockerFixture, tmp_path: Path, topic: str, pipe_code: str) -> None:
+        """A pipe reference of each form reaches `pipelex run pipe` as its positional, last and behind `--`."""
+        run_subprocess = _patch_cli_writing_working_memory(mocker, tmp_path, CliWorkingMemoryDumps.REF_STRING)
+
+        asyncio.run(PipelexRunner(library_dirs=["/libs"]).execute(pipe_code=pipe_code))
+
+        assert run_subprocess.call_args.args[0] == [
+            "pipelex",
+            "-L",
+            "/libs",
+            "run",
+            "pipe",
+            "--working-memory-path",
+            str(tmp_path / "working_memory.json"),
+            "-o",
+            str(tmp_path / "results"),
+            "--no-pretty-print",
+            "--",
+            pipe_code,
+        ], topic
+
+    @pytest.mark.parametrize(("topic", "pipe_code"), PipeCodeCases.INVALID)
+    def test_execute_refuses_a_pipe_code_outside_the_grammar(self, mocker: MockerFixture, tmp_path: Path, topic: str, pipe_code: str) -> None:
+        """A pipe code that is no pipe reference, one starting with `-` above all, is refused before the CLI is looked up,
+        anything is written or the CLI runs, with or without `files`, so it never reaches the command line as an option.
+        """
+        ensure_pipelex = mocker.patch("mthds.runners.pipelex.runner._ensure_pipelex", return_value="pipelex")
+        mocker.patch("mthds.runners.pipelex.runner.tempfile.mkdtemp", return_value=str(tmp_path / "run"))
+        run_subprocess = mocker.patch("mthds.runners.pipelex.runner.run_subprocess")
+
+        for call in (PipelexRunner().execute(pipe_code=pipe_code), PipelexRunner().execute(pipe_code=pipe_code, files=MethodFileMaps.INLINE)):
+            with pytest.raises(PipelexRunnerError, match=f"refuses the pipe code {re.escape(repr(pipe_code))}"):
+                asyncio.run(call)
+
+        ensure_pipelex.assert_not_called()
+        run_subprocess.assert_not_called()
+        assert list(tmp_path.rglob("*")) == [], topic
 
     def test_execute_serializes_pydantic_inputs(self, mocker: MockerFixture, tmp_path: Path) -> None:
         """Inputs may carry pydantic BaseModel values (StuffContent, etc.); a

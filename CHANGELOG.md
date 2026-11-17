@@ -6,6 +6,10 @@
 
 - **A `JSON` slot's compact inputs template is the bare object (Breaking)**: `project_inputs_template` and `render_inputs_template` with `explicit=False` now render a `native.JSON` slot, a slot of a concept refining it and each element of a `JSON[]` slot as the object it carries, `{}`, in place of the `{"concept": "native.JSON", "content": {"json_obj": {}}}` envelope, matching the reference projection and the runtime's input shaper, which reads a bare object at a `JSON` position literally; the explicit shape is unchanged.
 
+### Security
+
+- **`PipelexRunner.execute` refuses a pipe code outside the pipe-reference grammar**: a `pipe_code` must be a bare, domain-qualified or package-qualified pipe reference (`answer`, `legal.contracts.answer`, `docproc->extraction.extract_text`, a package alias always followed by a domain, every part matching `[a-z][a-z0-9_]*`), or the runner raises `PipelexRunnerError` before anything is written or the `pipelex` CLI runs, so a code starting with `-` can no longer be read by the CLI as one of its options; `pipelex run pipe` now also receives the code last, behind `--`.
+
 ## [v0.28.0] - 2026-11-15
 
 ### Changed

@@ -3,6 +3,7 @@
 # TODO: refacto
 
 import json
+import re
 import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import tempfile
@@ -31,6 +32,29 @@ class PipelexRunnerError(Exception):
 # Where a run's method tree is written, below the run's temporary directory: the inputs, the working
 # memory and the results the CLI writes sit beside it, so none of them becomes a file of the tree.
 _METHOD_DIRECTORY_NAME = "method"
+
+# A pipe reference as the standard writes it (`docs/spec/mthds-format.md`, "Pipe Reference Syntax"): a bare
+# pipe code, one behind a domain path (`domain.path.pipe_code`), or one behind a package alias and a domain
+# path (`alias->domain.pipe_code`, never `alias->pipe_code`), every part `snake_case` as the standard defines
+# it, `[a-z][a-z0-9_]*`. The caller's pipe code reaches the `pipelex` command line, where one starting with
+# `-` would be read as an option, so it is held to this grammar before the CLI runs.
+_SNAKE_CASE_PART = r"[a-z][a-z0-9_]*"
+_PIPE_REF_PATTERN = re.compile(rf"(?:{_SNAKE_CASE_PART}->(?:{_SNAKE_CASE_PART}\.)+|(?:{_SNAKE_CASE_PART}\.)*){_SNAKE_CASE_PART}")
+
+
+def _ensure_pipe_ref(pipe_code: str) -> None:
+    """Refuse a pipe code that is not a pipe reference of the standard's grammar.
+
+    Raises:
+        PipelexRunnerError: If `pipe_code` is not a bare, domain-qualified or package-qualified pipe reference.
+    """
+    if _PIPE_REF_PATTERN.fullmatch(pipe_code) is None:
+        msg = (
+            f"The pipelex CLI runner refuses the pipe code {pipe_code!r}: a pipe code is snake_case, "
+            "optionally qualified by a domain path and a package alias, such as 'answer', 'legal.contracts.answer' "
+            "or 'docproc->extraction.extract_text'."
+        )
+        raise PipelexRunnerError(msg)
 
 
 def _write_method_tree(files: MethodFiles, *, destination: Path) -> None:
@@ -232,9 +256,11 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             Complete execution results including pipeline state and output.
 
         Raises:
-            PipelexRunnerError: If pipelex execution fails, if `files` is no method
-                tree this runner can write (a key that is not a tree path, a hash
-                entry), or if extension args are passed (the CLI runner accepts none).
+            PipelexRunnerError: If pipelex execution fails, if `pipe_code` is not a
+                pipe reference of the standard's grammar (one starting with `-`, for
+                one), if `files` is no method tree this runner can write (a key that
+                is not a tree path, a hash entry), or if extension args are passed
+                (the CLI runner accepts none).
             pydantic.ValidationError: If the working memory the CLI wrote does not
                 fit the wire shape — a stuff carrying anything but its concept's ref
                 string under `concept`, as a `pipelex` built on an mthds older than
@@ -258,11 +284,16 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
         if not pipe_code and files is None:
             msg = "Either pipe_code or files must be provided to the pipelex CLI runner."
             raise PipelexRunnerError(msg)
+        if pipe_code:
+            _ensure_pipe_ref(pipe_code)
         pipelex_path = _ensure_pipelex()
 
         tmp_dir = Path(tempfile.mkdtemp(prefix="mthds-"))
         try:
             cmd: list[str] = [pipelex_path, *self._library_args(), "run"]
+            # `pipelex run pipe` takes the pipe code as its positional argument, which goes last, behind `--`,
+            # so that nothing in it is read as an option even past the grammar check above.
+            trailing_args: list[str] = []
 
             if files is not None:
                 method_dir = tmp_dir / _METHOD_DIRECTORY_NAME
@@ -271,7 +302,8 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
                 if pipe_code:
                     cmd.extend(["--pipe", pipe_code])
             elif pipe_code:
-                cmd.extend(["pipe", pipe_code])
+                cmd.append("pipe")
+                trailing_args = ["--", pipe_code]
 
             serialized_inputs = _serialize_inputs(inputs)
             if serialized_inputs is not None:
@@ -283,6 +315,7 @@ class PipelexRunner(MTHDSProtocol[DictPipeOutputAbstract]):
             cmd.extend(["--working-memory-path", str(working_memory_path)])
             cmd.extend(["-o", str(tmp_dir / "results")])
             cmd.append("--no-pretty-print")
+            cmd.extend(trailing_args)
 
             run_subprocess(cmd)
 
