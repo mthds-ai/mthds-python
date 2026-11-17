@@ -1112,6 +1112,34 @@ class MethodFileMaps:
     ESCAPED_TEXT: ClassVar[bytes] = 'title = "Café"\n\tbody \\ end\n'.encode()
 
 
+class PipeCodeCases:
+    """Pipe codes a caller hands the pipelex CLI runner: references of the standard's grammar, and codes it refuses."""
+
+    # (topic, pipe code): each form the standard writes a pipe reference in.
+    VALID: ClassVar[list[tuple[str, str]]] = [
+        ("a bare pipe code", "answer"),
+        ("a code with digits and doubled underscores", "step__2_"),
+        ("a domain-qualified reference", "legal.contracts.answer"),
+        ("a package-qualified reference", "docproc->extraction.extract_text"),
+    ]
+
+    # (topic, pipe code): codes outside the grammar, those starting with a dash first, which the CLI would read as options.
+    INVALID: ClassVar[list[tuple[str, str]]] = [
+        ("a short option", "-L"),
+        ("a long option with its value", "--output-dir=elsewhere"),
+        ("the end of options", "--"),
+        ("a help flag", "--help"),
+        ("a dash-led domain", "-x.answer"),
+        ("a concept code", "Answer"),
+        ("a code starting with a digit", "1answer"),
+        ("a trailing dot", "answer."),
+        ("consecutive dots", "legal..answer"),
+        ("a space", "answer --dry-run"),
+        ("an empty alias", "->extraction.answer"),
+        ("a bundle path", "methods/main.mthds"),
+    ]
+
+
 class BlobWireBodies:
     """`POST /blobs/missing` bodies, as a sender writes them and as a runner answers."""
 
