@@ -1136,6 +1136,7 @@ class PipeCodeCases:
         ("consecutive dots", "legal..answer"),
         ("a space", "answer --dry-run"),
         ("an empty alias", "->extraction.answer"),
+        ("a package alias with no domain", "docproc->extract_text"),
         ("a bundle path", "methods/main.mthds"),
     ]
 

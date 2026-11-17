@@ -33,12 +33,13 @@ class PipelexRunnerError(Exception):
 # memory and the results the CLI writes sit beside it, so none of them becomes a file of the tree.
 _METHOD_DIRECTORY_NAME = "method"
 
-# A pipe reference as the standard writes it (`docs/spec/namespace-resolution.md`): a pipe code, optionally
-# behind a domain path and a package alias (`alias->domain.path.pipe_code`), every part `snake_case` as the
-# standard defines it, `[a-z][a-z0-9_]*`. The caller's pipe code reaches the `pipelex` command line, where
-# one starting with `-` would be read as an option, so it is held to this grammar before the CLI runs.
+# A pipe reference as the standard writes it (`docs/spec/mthds-format.md`, "Pipe Reference Syntax"): a bare
+# pipe code, one behind a domain path (`domain.path.pipe_code`), or one behind a package alias and a domain
+# path (`alias->domain.pipe_code`, never `alias->pipe_code`), every part `snake_case` as the standard defines
+# it, `[a-z][a-z0-9_]*`. The caller's pipe code reaches the `pipelex` command line, where one starting with
+# `-` would be read as an option, so it is held to this grammar before the CLI runs.
 _SNAKE_CASE_PART = r"[a-z][a-z0-9_]*"
-_PIPE_REF_PATTERN = re.compile(rf"(?:{_SNAKE_CASE_PART}->)?(?:{_SNAKE_CASE_PART}\.)*{_SNAKE_CASE_PART}")
+_PIPE_REF_PATTERN = re.compile(rf"(?:{_SNAKE_CASE_PART}->(?:{_SNAKE_CASE_PART}\.)+|(?:{_SNAKE_CASE_PART}\.)*){_SNAKE_CASE_PART}")
 
 
 def _ensure_pipe_ref(pipe_code: str) -> None:
